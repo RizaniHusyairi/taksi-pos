@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Supir - Koperasi Taksi POS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',
+              500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'
+            },
+            pending:'#f59e0b', success:'#10b981'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <header class="bg-white border-b p-3 flex items-center justify-between sticky top-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-primary-600 text-white grid place-items-center font-semibold">KT</div>
+      <div class="text-sm">
+        <div class="font-semibold">Dasbor Supir</div>
+        <div class="text-slate-500">Order & Dompet</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="#orders" class="text-sm px-3 py-1.5 rounded-lg bg-primary-50 text-primary-700">Order</a>
+      <a href="#wallet" class="text-sm px-3 py-1.5 rounded-lg hover:bg-primary-50">Dompet</a>
+      <a href="#history" class="text-sm px-3 py-1.5 rounded-lg hover:bg-primary-50">Riwayat</a>
+      <button id="logoutBtn" class="text-sm text-slate-600 hover:text-primary-700">Keluar</button>
+    </div>
+  </header>
+
+  <main class="p-4 max-w-3xl mx-auto">
+    <!-- Active/Incoming Order -->
+    <section id="view-orders" class="space-y-4">
+      <div id="activeOrderBox" class="hidden rounded-xl border-2 border-pending bg-white p-4 animate-pulse">
+        <div class="flex items-center justify-between">
+          <div class="font-semibold">Order Aktif</div>
+          <div class="text-xs bg-pending text-white px-2 py-0.5 rounded">Baru</div>
+        </div>
+        <div id="activeOrderInfo" class="mt-2 text-sm"></div>
+        <div class="mt-3 flex gap-2">
+          <button id="markComplete" class="bg-success hover:bg-emerald-600 text-white rounded-lg px-3 py-2">Selesaikan Perjalanan</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <div class="font-semibold mb-2">Status Saya</div>
+        <div id="driverStatus" class="text-sm"></div>
+        <div class="mt-2 flex gap-2">
+          <button id="setAvail" class="rounded-lg border px-3 py-1.5">Tersedia</button>
+          <button id="setOffline" class="rounded-lg border px-3 py-1.5">Offline</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Wallet -->
+    <section id="view-wallet" class="hidden space-y-4">
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm text-slate-500">Total Saldo</div>
+            <div id="walletBalance" class="text-3xl font-semibold">Rp0</div>
+          </div>
+          <div class="text-xs text-slate-500">*Saldo = QRIS/Tunai ke CSO setelah potong komisi</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <h3 class="font-semibold mb-3">Pencairan Dana</h3>
+        <form id="formWd" class="flex gap-2 items-end">
+          <div>
+            <label class="block text-sm font-medium">Jumlah (Rp)</label>
+            <input id="wdAmount" type="number" min="10000" class="rounded-lg border-slate-300" required>
+          </div>
+          <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-2">Request Withdrawal</button>
+        </form>
+
+        <div class="overflow-x-auto mt-3">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2">Tanggal</th>
+                <th class="py-2">Jumlah</th>
+                <th class="py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody id="wdList"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <h3 class="font-semibold mb-3">Riwayat Dompet</h3>
+        <div class="text-xs text-slate-500 mb-2">Kredit = QRIS/Tunai ke CSO * (1 - komisi). Debet = Pencairan (Approved/Paid).</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2">Waktu</th>
+                <th class="py-2">Keterangan</th>
+                <th class="py-2">Jumlah</th>
+              </tr>
+            </thead>
+            <tbody id="walletTx"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Trip History -->
+    <section id="view-history" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="font-semibold">Riwayat Perjalanan</h3>
+          <input type="date" id="histFrom" class="rounded-lg border-slate-300 text-sm">
+          <input type="date" id="histTo" class="rounded-lg border-slate-300 text-sm">
+          <button id="histFilter" class="rounded-lg border px-3 py-1.5 text-sm">Filter</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2">Waktu</th>
+                <th class="py-2">Rute</th>
+                <th class="py-2">Metode</th>
+                <th class="py-2">Jumlah</th>
+                <th class="py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody id="tripTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { requireRole, logout } from '../assets/js/auth.js';
+    import { DriverApp } from '../assets/js/driver.js';
+    requireRole('driver');
+    const app = new DriverApp();
+    app.init();
+    document.getElementById('logoutBtn').addEventListener('click', () => logout());
+  </script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CSO - Koperasi Taksi POS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',
+              500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'
+            },
+            pending:'#f59e0b', success:'#10b981'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <header class="bg-white border-b p-3 flex items-center justify-between sticky top-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-primary-600 text-white grid place-items-center font-semibold">KT</div>
+      <div class="text-sm">
+        <div class="font-semibold">CSO Panel</div>
+        <div class="text-slate-500">Pemesanan & Pembayaran</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="./cso.html" class="text-sm px-3 py-1.5 rounded-lg bg-primary-50 text-primary-700">Pemesanan Baru</a>
+      <a href="#history" id="navHistory" class="text-sm px-3 py-1.5 rounded-lg hover:bg-primary-50">Riwayat Hari Ini</a>
+      <button id="logoutBtn" class="text-sm text-slate-600 hover:text-primary-700">Keluar</button>
+    </div>
+  </header>
+
+  <main class="p-4 max-w-5xl mx-auto">
+    <section id="view-new" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="bg-white rounded-xl shadow-sm p-4 lg:col-span-2">
+        <h3 class="font-semibold mb-3">Pemesanan Baru</h3>
+        <form id="formBooking" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium">Zona Asal</label>
+            <select id="fromZone" class="w-full rounded-lg border-slate-300"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Zona Tujuan</label>
+            <select id="toZone" class="w-full rounded-lg border-slate-300"></select>
+          </div>
+          <div class="md:col-span-2">
+            <div class="p-3 rounded-lg bg-slate-50 border">
+              <div class="text-sm text-slate-500">Tarif</div>
+              <div id="priceBox" class="text-2xl font-semibold">-</div>
+            </div>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium">Pilih Supir Tersedia</label>
+            <div id="driversList" class="grid md:grid-cols-3 gap-2"></div>
+          </div>
+          <div class="md:col-span-2 flex gap-2">
+            <button id="btnConfirmBooking" disabled class="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg px-3 py-2">Konfirmasi & Proses Pembayaran</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <h3 class="font-semibold mb-3">Info</h3>
+        <ul class="text-sm text-slate-600 list-disc pl-5 space-y-1">
+          <li>Harga ditentukan oleh Admin berdasarkan pasangan zona.</li>
+          <li>Pembayaran dapat via QRIS, tunai ke CSO, atau tunai ke Supir.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="view-history" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">Riwayat Transaksi (Hari Ini)</h3>
+          <button id="refreshHistory" class="text-sm rounded-lg border px-3 py-1.5">Refresh</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2">Waktu</th>
+                <th class="py-2">Rute</th>
+                <th class="py-2">Supir</th>
+                <th class="py-2">Metode</th>
+                <th class="py-2">Jumlah</th>
+                <th class="px-4 py-2">Aksi</th> 
+              </tr>
+            </thead>
+            <tbody id="csoTxTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Payment Modal -->
+  <div id="paymentModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Proses Pembayaran</h3>
+        <button id="closePayModal">✕</button>
+      </div>
+      <div id="payInfo" class="text-sm text-slate-600 mb-3"></div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <button id="payQRIS" class="rounded-lg border p-3 hover:bg-primary-50">
+          <div class="font-medium">QRIS</div>
+          <div class="text-xs text-slate-500">Tampilkan QR & konfirmasi</div>
+        </button>
+        <button id="payCashCSO" class="rounded-lg border p-3 hover:bg-primary-50">
+          <div class="font-medium">Tunai ke CSO</div>
+          <div class="text-xs text-slate-500">Konfirmasi penerimaan</div>
+        </button>
+        <button id="payCashDriver" class="rounded-lg border p-3 hover:bg-primary-50">
+          <div class="font-medium">Tunai ke Supir</div>
+          <div class="text-xs text-slate-500">Penumpang bayar ke supir</div>
+        </button>
+      </div>
+
+      <div id="qrisBox" class="hidden mt-4 p-3 border rounded-lg">
+        <div class="text-sm mb-1">QRIS Bank BTN (statis/placeholder)</div>
+        <img src="../assets/img/qris-placeholder.svg" alt="QRIS" class="w-48 h-48 mx-auto">
+        <button id="confirmQR" class="mt-3 bg-success text-white rounded-lg px-3 py-2">QRIS Dibayar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireRole, logout } from '../assets/js/auth.js';
+    import { CsoApp } from '../assets/js/cso.js';
+
+    requireRole('cso');
+    const app = new CsoApp();
+    app.init();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => logout());
+  </script>
+
+  <!-- Receipt Modal -->
+  <div id="receiptModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-[380px] max-w-full p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold">Struk Pembayaran</h3>
+        <button id="closeReceipt">✕</button>
+      </div>
+      <div class="text-xs text-slate-500 mb-2">Pratinjau struk (58mm).</div>
+      <div id="receiptArea" class="receipt-paper mx-auto"></div>
+      <div class="mt-3 flex gap-2 justify-end">
+        <button id="printReceipt" class="rounded-lg border px-3 py-1.5">Cetak</button>
+        <button id="closeReceipt2" class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-1.5">Selesai</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
