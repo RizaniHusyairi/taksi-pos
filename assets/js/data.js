@@ -40,6 +40,16 @@ function seed(){
 seed();
 
 export const DB = {
+  // Sisipkan di dalam objek DB
+  commission(){ return this.load().commissionRate || 0; },
+
+  // TAMBAHKAN FUNGSI INI
+  setCommissionRate(rate){
+    const d = this.load();
+    d.commissionRate = rate;
+    this.save(d);
+  },
+
   // --- low level helpers ---
   load(){ return JSON.parse(localStorage.getItem(STORAGE_KEY)); },
   save(d){ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); },

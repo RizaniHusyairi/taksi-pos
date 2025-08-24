@@ -68,22 +68,62 @@ export class CsoApp{
     document.getElementById('closeReceipt')?.addEventListener('click', ()=> this.hideReceipt());
     document.getElementById('closeReceipt2')?.addEventListener('click', ()=> this.hideReceipt());
     document.getElementById('printReceipt')?.addEventListener('click', ()=> {
-      const html = document.getElementById('receiptArea').innerHTML;
-      const w = window.open('', 'PRINT', 'height=600,width=400');
-      w.document.write(`<!doctype html><html><head><title>Struk</title>
-        <link rel="stylesheet" href="../assets/css/style.css">
-        </head><body class="receipt-print">${html}</body></html>`);
-      w.document.close(); w.focus(); w.print(); w.close();
-    });
+  const receiptHTML = document.getElementById('receiptArea').innerHTML;
 
-    this.historyBody = document.getElementById('historyBody');
+  // Semua style CSS yang dibutuhkan untuk struk disalin ke sini
+  const receiptCSS = `
+    .rcpt58 {
+      width: 280px; font-family: "Courier New", ui-monospace, Menlo, Consolas, monospace;
+      font-size: 12px; color: #111; line-height: 1.35; background: #fff; padding: 6px 8px;
+    }
+    .rcpt58 .row { display: flex; justify-content: space-between; align-items: baseline; }
+    .rcpt58 .muted { color:#6b7280; }
+    .rcpt58 .r { text-align: right; }
+    .rcpt58 .c { text-align: center; }
+    .rcpt58 .hr { letter-spacing: .5px; margin: 4px 0; white-space: pre; }
+    .rcpt58 .hr::before { content: "--------------------------------"; }
+    .rcpt58 .reprint { margin: 4px 0 6px; }
+    .rcpt58 .reprint .label { display:block; }
+    .rcpt58 .reprint .phone { font-weight: 700; }
+    .rcpt58 .meta { margin: 6px 0; }
+    .rcpt58 .code { font-size: 11px; color:#6b7280; }
+    .rcpt58 .thead { margin-top: 6px; font-weight: 700; }
+    .rcpt58 .thead .item { width: 60%; }
+    .rcpt58 .thead .qty { width: 40%; text-align: right; }
+    .rcpt58 .itemrow { margin-top: 2px; }
+    .rcpt58 .itemrow .name { font-weight: 700; }
+    .rcpt58 .itemrow .qtyprice { text-align:right; }
+    .rcpt58 .itemrow .amt { text-align: right; }
+    .rcpt58 .totals .row { margin-top: 2px; }
+    .rcpt58 .currency::before { content: "Rp "; }
+    .rcpt58 .foot { margin-top: 8px; }
+  `;
+
+  const win = window.open('', 'PRINT', 'height=600,width=400');
+  win.document.write('<!doctype html><html><head><title>Struk Pembayaran</title>');
+  win.document.write('<style>' + receiptCSS + '</style>'); // Menyematkan CSS
+  win.document.write('</head><body>');
+  win.document.write(receiptHTML); // Menyisipkan HTML struk
+  win.document.write('</body></html>');
+
+  win.document.close();
+  win.focus();
+  
+  // Memberi sedikit waktu agar browser sempat merender CSS sebelum mencetak
+  setTimeout(() => {
+    win.print();
+    win.close();
+  }, 250);
+});
+
+    this.historyBody = document.getElementById('csoTxTable');
 
   // Delegasi klik tombol "Lihat Struk"
   this.historyBody.addEventListener('click', (e) => {
-    const btn = e.target.closest('.btn-view-receipt');
+    const btn = e.target.closest('.lihat-struk-btn');
     if (!btn) return;
 
-    const txId = btn.dataset.tx;
+    const txId = btn.dataset.id;
     // Ambil transaksi + booking terkait
     const tx = (DB.getTransactionById ? DB.getTransactionById(txId)
              : DB.listTransactions().find(x => String(x.id) === String(txId)));
@@ -189,7 +229,7 @@ export class CsoApp{
         <td class="py-2">${t.method}</td>
         <td class="py-2">${Utils.formatCurrency(t.amount)}</td>
         <td class="px-4 py-2">
-        <button class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-2 py-1 rounded lihat-struk-btn" data-id="${t.bookingId}">
+        <button class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-2 py-1 rounded lihat-struk-btn" data-id="${t.id}">
           Lihat Struk
         </button>
       </td>
@@ -208,7 +248,7 @@ export class CsoApp{
   const MERCHANT_TOP = "";                // foto ada stempel, kita kosongkan teksnya
   const SHOW_REPRINT = true;              // tampilkan (Reprint)
   const REPRINT_PHONE = "0811519883";     // seperti foto
-  const FOOTER_TEXT = "Powered by Olsera POS"; // mengikuti foto
+  const FOOTER_TEXT = "Powered by Taksi Koperasi POS"; // mengikuti foto
   // ========================================
 
   // format tanggal & jam: "17 Agu 2025 10:21"
@@ -287,37 +327,9 @@ export class CsoApp{
 
 }
 
-// document.getElementById('printReceipt')?.addEventListener('click', ()=>{
-//   const receiptHTML = document.getElementById('receiptArea').innerHTML;
+// File: assets/js/cso.js
 
-//   // CSS khusus struk 58mm – paste-kan persis seperti yang di style.css
-//   const receiptCSS = `
-//     @page { size: 58mm auto; margin: 0; }
-//     html, body { margin:0; padding:0; background:#fff; }
-//     .rcpt58 { width:280px; font-family:"Courier New", ui-monospace, Menlo, Consolas, monospace;
-//               font-size:12px; color:#111; line-height:1.35; background:#fff; padding:6px 8px; }
-//     .rcpt58 .row{ display:flex; justify-content:space-between; align-items:baseline; }
-//     .rcpt58 .r{text-align:right;} .rcpt58 .c{text-align:center;}
-//     .rcpt58 .hr{ letter-spacing:.5px; margin:4px 0; white-space:pre; }
-//     .rcpt58 .hr::before{ content:"--------------------------------"; }
-//     .rcpt58 .reprint{ margin:4px 0 6px; } .rcpt58 .reprint .phone{ font-weight:700; }
-//     .rcpt58 .meta{ margin:6px 0; } .rcpt58 .code{ font-size:11px; color:#6b7280; }
-//     .rcpt58 .thead{ margin-top:6px; font-weight:700; }
-//     .rcpt58 .itemrow{ margin-top:2px; } .rcpt58 .itemrow .name{ font-weight:700; }
-//     .rcpt58 .itemrow .qtyprice{ text-align:right; } .rcpt58 .itemrow .amt{ text-align:right; }
-//     .rcpt58 .totals .row{ margin-top:2px; } .rcpt58 .currency::before{ content:"Rp "; }
-//     .rcpt58 .foot{ margin-top:8px; text-align:center; }
-//   `;
 
-//   const w = window.open('', 'PRINT', 'width=400,height=600');
-//   w.document.write(`<!doctype html>
-//   <html><head><title>Struk</title><style>${receiptCSS}</style></head>
-//   <body class="receipt-print">${receiptHTML}</body></html>`);
-//   w.document.close();
-
-//   // Pastikan print dipanggil setelah CSS ter-load
-//   w.onload = () => { w.focus(); w.print(); w.close(); };
-// });
 
 // Pasang event listener tombol Lihat Struk
   document.querySelectorAll(".lihat-struk-btn").forEach(btn=>{

@@ -3,7 +3,7 @@ import { Utils } from './utils.js';
 
 export class AdminApp{
   constructor(){
-    this.views = ['dashboard','zones','users','finance-log','withdrawals','report-revenue','report-driver'];
+    this.views = ['dashboard','zones','users','finance-log','withdrawals','report-revenue','report-driver','settings'];
     this.charts = {};
   }
   init(){
@@ -12,6 +12,20 @@ export class AdminApp{
     this.initCommon();
   }
   initCommon(){
+
+    // Settings form
+    const formSettings = document.getElementById('formSettings');
+    formSettings?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const rateInput = document.getElementById('commissionRate').value;
+      const rateDecimal = parseFloat(rateInput) / 100;
+      if (isNaN(rateDecimal) || rateDecimal < 0 || rateDecimal > 1) {
+        Utils.showToast('Masukkan nilai persentase antara 0 dan 100', 'error');
+        return;
+      }
+      DB.setCommissionRate(rateDecimal);
+      Utils.showToast('Pengaturan komisi berhasil disimpan', 'success');
+    });
     // Populate select filters with drivers and CSOs
     const dOpt = ['<option value="">Semua</option>']
       .concat(DB.listDrivers().map(d=>`<option value="${d.id}">${d.name}</option>`)).join('');
@@ -143,6 +157,7 @@ export class AdminApp{
     this.renderWithdrawals();
     this.renderRevReport();
     this.renderDriverReport();
+    this.renderSettings();
   }
 
   route(){
@@ -167,7 +182,8 @@ export class AdminApp{
       'finance-log':'Transaction Log',
       'withdrawals':'Withdrawal Requests',
       'report-revenue':'Laporan Pendapatan',
-      'report-driver':'Laporan Kinerja Supir'
+      'report-driver':'Laporan Kinerja Supir',
+      'settings': 'Pengaturan'
     }[v] || 'Dashboard';
   }
 
@@ -487,4 +503,14 @@ export class AdminApp{
       <td class="py-2">${Utils.formatCurrency(r.revenue)}</td>
     </tr>`).join('');
   }
+
+  renderSettings(){
+    const rate = DB.commission();
+    const rateInput = document.getElementById('commissionRate');
+    if(rateInput) {
+      // Tampilkan sebagai persen, misal 0.2 menjadi 20
+      rateInput.value = (rate * 100).toFixed(0);
+    }
+  }
+
 }
