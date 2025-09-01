@@ -65,12 +65,8 @@
     <section id="view-new" class="view-section space-y-5">
       <!-- Route Selection Card -->
       <div>
-        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">1. Pilih Rute</h2>
+        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">1. Pilih Tujuan</h2>
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Zona Asal</label>
-            <select id="fromZone" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:border-primary-500 focus:ring-primary-500"></select>
-          </div>
           <div>
             <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Zona Tujuan</label>
             <select id="toZone" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:border-primary-500 focus:ring-primary-500"></select>
@@ -202,7 +198,6 @@
       }
 
       initTheme() {
-        // Logika dark mode sama seperti di halaman driver
         const updateTheme = () => {
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
@@ -211,12 +206,11 @@
             }
         };
         updateTheme();
-      } // <-- THE FIX IS HERE: Added the missing closing brace
+      }
 
       cacheEls() {
         this.views = ['new', 'history'];
         this.pageTitle = document.getElementById('pageTitle');
-        this.fromSel = document.getElementById('fromZone');
         this.toSel = document.getElementById('toZone');
         this.priceBox = document.getElementById('priceBox');
         this.driversList = document.getElementById('driversList');
@@ -231,29 +225,29 @@
         this.btnConfirmQR = document.getElementById('confirmQR');
         this.historyList = document.getElementById('csoTxList');
         this.refreshHistoryBtn = document.getElementById('refreshHistory');
+        this.lastReceiptData = null; // To store data for clean printing
       }
 
       bind() {
         document.getElementById('logoutBtn').addEventListener('click', () => logout());
 
-        const onZonesChange = () => {
-          const from = this.fromSel.value, to = this.toSel.value;
-          const t = DB.findTariff(from, to);
-          this.priceBox.textContent = t ? Utils.formatCurrency(t.price) : '-';
-          this.btnConfirm.disabled = !t || !this.selectedDriver;
+        const onZoneChange = () => {
+          const to = this.toSel.value;
+          const zone = DB.getZoneById(to);
+          this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-';
+          this.btnConfirm.disabled = !zone || !this.selectedDriver;
         };
-        this.fromSel.addEventListener('change', onZonesChange);
-        this.toSel.addEventListener('change', onZonesChange);
+        this.toSel.addEventListener('change', onZoneChange);
 
         this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
 
         this.btnConfirm.addEventListener('click', (e) => {
           e.preventDefault();
           if (!this.selectedDriver) { Utils.showToast('Pilih supir terlebih dahulu', 'error'); return; }
-          const from = this.fromSel.value, to = this.toSel.value;
-          const t = DB.findTariff(from, to);
-          if (!t) { Utils.showToast('Tarif belum diatur untuk rute ini', 'error'); return; }
-          this.currentBooking = DB.createBooking({ csoId: this.u.id, driverId: this.selectedDriver, from, to, price: t.price });
+          const to = this.toSel.value;
+          const zone = DB.getZoneById(to);
+          if (!zone) { Utils.showToast('Tarif belum diatur untuk rute ini', 'error'); return; }
+          this.currentBooking = DB.createBooking({ csoId: this.u.id, driverId: this.selectedDriver, from: 'z0', to, price: zone.price });
           this.openPayment();
         });
 
@@ -299,9 +293,8 @@
       }
 
       renderZones() {
-        const zones = DB.listZones();
+        const zones = DB.listZones().filter(z => z.id !== 'z0');
         const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
-        this.fromSel.innerHTML = '<option value="">Pilih Asal</option>' + opts;
         this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
       }
 
@@ -312,7 +305,6 @@
           const st = DB.getDriverStatus(d.id);
           const avail = st === 'available';
           const statusText = avail ? 'Tersedia' : (st === 'ontrip' ? 'Sedang jalan' : 'Offline');
-          const statusColor = avail ? 'text-success' : 'text-slate-400';
           return `
             <button type="button" data-driver="${d.id}" class="driver-card border-2 ${avail ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600'} rounded-xl p-3 text-left transition-all ${avail ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}">
               <div class="flex items-center justify-between">
@@ -331,8 +323,8 @@
             this.selectedDriver = id;
             this.driversList.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
-            const t = DB.findTariff(this.fromSel.value, this.toSel.value);
-            this.btnConfirm.disabled = !t;
+            const zone = DB.getZoneById(this.toSel.value);
+            this.btnConfirm.disabled = !zone;
           });
         });
       }
@@ -438,11 +430,13 @@
             </div>
             <div class="foot c" style="margin-top: 8px;">Terima kasih!</div>
         </div>`;
-      }
+      } // <<<--- THIS IS WHERE THE FIX IS. I've added the missing closing brace.
 
       showReceipt(tx, booking) {
         const m = document.getElementById('receiptModal');
         const area = document.getElementById('receiptArea');
+        // Store data for clean printing
+        this.lastReceiptData = { tx, booking };
         area.innerHTML = this.generateReceiptHTML(tx, booking);
         m.classList.remove('hidden'); m.classList.add('flex');
       }
@@ -453,35 +447,18 @@
       }
 
       printReceiptHandler() {
-        const receiptHTML = document.getElementById('receiptArea').innerHTML;
-
-        // Kumpulkan stylesheet yang sudah ada
-        const links = Array.from(document.styleSheets)
-          .filter(sheet => sheet.href)
-          .map(sheet => sheet.href);
-
+        if (!this.lastReceiptData) {
+            Utils.showToast('Data struk tidak ditemukan.', 'error');
+            return;
+        }
+        // Regenerate clean HTML from stored data
+        const receiptHTML = this.generateReceiptHTML(this.lastReceiptData.tx, this.lastReceiptData.booking);
+        
+        const stylesheets = Array.from(document.styleSheets).map(sheet => sheet.href ? `<link rel="stylesheet" href="${sheet.href}">` : '').join('\n');
         const win = window.open('', 'PRINT', 'height=600,width=400');
-
-        // Set title
-        win.document.title = 'Struk';
-
-        // Tambahkan <link rel="stylesheet"> ke head jendela baru
-        links.forEach(href => {
-          const link = win.document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = href;
-          win.document.head.appendChild(link);
-        });
-
-        // Tambahkan style kecil untuk memastikan warna hitam
-        const style = win.document.createElement('style');
-        style.textContent = '.rcpt58{color:#000!important}';
-        win.document.head.appendChild(style);
-
-        // Isi body dengan HTML struk
-        win.document.body.innerHTML = receiptHTML;
-
-        // Cetak
+        
+        win.document.write(`<!doctype html><html><head><title>Struk</title>${stylesheets}<style>.rcpt58{color:#000!important}</style></head><body>${receiptHTML}</body></html>`);
+        win.document.close();
         win.focus();
         setTimeout(() => { win.print(); win.close(); }, 500);
       }
@@ -493,3 +470,4 @@
   </script>
 </body>
 </html>
+

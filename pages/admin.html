@@ -39,17 +39,13 @@
         <div class="mt-3 text-xs uppercase text-slate-400 px-3">Operasional</div>
         <a href="#zones" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Manajemen Zona & Tarif</a>
         <a href="#users" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Manajemen Pengguna</a>
+        <a href="#settings" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Pengaturan</a>
         <div class="mt-3 text-xs uppercase text-slate-400 px-3">Keuangan</div>
         <a href="#finance-log" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Transaction Log</a>
         <a href="#withdrawals" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Withdrawal Requests</a>
         <div class="mt-3 text-xs uppercase text-slate-400 px-3">Laporan</div>
         <a href="#report-revenue" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Laporan Pendapatan</a>
         <a href="#report-driver" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Laporan Kinerja Supir</a>
-        <div class="mt-3 text-xs uppercase text-slate-400 px-3">-</div>
-        <a href="#settings" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Pengaturan</a>
-        
-
-
       </nav>
     </aside>
 
@@ -105,68 +101,36 @@
       <section id="view-zones" class="p-4 hidden">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div class="bg-white rounded-xl shadow-sm p-4 lg:col-span-1">
-            <h3 class="font-semibold mb-3">Tambah Zona</h3>
+            <h3 class="font-semibold mb-3">Tambah/Edit Zona Tujuan</h3>
             <form id="formZone" class="space-y-3">
               <input type="hidden" id="zoneId">
               <div>
                 <label class="block text-sm font-medium">Nama Zona</label>
                 <input id="zoneName" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500" required>
               </div>
+              <div>
+                <label class="block text-sm font-medium">Tarif (Rp)</label>
+                <input id="zonePrice" type="number" min="0" class="w-full rounded-lg border-slate-300" required>
+              </div>
               <div class="flex gap-2">
                 <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-2">Simpan</button>
                 <button type="button" id="zoneReset" class="rounded-lg px-3 py-2 border">Reset</button>
               </div>
             </form>
-
-            <hr class="my-4"/>
-
-            <h3 class="font-semibold mb-3">Tambah Tarif</h3>
-            <form id="formTariff" class="space-y-3">
-              <input type="hidden" id="tariffId">
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="block text-sm font-medium">Zona Asal</label>
-                  <select id="tariffFrom" class="w-full rounded-lg border-slate-300"></select>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium">Zona Tujuan</label>
-                  <select id="tariffTo" class="w-full rounded-lg border-slate-300"></select>
-                </div>
-              </div>
-              <div>
-                <label class="block text-sm font-medium">Harga (Rp)</label>
-                <input id="tariffPrice" type="number" min="0" class="w-full rounded-lg border-slate-300" required>
-              </div>
-              <div class="flex gap-2">
-                <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-2">Simpan</button>
-                <button type="button" id="tariffReset" class="rounded-lg px-3 py-2 border">Reset</button>
-              </div>
-            </form>
           </div>
 
           <div class="bg-white rounded-xl shadow-sm p-4 lg:col-span-2">
-            <h3 class="font-semibold mb-3">Daftar Zona</h3>
+            <h3 class="font-semibold mb-3">Daftar Zona & Tarif Tujuan</h3>
+            <p class="text-xs text-slate-500 mb-3">Semua perjalanan diasumsikan berasal dari titik pusat (misal: Bandara).</p>
             <table class="w-full text-sm">
               <thead>
                 <tr class="text-left text-slate-500">
-                  <th class="py-2">Nama</th>
+                  <th class="py-2">Nama Zona Tujuan</th>
+                  <th class="py-2">Tarif</th>
                   <th class="py-2 w-32">Aksi</th>
                 </tr>
               </thead>
               <tbody id="zonesTable"></tbody>
-            </table>
-
-            <h3 class="font-semibold mt-6 mb-3">Daftar Tarif</h3>
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="text-left text-slate-500">
-                  <th class="py-2">Asal</th>
-                  <th class="py-2">Tujuan</th>
-                  <th class="py-2">Harga</th>
-                  <th class="py-2 w-32">Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tariffsTable"></tbody>
             </table>
           </div>
         </div>

@@ -16,18 +16,12 @@ function seed(){
       { id:'u5', role:'driver', name:'Siti',        username:'driver3',password:'123456', active:false, car:'Ertiga', plate:'B 3456 GH', createdAt: new Date().toISOString() }
     ],
     zones: [
-      { id:'z1', name:'Zona Bandara' },
-      { id:'z2', name:'Zona Pusat Kota' },
-      { id:'z3', name:'Zona Stasiun' },
-      { id:'z4', name:'Zona Pelabuhan' }
+      { id: 'z0', name: 'Bandara APT Pranoto', price: 0 }, // Titik asal tetap
+      { id: 'z1', name: 'Pusat Kota', price: 150000 },
+      { id: 'z2', name: 'Stasiun', price: 120000 },
+      { id: 'z3', name: 'Pelabuhan', price: 90000 }
     ],
-    tariffs: [
-      { id:'t1', from:'z1', to:'z2', price:150000 },
-      { id:'t2', from:'z1', to:'z3', price:120000 },
-      { id:'t3', from:'z2', to:'z3', price:80000 },
-      { id:'t4', from:'z2', to:'z4', price:90000 },
-      { id:'t5', from:'z3', to:'z2', price:80000 }
-    ],
+    // tariffs array is removed
     bookings: [],
     transactions: [],
     withdrawals: [],
@@ -40,26 +34,15 @@ function seed(){
 seed();
 
 export const DB = {
-  // Sisipkan di dalam objek DB
-  commission(){ return this.load().commissionRate || 0; },
-
-  // TAMBAHKAN FUNGSI INI
-  setCommissionRate(rate){
-    const d = this.load();
-    d.commissionRate = rate;
-    this.save(d);
-  },
-
   // --- low level helpers ---
   load(){ return JSON.parse(localStorage.getItem(STORAGE_KEY)); },
   save(d){ localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); },
   session(){ return JSON.parse(localStorage.getItem(SESSION_KEY)); },
 
-  // --- Users ---
+  // --- Users (no changes) ---
   listUsers(){ return this.load().users; },
   listDrivers({onlyActive=false}={}){
-    const d = this.load().users.filter(u => u.role==='driver' && (!onlyActive || u.active));
-    return d;
+    return this.load().users.filter(u => u.role==='driver' && (!onlyActive || u.active));
   },
   listCSOs(){ return this.load().users.filter(u => u.role==='cso'); },
   findUserByUsername(username){
@@ -85,12 +68,15 @@ export const DB = {
     if(u){ u.active = !!active; this.save(d); }
   },
 
-  // --- Zones & Tariffs ---
+  // --- Zones & Tariffs (Simplified) ---
   listZones(){ return this.load().zones; },
+  getZoneById(id){ return this.load().zones.find(z => z.id === id); },
   upsertZone(zone){
     const d = this.load();
-    if(!zone.id){ zone.id = Utils.id('z'); d.zones.push(zone); }
-    else{
+    if(!zone.id){ 
+      zone.id = Utils.id('z'); 
+      d.zones.push(zone); 
+    } else {
       const i = d.zones.findIndex(z=>z.id===zone.id);
       if(i>=0) d.zones[i] = { ...d.zones[i], ...zone };
     }
@@ -99,40 +85,26 @@ export const DB = {
   },
   deleteZone(id){
     const d = this.load();
+    // Prevent deleting the base zone
+    if (id === 'z0') return;
     d.zones = d.zones.filter(z=>z.id!==id);
-    d.tariffs = d.tariffs.filter(t => t.from!==id && t.to!==id);
     this.save(d);
   },
-  listTariffs(){ return this.load().tariffs; },
-  upsertTariff(t){
-    const d = this.load();
-    if(!t.id){ t.id = Utils.id('t'); d.tariffs.push(t); }
-    else{
-      const i = d.tariffs.findIndex(x=>x.id===t.id);
-      if(i>=0) d.tariffs[i] = { ...d.tariffs[i], ...t };
-    }
-    this.save(d); return t;
-  },
-  deleteTariff(id){
-    const d = this.load(); d.tariffs = d.tariffs.filter(t=>t.id!==id); this.save(d);
-  },
-  findTariff(from, to){
-    return this.load().tariffs.find(t => t.from===from && t.to===to);
-  },
+  // findTariff, listTariffs, upsertTariff, deleteTariff are removed.
 
-  // --- Driver Status ---
+  // --- Driver Status (no changes) ---
   getDriverStatus(id){ return (this.load().driverStatus || {})[id] || 'offline'; },
   setDriverStatus(id, status){
     const d = this.load(); d.driverStatus[id] = status; this.save(d);
   },
 
-  // --- Bookings & Transactions ---
+  // --- Bookings & Transactions (Simplified 'from') ---
   createBooking({csoId, driverId, from, to, price}){
     const d = this.load();
     const booking = {
       id: Utils.id('b'),
       csoId, driverId, from, to, price,
-      status: 'Assigned', // Assigned -> Paid/CashDriver -> Completed
+      status: 'Assigned',
       createdAt: new Date().toISOString()
     };
     d.bookings.push(booking);
@@ -149,7 +121,6 @@ export const DB = {
     const d = this.load(); const b = d.bookings.find(x=>x.id===id);
     if(b){ b.status = 'Completed'; d.driverStatus[b.driverId] = 'available'; this.save(d); }
   },
-
   recordPayment(bookingId, method){
     const d = this.load();
     const b = d.bookings.find(x=>x.id===bookingId);
@@ -158,8 +129,7 @@ export const DB = {
       id: Utils.id('tx'),
       bookingId: b.id,
       csoId: b.csoId, driverId: b.driverId,
-      method, // 'QRIS' | 'CashCSO' | 'CashDriver'
-      whoReceived: method==='QRIS' ? 'QRIS' : (method==='CashCSO'?'CSO':'Driver'),
+      method,
       amount: b.price,
       createdAt: new Date().toISOString()
     };
@@ -170,7 +140,15 @@ export const DB = {
   },
   listTransactions(){ return this.load().transactions; },
 
-  // --- Withdrawals ---
+  // --- Settings ---
+  commission(){ return this.load().commissionRate || 0; },
+  setCommissionRate(rate){
+    const d = this.load();
+    d.commissionRate = rate;
+    this.save(d);
+  },
+
+  // --- Withdrawals & Wallet (no changes) ---
   createWithdrawal(driverId, amount){
     const d = this.load();
     const wd = {
@@ -184,11 +162,7 @@ export const DB = {
     const d = this.load(); const w = d.withdrawals.find(x=>x.id===id);
     if(w){ w.status = status; w.processedAt = new Date().toISOString(); this.save(d); }
   },
-
-  // --- Wallet calculations for drivers ---
-  commission(){ return this.load().commissionRate || 0; },
   driverCredits(driverId){
-    // From QRIS or CashCSO: credit amount * (1 - commission)
     const { transactions } = this.load();
     const com = this.commission();
     return transactions

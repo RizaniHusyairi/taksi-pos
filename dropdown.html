@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Multi-select + Search (Choices.js)</title>
+  <!-- CSS Choices -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css"/>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; }
+    form { max-width: 420px; }
+    .field { margin-bottom: 16px; }
+    button { padding: 10px 14px; border: 1px solid #aaa; border-radius: 8px; background: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h2>Pilih Hobi</h2>
+  <form id="formHobi">
+    <div class="field">
+      <label for="hobi">Hobi (bisa lebih dari satu):</label>
+      <select id="hobi" name="hobi[]" multiple>
+        <option value="membaca">Membaca</option>
+        <option value="olahraga">Olahraga</option>
+        <option value="musik">Musik</option>
+        <option value="travel">Travel</option>
+        <option value="fotografi">Fotografi</option>
+        <option value="game">Game</option>
+        <option value="memasak">Memasak</option>
+      </select>
+    </div>
+
+    <button type="submit">Kirim</button>
+  </form>
+
+  <pre id="output"></pre>
+
+  <!-- JS Choices -->
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <script>
+    // Inisialisasi Choices (aktifkan search, remove item, dll)
+    const choices = new Choices('#hobi', {
+      removeItemButton: true,
+      placeholderValue: 'Pilih hobi...',
+      searchPlaceholderValue: 'Cari hobi...',
+      noResultsText: 'Tidak ada hasil',
+      noChoicesText: 'Tidak ada pilihan',
+      itemSelectText: 'Klik untuk pilih'
+    });
+
+    // Contoh handling submit untuk ambil nilai terpilih
+    const form = document.getElementById('formHobi');
+    const output = document.getElementById('output');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const selected = choices.getValue(true); // return array of values
+      output.textContent = 'Terpilih: ' + JSON.stringify(selected, null, 2);
+    });
+  </script>
+</body>
+</html>

@@ -43,38 +43,17 @@ export class AdminApp{
       e.preventDefault();
       const id = document.getElementById('zoneId').value || null;
       const name = document.getElementById('zoneName').value.trim();
+      const price = parseInt(document.getElementById('zonePrice').value, 10) || 0;
       if(!name) return;
-      DB.upsertZone({ id, name });
+      DB.upsertZone({ id, name, price });
       Utils.showToast('Zona disimpan', 'success');
+      formZone.reset();
       document.getElementById('zoneId').value='';
-      document.getElementById('zoneName').value='';
       this.renderZones();
-      this.renderTariffsFormOptions();
     });
     zoneReset?.addEventListener('click', ()=>{
+      document.getElementById('formZone').reset();
       document.getElementById('zoneId').value='';
-      document.getElementById('zoneName').value='';
-    });
-
-    const formTariff = document.getElementById('formTariff');
-    document.getElementById('tariffReset')?.addEventListener('click', ()=>{
-      document.getElementById('tariffId').value='';
-      document.getElementById('tariffFrom').selectedIndex=0;
-      document.getElementById('tariffTo').selectedIndex=0;
-      document.getElementById('tariffPrice').value='';
-    });
-    formTariff?.addEventListener('submit', (e)=>{
-      e.preventDefault();
-      const id = document.getElementById('tariffId').value || null;
-      const from = document.getElementById('tariffFrom').value;
-      const to   = document.getElementById('tariffTo').value;
-      const price= parseInt(document.getElementById('tariffPrice').value,10) || 0;
-      if(!from || !to || from===to){ Utils.showToast('Pilih zona asal & tujuan yang berbeda','error'); return; }
-      DB.upsertTariff({ id, from, to, price });
-      Utils.showToast('Tarif disimpan','success');
-      document.getElementById('tariffId').value='';
-      document.getElementById('tariffPrice').value='';
-      this.renderTariffs();
     });
 
     // Users modal
@@ -150,8 +129,6 @@ export class AdminApp{
   renderAll(){
     this.renderDashboard();
     this.renderZones();
-    this.renderTariffsFormOptions();
-    this.renderTariffs();
     this.renderUsers();
     this.renderTxLog();
     this.renderWithdrawals();
@@ -244,74 +221,37 @@ export class AdminApp{
 
   // ----- Zones & Tariffs -----
   renderZones(){
-    const zones = DB.listZones();
+    const zones = DB.listZones().filter(z => z.id !== 'z0');
     const tbody = document.getElementById('zonesTable');
     if(!tbody) return;
     tbody.innerHTML = zones.map(z=>`<tr class="border-t">
       <td class="py-2">${z.name}</td>
+      <td class="py-2">${Utils.formatCurrency(z.price)}</td>
       <td class="py-2">
-        <button class="text-primary-700 text-sm" data-edit-zone="${z.id}">Edit</button>
+        <button class="text-primary-700 text-sm" data-edit-zone='${JSON.stringify(z)}'>Edit</button>
         <button class="text-red-600 text-sm ml-2" data-del-zone="${z.id}">Hapus</button>
       </td>
     </tr>`).join('');
 
     tbody.querySelectorAll('[data-edit-zone]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const z = zones.find(x=>x.id===btn.dataset.editZone);
+        const z = JSON.parse(btn.dataset.editZone);
         document.getElementById('zoneId').value = z.id;
         document.getElementById('zoneName').value = z.name;
+        document.getElementById('zonePrice').value = z.price;
       });
     });
     tbody.querySelectorAll('[data-del-zone]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        if(confirm('Hapus zona ini beserta tarif terkait?')){
+        if(confirm('Hapus zona tujuan ini?')){
           DB.deleteZone(btn.dataset.delZone);
-          this.renderZones(); this.renderTariffs(); this.renderTariffsFormOptions();
+          this.renderZones();
         }
       });
     });
   }
-  renderTariffsFormOptions(){
-    const zones = DB.listZones();
-    const opts = zones.map(z=>`<option value="${z.id}">${z.name}</option>`).join('');
-    const fromSel = document.getElementById('tariffFrom');
-    const toSel = document.getElementById('tariffTo');
-    if(fromSel) fromSel.innerHTML = '<option value="">Pilih</option>' + opts;
-    if(toSel) toSel.innerHTML = '<option value="">Pilih</option>' + opts;
-  }
-  renderTariffs(){
-    const tariffs = DB.listTariffs();
-    const zones = DB.listZones();
-    const zoneName = id => zones.find(z=>z.id===id)?.name || id;
-    const tbody = document.getElementById('tariffsTable');
-    if(!tbody) return;
-    tbody.innerHTML = tariffs.map(t=>`<tr class="border-t">
-      <td class="py-2">${zoneName(t.from)}</td>
-      <td class="py-2">${zoneName(t.to)}</td>
-      <td class="py-2">${Utils.formatCurrency(t.price)}</td>
-      <td class="py-2">
-        <button class="text-primary-700 text-sm" data-edit-t="${t.id}">Edit</button>
-        <button class="text-red-600 text-sm ml-2" data-del-t="${t.id}">Hapus</button>
-      </td>
-    </tr>`).join('');
-    tbody.querySelectorAll('[data-edit-t]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const t = tariffs.find(x=>x.id===btn.dataset.editT);
-        document.getElementById('tariffId').value = t.id;
-        document.getElementById('tariffFrom').value = t.from;
-        document.getElementById('tariffTo').value = t.to;
-        document.getElementById('tariffPrice').value = t.price;
-        location.hash = '#zones';
-      });
-    });
-    tbody.querySelectorAll('[data-del-t]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        if(confirm('Hapus tarif ini?')){ DB.deleteTariff(btn.dataset.delT); this.renderTariffs(); }
-      });
-    });
-  }
-
-  // ----- Users -----
+  
+    // ----- Users -----
   renderUsers(){
     const users = DB.listUsers();
     const tbody = document.getElementById('usersTable');

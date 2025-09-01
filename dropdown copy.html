@@ -1,0 +1,24 @@
+<!-- CDN CSS & JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<select id="hobi2" name="hobi2[]" multiple style="width: 320px;">
+  <option value="membaca">Membaca</option>
+  <option value="olahraga">Olahraga</option>
+  <option value="musik">Musik</option>
+  <option value="travel">Travel</option>
+  <option value="fotografi">Fotografi</option>
+  <option value="game">Game</option>
+  <option value="memasak">Memasak</option>
+</select>
+
+<script>
+  $(function(){
+    $('#hobi2').select2({
+      placeholder: 'Pilih hobi...',
+      allowClear: true,
+      width: 'resolve'
+    });
+  });
+</script>
