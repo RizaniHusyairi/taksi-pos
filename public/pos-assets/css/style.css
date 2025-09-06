@@ -1,0 +1,121 @@
+
+/* Koperasi Taksi POS - Custom Styles & Animations */
+:root{
+  --kt-primary-600: #2563eb;
+  --kt-primary-700: #1d4ed8;
+  --kt-success: #10b981;
+  --kt-pending: #f59e0b;
+}
+
+/* Background ambiance */
+body{
+  background-image:
+    radial-gradient(60rem 60rem at 10% -10%, rgba(37,99,235,.08), transparent 40%),
+    radial-gradient(40rem 40rem at 100% 10%, rgba(16,185,129,.06), transparent 45%);
+}
+
+/* Card lift */
+.rounded-xl.shadow-sm,
+.rounded-xl.shadow-xl { transition: transform .25s ease, box-shadow .25s ease, background-color .25s ease; }
+.rounded-xl.shadow-sm:hover,
+.rounded-xl.shadow-xl:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.08); }
+
+/* Primary buttons glow */
+button[class*="bg-primary-"],
+a[class*="bg-primary-"] { position: relative; overflow: hidden; }
+button[class*="bg-primary-"]::after,
+a[class*="bg-primary-"]::after{
+  content:""; position:absolute; inset:0;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 40%);
+  opacity:0; transition: opacity .25s ease; pointer-events:none;
+}
+button[class*="bg-primary-"]:hover::after,
+a[class*="bg-primary-"]:hover::after{ opacity:.6; }
+
+/* Focus ring */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible{
+  box-shadow: 0 0 0 3px rgba(37,99,235,.35);
+  border-radius:.6rem;
+}
+
+/* Table row hover */
+table tbody tr:hover{ background-color: rgba(37,99,235,.035); }
+
+/* Sidebar nav indicator */
+.nav-link{ position:relative; transition: background-color .2s ease, color .2s ease; }
+.nav-link::before{
+  content:""; position:absolute; left:8px; top:50%; width:0; height:60%; transform:translateY(-50%);
+  border-radius:999px; background: linear-gradient(180deg, var(--kt-primary-600), var(--kt-primary-700));
+  transition: width .2s ease;
+}
+.nav-link.bg-primary-50::before, .nav-link:hover::before{ width:4px; }
+
+/* Modal entrance */
+@keyframes ktModalIn { from{opacity:0; transform: translateY(10px) scale(.98);} to{opacity:1; transform:none;} }
+#paymentModal > div, #userModal > div{ animation: ktModalIn .24s ease both; }
+
+/* Driver active order blink */
+@keyframes ktBlinkBorder { 0%,100%{ box-shadow:0 0 0 0 rgba(245,158,11,.55);} 50%{ box-shadow:0 0 0 8px rgba(245,158,11,0);} }
+#activeOrderBox{ animation: ktBlinkBorder 1.6s ease-in-out infinite; }
+
+/* QR image wiggle */
+@keyframes ktWiggle { 0%{transform:rotate(0) scale(1);} 50%{transform:rotate(1deg) scale(1.02);} 100%{transform:none;} }
+#qrisBox img:hover{ animation: ktWiggle .6s ease; }
+
+/* CSO driver cards hover */
+#driversList button{ transition: transform .18s ease, box-shadow .18s ease; }
+#driversList button:hover{ transform: translateY(-1px); box-shadow:0 8px 16px rgba(0,0,0,.06); }
+
+/* ===== RECEIPT 58MM — MIRROR FOTO ===== */
+.rcpt58 {
+  width: 280px;               /* ±58mm printable width */
+  font-family: "Courier New", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #111;
+  line-height: 1.35;
+  background: #fff;
+  padding: 6px 8px;
+}
+
+/* baris umum */
+.rcpt58 .row { display: flex; justify-content: space-between; align-items: baseline; }
+.rcpt58 .muted { color:#6b7280; }
+.rcpt58 .r { text-align: right; }
+.rcpt58 .c { text-align: center; }
+
+.rcpt58 .hr { letter-spacing: .5px; margin: 4px 0; white-space: pre; }
+.rcpt58 .hr::before { content: "--------------------------------"; }
+
+/* header “(Reprint) + phone” di kiri atas */
+.rcpt58 .reprint { margin: 4px 0 6px; }
+.rcpt58 .reprint .label { display:block; }
+.rcpt58 .reprint .phone { font-weight: 700; }
+
+/* blok meta */
+.rcpt58 .meta { margin: 6px 0; }
+.rcpt58 .code { font-size: 11px; color:#6b7280; }
+
+/* header kolom */
+.rcpt58 .thead { margin-top: 6px; font-weight: 700; }
+.rcpt58 .thead .item { width: 60%; }
+.rcpt58 .thead .qty { width: 40%; text-align: right; }
+
+/* item row: nama (kiri), qty×harga (kanan), amount (baris di bawah kanan) */
+.rcpt58 .itemrow { margin-top: 2px; }
+.rcpt58 .itemrow .name { font-weight: 700; }
+.rcpt58 .itemrow .qtyprice { text-align:right; }
+.rcpt58 .itemrow .amt { text-align: right; }
+
+/* totals */
+.rcpt58 .totals .row { margin-top: 2px; }
+.rcpt58 .currency::before { content: "Rp "; }
+
+/* footer */
+.rcpt58 .foot { margin-top: 8px; }
+
+/* print hanya struk */
+@media print {
+  html, body { background:#fff; }
+  body.receipt-print { margin:0; padding:0; }
+  body.receipt-print .rcpt58 { width: 280px; margin: 0 auto; }
+}
