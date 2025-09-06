@@ -24,11 +24,3 @@ Route::middleware('auth')->group(function () {
     // Halaman Admin (hanya bisa diakses oleh role 'admin')
     Route::get('/admin', [PageController::class, 'showAdmin'])->middleware('role:admin');
 });
-
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/zones', [CsoController::class, 'getZones']);
-    Route::get('/drivers/available', [CsoController::class, 'getAvailableDrivers']);
-    Route::post('/bookings', [CsoController::class, 'storeBooking']);
-    Route::post('/transactions', [CsoController::class, 'storeTransaction']);
-    // ... rute lainnya
-});

@@ -138,4 +138,178 @@ class ApiController extends Controller
 
         return response()->json(['balance' => round($balance)]);
     }
+
+    // =========================================================
+    // === METODE BARU: Untuk Panel Admin ===
+    // =========================================================
+
+    // --- Manajemen Zona ---
+    public function adminGetZones() {
+        return response()->json(Zone::orderBy('name')->get());
+    }
+
+    public function adminStoreZone(Request $request) {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+        ]);
+        $zone = Zone::create($validated);
+        return response()->json($zone, 201);
+    }
+
+    public function adminUpdateZone(Request $request, Zone $zone) {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+        ]);
+        $zone->update($validated);
+        return response()->json($zone);
+    }
+
+    public function adminDestroyZone(Zone $zone) {
+        $zone->delete();
+        return response()->json(['message' => 'Zone deleted successfully']);
+    }
+
+    // --- Manajemen Pengguna ---
+    public function adminGetUsers() {
+        // Mengambil semua user dengan relasi driverProfile jika ada
+        return response()->json(User::with('driverProfile')->orderBy('name')->get());
+    }
+
+    public function adminStoreUser(Request $request) {
+        $validated = $request->validate([
+            'name' => 'required|string',
+            'username' => 'required|string|unique:users,username',
+            'password' => 'required|string|min:6',
+            'role' => 'required|in:cso,driver,admin',
+            // validasi tambahan untuk supir
+            'car_model' => 'nullable|string',
+            'plate_number' => 'nullable|string',
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'username' => $validated['username'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+        ]);
+
+        if ($validated['role'] === 'driver') {
+            $user->driverProfile()->create([
+                'car' => $validated['car_model'],
+                'plate' => $validated['plate_number'],
+                'status' => 'offline', // default status
+            ]);
+        }
+
+        return response()->json($user->load('driverProfile'), 201);
+    }
+
+    public function adminUpdateUser(Request $request, User $user) {
+        $validated = $request->validate([
+            'name' => 'required|string',
+            'password' => 'nullable|string|min:6',
+            'role' => 'required|in:cso,driver,admin',
+            // validasi tambahan untuk supir
+            'car_model' => 'nullable|string',
+            'plate_number' => 'nullable|string',
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'role' => $validated['role'],
+        ]);
+
+        if (!empty($validated['password'])) {
+            $user->update(['password' => Hash::make($validated['password'])]);
+        }
+
+        if ($validated['role'] === 'driver') {
+            $user->driverProfile()->updateOrCreate([], [
+                'car' => $validated['car_model'],
+                'plate' => $validated['plate_number'],
+            ]);
+        } else {
+            // Jika bukan driver, hapus profil driver jika ada
+            $user->driverProfile()->delete();
+        }
+
+        return response()->json($user->load('driverProfile'));
+    }
+
+    public function adminToggleUserActive(User $user) {
+        $user->update(['active' => !$user->active]);
+        return response()->json(['message' => 'User status updated', 'active' => $user->active]);
+    }
+
+
+    public function adminGetTransactions(Request $request)
+    {
+        // Mulai query dengan eager loading untuk data terkait
+        $query = Transaction::with(['booking.zoneTo', 'driver', 'cso'])
+                            ->orderBy('created_at', 'desc');
+
+        // Terapkan filter berdasarkan query string dari URL
+        if ($request->has('date_from')) {
+            $query->whereDate('created_at', '>=', $request->query('date_from'));
+        }
+        if ($request->has('date_to')) {
+            $query->whereDate('created_at', '<=', $request->query('date_to'));
+        }
+        if ($request->has('driver_id')) {
+            // Filter berdasarkan relasi booking
+            $driverId = $request->query('driver_id');
+            $query->whereHas('booking', function ($q) use ($driverId) {
+                $q->where('driver_id', $driverId);
+            });
+        }
+        if ($request->has('cso_id')) {
+            // Filter berdasarkan relasi booking
+            $csoId = $request->query('cso_id');
+            $query->whereHas('booking', function ($q) use ($csoId) {
+                $q->where('cso_id', $csoId);
+            });
+        }
+
+        $transactions = $query->paginate(50); // Gunakan paginasi untuk data yang banyak
+
+        return response()->json($transactions);
+    }
+
+    // app/Http/Controllers/Api/ApiController.php
+
+    // Ambil semua withdrawal request dengan data supirnya
+    public function adminGetWithdrawals()
+    {
+        $withdrawals = Withdrawal::with('driver') // Eager load relasi 'driver'
+                                ->orderBy('requested_at', 'desc')
+                                ->get();
+        return response()->json($withdrawals);
+    }
+
+    // Setujui permintaan
+    public function adminApproveWithdrawal(Withdrawal $withdrawal)
+    {
+        $withdrawal->update(['status' => 'Approved', 'processed_at' => now()]);
+        return response()->json(['message' => 'Withdrawal approved']);
+    }
+
+    // Tolak permintaan
+    public function adminRejectWithdrawal(Withdrawal $withdrawal)
+    {
+        $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
+        return response()->json(['message' => 'Withdrawal rejected']);
+    }
+
+    // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda
+    public function adminMarkAsPaid(Withdrawal $withdrawal)
+    {
+        // Hanya bisa di-set Paid jika status sebelumnya Approved
+        if ($withdrawal->status !== 'Approved') {
+            return response()->json(['message' => 'Hanya permintaan yang sudah disetujui yang bisa ditandai lunas.'], 422);
+        }
+        $withdrawal->update(['status' => 'Paid', 'processed_at' => now()]);
+        return response()->json(['message' => 'Withdrawal marked as paid']);
+    }
 }
