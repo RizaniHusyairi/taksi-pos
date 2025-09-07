@@ -12,7 +12,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('settings', function (Blueprint $table) {
+             // Kolom id, standar.
             $table->id();
+
+            // Kolom 'key' untuk nama pengaturan, harus unik.
+            // Contoh: 'commission_rate', 'app_name', 'maintenance_mode'
+            $table->string('key')->unique();
+
+            // Kolom 'value' untuk menyimpan nilai dari pengaturan.
+            // Menggunakan TEXT agar fleksibel, bisa menyimpan string panjang atau JSON.
+            $table->text('value')->nullable();
+
+            // Kolom created_at dan updated_at.
             $table->timestamps();
         });
     }

@@ -13,6 +13,21 @@ return new class extends Migration
     {
         Schema::create('transactions', function (Blueprint $table) {
             $table->id();
+
+            // Kolom foreign key ke tabel 'bookings'
+            // Ini cara modern dan aman untuk membuat relasi di Laravel.
+            $table->foreignId('booking_id')
+                  ->constrained('bookings')
+                  ->onDelete('cascade'); // Opsi: jika booking dihapus, transaksi ini juga ikut terhapus.
+
+            // Kolom untuk metode pembayaran dengan nilai yang sudah ditentukan.
+            $table->enum('method', ['QRIS', 'CashCSO', 'CashDriver']);
+
+            // Kolom untuk jumlah uang. (total 10 digit, 2 digit di belakang koma)
+            // Sangat direkomendasikan untuk nilai moneter.
+            $table->decimal('amount', 10, 2);
+
+            // Kolom created_at dan updated_at (TIMESTAMP)
             $table->timestamps();
         });
     }

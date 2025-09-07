@@ -17,11 +17,10 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
 
             // Kolom-kolom spesifik driver
-            $table->string('car');
-            $table->string('plate');
+            $table->string('car_model'); // <-- Ubah dari 'car'
+            $table->string('plate_number'); // <-- Ubah dari 'plate'
             $table->enum('status', ['available', 'ontrip', 'offline'])->default('offline');
 
-            $table->timestamps();
             $table->timestamps();
         });
     }

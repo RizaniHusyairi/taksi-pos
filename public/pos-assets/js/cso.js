@@ -1,5 +1,5 @@
-import { DB } from '../assets/js/data.js';
-import { Utils } from '../assets/js/utils.js';
+
+import { Utils } from './utils.js';
 
 
 async function fetchApi(endpoint, options = {}) {
@@ -21,7 +21,7 @@ async function fetchApi(endpoint, options = {}) {
       return response.json();
   } catch (error) {
       console.error(`API Error on ${endpoint}:`, error);
-      alert(`Gagal: ${error.message}`);
+      Utils.showToast(error.message, 'error');
       throw error;
   }
 }
@@ -36,16 +36,37 @@ class CsoApp {
     this.route();
   }
 
-  initTheme() {
-    const updateTheme = () => {
-        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    };
-    updateTheme();
-  }
+    initTheme() {
+        this.themeToggleBtn = document.getElementById('themeToggleBtn');
+        this.iconDark = document.getElementById('theme-icon-dark');
+        this.iconLight = document.getElementById('theme-icon-light');
+
+        const updateTheme = () => {
+            const isDarkMode = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.classList.toggle('dark', isDarkMode);
+            this.iconDark.classList.toggle('hidden', !isDarkMode);
+            this.iconLight.classList.toggle('hidden', isDarkMode);
+        };
+        
+        this.themeToggleBtn.addEventListener('click', () => {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            localStorage.theme = isDarkMode ? 'light' : 'dark';
+            updateTheme();
+        });
+
+        updateTheme(); // Jalankan saat pertama kali dimuat
+    }
+
+//   initTheme() {
+//     const updateTheme = () => {
+//         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+//             document.documentElement.classList.add('dark');
+//         } else {
+//             document.documentElement.classList.remove('dark');
+//         }
+//     };
+//     updateTheme();
+//   }
 
   cacheEls() {
       this.views = ['new', 'history'];
@@ -230,9 +251,9 @@ class CsoApp {
 
   updatePrice() {
       const zoneId = this.toSel.value;
-      const zone = this.zones.find(z => z.id == zoneId);
-      this.priceBox.textContent = zone ? zone.price.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0}) : '-';
-      this.updateConfirmButtonState();
+    const zone = this.zones.find(z => z.id == zoneId);
+    this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-'; // <-- Gunakan Utils
+    this.updateConfirmButtonState();
   }
   updateConfirmButtonState() {
       const zoneId = this.toSel.value;
@@ -283,7 +304,10 @@ class CsoApp {
   }
 
   async finishPayment(method) {
-      if (!this.currentBooking) { alert('Tidak ada booking aktif'); return; }
+      if (!this.currentBooking) { 
+        Utils.showToast('Tidak ada booking aktif', 'error'); // <-- Gunakan Utils
+        return; 
+    }
 
       try {
           const paymentData = {
@@ -295,10 +319,11 @@ class CsoApp {
               body: JSON.stringify(paymentData)
           });
           
-          alert('Pembayaran berhasil dicatat!');
-          this.showReceipt(this.currentBooking); // Kirim booking object ke receipt
-          this.closePayment();
-          this.renderHistory();
+          Utils.showToast('Pembayaran berhasil dicatat', 'success'); // <-- Gunakan Utils
+        
+        this.showReceipt(this.currentBooking);
+        this.closePayment();
+        this.renderHistory();
       } catch (error) {
           // error ditangani fetchApi
       }

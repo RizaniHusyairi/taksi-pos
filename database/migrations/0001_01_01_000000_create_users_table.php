@@ -17,8 +17,6 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
             // Username untuk login, harus unik
             $table->string('username')->unique(); 
             // Role pengguna (Admin, CSO, atau Driver)
@@ -26,11 +24,10 @@ return new class extends Migration
             
             // Status aktif atau tidaknya akun
             $table->boolean('active')->default(true); 
-            
-            
-            
-            // Timestamps bawaan Laravel (created_at dan updated_at)
+            $table->rememberToken();
             $table->timestamps();
+            
+            
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {

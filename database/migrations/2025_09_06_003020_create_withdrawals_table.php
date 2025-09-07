@@ -12,8 +12,30 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('withdrawals', function (Blueprint $table) {
-            $table->id();
-            $table->timestamps();
+           $table->id();
+
+            // Foreign Key ke tabel 'users' untuk supir yang mengajukan.
+            $table->foreignId('driver_id')
+                  ->constrained('users')
+                  ->onDelete('cascade');
+
+            // Jumlah dana yang diajukan untuk ditarik.
+            $table->decimal('amount', 10, 2);
+
+            // Status pengajuan saat ini.
+            $table->enum('status', ['Pending', 'Approved', 'Rejected', 'Paid'])
+                  ->default('Pending');
+
+            // Waktu pengajuan dibuat.
+            $table->timestamp('requested_at')->nullable();
+
+            // Waktu pengajuan diproses (disetujui/ditolak) oleh admin.
+            $table->timestamp('processed_at')->nullable();
+
+            // Timestamps standar Laravel (created_at, updated_at)
+            // Kita bisa menggunakan created_at sebagai requested_at jika mau.
+            // Namun, memiliki kolom requested_at memberikan fleksibilitas lebih.
+            $table->timestamps(); 
         });
     }
 

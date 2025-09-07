@@ -3,6 +3,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
+use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -83,5 +84,26 @@ Route::middleware('auth:sanctum')->group(function() {
 
         // Mengambil riwayat transaksi untuk CSO yang login
         Route::get('/history', [CsoApiController::class, 'getHistory']);
+    });
+
+
+    // =========================================================
+    // === RUTE BARU: Khusus untuk Panel Supir ===
+    // =========================================================
+    Route::prefix('driver')->middleware('role:driver')->group(function () {
+        // Data utama: profil, status, dan order aktif
+        Route::get('/profile', [DriverApiController::class, 'getProfile']);
+        
+        // Aksi-aksi
+        Route::post('/status', [DriverApiController::class, 'setStatus']);
+        Route::post('/bookings/{booking}/complete', [DriverApiController::class, 'completeBooking']);
+        
+        // Fitur Dompet (Wallet)
+        Route::get('/balance', [DriverApiController::class, 'getBalance']);
+        Route::get('/withdrawals', [DriverApiController::class, 'getWithdrawalHistory']);
+        Route::post('/withdrawals', [DriverApiController::class, 'requestWithdrawal']);
+
+        // Riwayat Perjalanan
+        Route::get('/history', [DriverApiController::class, 'getTripHistory']);
     });
 });
