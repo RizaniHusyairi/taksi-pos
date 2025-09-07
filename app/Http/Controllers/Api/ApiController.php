@@ -4,10 +4,73 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+use App\Models\Setting; 
+use App\Models\User;
+use App\Models\Zone;
+use App\Models\DriverProfile;
+use App\Models\Booking;
+use App\Models\Transaction;
+use App\Models\Withdrawal;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 
 class ApiController extends Controller
 {
     // === Terjemahan Logika Zona ===
+    public function adminGetDashboardStats()
+    {
+        // 1. Hitung Semua Metrik
+        $revenueToday = Transaction::whereDate('created_at', today())->sum('amount');
+        $transactionsToday = Transaction::whereDate('created_at', today())->count();
+        $activeDrivers = User::where('role', 'driver')
+                            ->whereHas('driverProfile', function ($query) {
+                                $query->whereIn('status', ['available', 'ontrip']);
+                            })->count();
+        $pendingWithdrawals = Withdrawal::where('status', 'Pending')->count();
+
+        // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
+        $weeklyChartData = Transaction::select(
+                DB::raw("DATE(created_at) as label"),
+                DB::raw('SUM(amount) as total')
+            )
+            ->whereBetween('created_at', [now()->subDays(6), now()])
+            ->groupBy('label')
+            ->orderBy('label', 'asc')
+            ->get();
+
+        // 3. Siapkan Data Grafik Bulanan (12 bulan terakhir)
+        $monthlyChartData = Transaction::select(
+                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as label"),
+                DB::raw('SUM(amount) as total')
+            )
+            ->whereBetween('created_at', [now()->subMonths(11)->startOfMonth(), now()])
+            ->groupBy('label')
+            ->orderBy('label', 'asc')
+            ->get();
+
+        // 4. Gabungkan semua data dalam satu respons JSON
+        return response()->json([
+            'metrics' => [
+                'revenue_today' => $revenueToday,
+                'transactions_today' => $transactionsToday,
+                'active_drivers' => $activeDrivers,
+                'pending_withdrawals' => $pendingWithdrawals,
+            ],
+            'charts' => [
+                'weekly' => [
+                    'labels' => $weeklyChartData->pluck('label'),
+                    'values' => $weeklyChartData->pluck('total'),
+                ],
+                'monthly' => [
+                    'labels' => $monthlyChartData->pluck('label'),
+                    'values' => $monthlyChartData->pluck('total'),
+                ],
+            ]
+        ]);
+    }
+
     public function getZones()
     {
         // Mengambil semua zona kecuali 'Bandara' (jika ada logika seperti itu)
@@ -312,4 +375,126 @@ class ApiController extends Controller
         $withdrawal->update(['status' => 'Paid', 'processed_at' => now()]);
         return response()->json(['message' => 'Withdrawal marked as paid']);
     }
+
+    public function adminGetRevenueReport(Request $request)
+    {
+        $range = $request->query('range', 'daily'); // default 'daily'
+        $endDate = now();
+        $data = [];
+
+        switch ($range) {
+            case 'weekly':
+                // 8 minggu terakhir
+                $startDate = now()->subWeeks(8)->startOfWeek();
+                $data = Transaction::select(
+                        DB::raw("DATE_FORMAT(created_at, '%x-W%v') as label"), // Format: YYYY-WW (e.g., 2025-W36)
+                        DB::raw('SUM(amount) as total')
+                    )
+                    ->whereBetween('created_at', [$startDate, $endDate])
+                    ->groupBy('label')
+                    ->orderBy('label', 'asc')
+                    ->get();
+                break;
+
+            case 'monthly':
+                // 12 bulan terakhir
+                $startDate = now()->subMonths(12)->startOfMonth();
+                $data = Transaction::select(
+                        DB::raw("DATE_FORMAT(created_at, '%Y-%m') as label"), // Format: YYYY-MM
+                        DB::raw('SUM(amount) as total')
+                    )
+                    ->whereBetween('created_at', [$startDate, $endDate])
+                    ->groupBy('label')
+                    ->orderBy('label', 'asc')
+                    ->get();
+                break;
+
+            case 'daily':
+            default:
+                // 7 hari terakhir
+                $startDate = now()->subDays(7);
+                $data = Transaction::select(
+                        DB::raw("DATE(created_at) as label"),
+                        DB::raw('SUM(amount) as total')
+                    )
+                    ->whereBetween('created_at', [$startDate, $endDate])
+                    ->groupBy('label')
+                    ->orderBy('label', 'asc')
+                    ->get();
+                break;
+        }
+
+        // Ubah format menjadi yang dibutuhkan oleh Chart.js
+        $response = [
+            'labels' => $data->pluck('label'),
+            'values' => $data->pluck('total'),
+        ];
+
+        return response()->json($response);
+    }
+
+    public function adminGetDriverPerformanceReport(Request $request)
+    {
+        $sortBy = $request->query('sort_by', 'trips'); // default 'trips'
+
+        $drivers = User::where('role', 'driver')
+            // Menghitung jumlah booking dengan status 'Completed' secara efisien
+            ->withCount(['bookings as trips' => function ($query) {
+                $query->where('status', 'Completed');
+            }])
+            // Menjumlahkan total pendapatan dari tabel transaksi
+            ->withSum('transactions as revenue', 'amount')
+            // Mengurutkan berdasarkan parameter yang diberikan
+            ->orderBy($sortBy === 'revenue' ? 'revenue' : 'trips', 'desc')
+            ->get();
+
+        // Data yang dikembalikan sudah jadi dan terurut
+        return response()->json($drivers);
+    }
+    public function adminGetSettings()
+    {
+        // Mengambil semua settings dan mengubahnya menjadi format key => value
+        // Contoh hasil: { "commission_rate": "0.20", "admin_email": "admin@example.com" }
+        $settings = Setting::all()->pluck('value', 'key');
+        return response()->json($settings);
+    }
+    
+    public function adminUpdateSettings(Request $request)
+    {
+        // Validasi input jika perlu
+        $validated = $request->validate([
+            'commission_rate' => 'required|numeric|min:0|max:100',
+            // Tambahkan validasi untuk setting lain jika ada
+        ]);
+    
+        // Loop melalui data yang dikirim dan update ke database
+        foreach ($validated as $key => $value) {
+            // Konversi dari persen kembali ke desimal sebelum disimpan
+            $dbValue = $key === 'commission_rate' ? $value / 100 : $value;
+            
+            Setting::updateOrCreate(
+                ['key' => $key],
+                ['value' => $dbValue]
+            );
+        }
+    
+        return response()->json(['message' => 'Pengaturan berhasil disimpan.']);
+    }
+
+    public function adminGetUsersByRole($role)
+    {
+        // Validasi untuk keamanan
+        if (!in_array($role, ['driver', 'cso'])) {
+            return response()->json(['message' => 'Role tidak valid'], 400);
+        }
+
+        $users = User::where('role', $role)
+                    ->where('active', true) // Mungkin Anda hanya ingin menampilkan yang aktif
+                    ->select('id', 'name')
+                    ->orderBy('name')
+                    ->get();
+                    
+        return response()->json($users);
+    }
 }
+

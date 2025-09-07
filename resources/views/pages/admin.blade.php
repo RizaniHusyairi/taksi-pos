@@ -58,8 +58,16 @@
         </button>
         <div class="text-sm text-slate-500"><span id="pageTitle" class="font-semibold">Dashboard</span></div>
         <div class="flex items-center gap-2">
-          <button id="logoutBtn" class="text-sm text-slate-600 hover:text-primary-700">Keluar</button>
-        </div>
+          <a href="{{ route('logout') }}" 
+            onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
+            class="text-sm text-slate-600 hover:text-primary-700">
+            Keluar
+          </a>
+
+          <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+              @csrf
+          </form>
+      </div>
       </header>
 
       <section id="view-dashboard" class="p-4 space-y-6">
@@ -322,15 +330,12 @@
   </div>
 
   <script type="module">
-    import { requireRole, logout } from '../assets/js/auth.js';
-    import { AdminApp } from '../assets/js/admin.js';
+    import { AdminApp } from '{{ asset("pos-assets/js/admin.js") }}';
 
-    requireRole('admin'); // guard
 
     const app = new AdminApp();
     app.init();
 
-    document.getElementById('logoutBtn').addEventListener('click', () => logout());
 
     // Mobile sidebar toggler (simple)
     const mobileBtn = document.getElementById('mobileMenu');

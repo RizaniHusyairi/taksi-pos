@@ -51,11 +51,22 @@
         <p id="pageTitle" class="text-xs text-slate-500 dark:text-slate-400">Pemesanan Baru</p>
       </div>
     </div>
-    <button id="logoutBtn" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+    <a href="{{ route('logout') }}" 
+      onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
+      class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
         </svg>
-    </button>
+    </a>
+
+    <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display: none;">
+        @csrf
+    </form>
+    {{-- <button id="logoutBtn" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+    </button> --}}
   </header>
 
   <!-- Main Content Area -->
@@ -180,346 +191,14 @@
   </div>
 
   <script type="module">
-    import { requireRole, logout, currentUser } from '../assets/js/auth.js';
-    import { DB } from '../assets/js/data.js';
-    import { Utils } from '../assets/js/utils.js';
+    import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
+    
 
-    requireRole('cso');
-
-    class CsoApp {
-      init() {
-        this.u = currentUser();
-        this.initTheme();
-        this.cacheEls();
-        this.bind();
-        this.renderAll();
-        window.addEventListener('hashchange', () => this.route());
-        this.route();
-      }
-
-      initTheme() {
-        const updateTheme = () => {
-            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-        };
-        updateTheme();
-      }
-
-      cacheEls() {
-        this.views = ['new', 'history'];
-        this.pageTitle = document.getElementById('pageTitle');
-        this.toSel = document.getElementById('toZone');
-        this.priceBox = document.getElementById('priceBox');
-        this.driversList = document.getElementById('driversList');
-        this.btnConfirm = document.getElementById('btnConfirmBooking');
-        this.modal = document.getElementById('paymentModal');
-        this.payInfo = document.getElementById('payInfo');
-        this.btnClosePay = document.getElementById('closePayModal');
-        this.btnQRIS = document.getElementById('payQRIS');
-        this.btnCashCSO = document.getElementById('payCashCSO');
-        this.btnCashDriver = document.getElementById('payCashDriver');
-        this.qrisBox = document.getElementById('qrisBox');
-        this.btnConfirmQR = document.getElementById('confirmQR');
-        this.historyList = document.getElementById('csoTxList');
-        this.refreshHistoryBtn = document.getElementById('refreshHistory');
-        this.lastReceiptData = null; // To store data for clean printing
-      }
-
-      bind() {
-        document.getElementById('logoutBtn').addEventListener('click', () => logout());
-
-        const onZoneChange = () => {
-          const to = this.toSel.value;
-          const zone = DB.getZoneById(to);
-          this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-';
-          this.btnConfirm.disabled = !zone || !this.selectedDriver;
-        };
-        this.toSel.addEventListener('change', onZoneChange);
-
-        this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
-
-        this.btnConfirm.addEventListener('click', (e) => {
-          e.preventDefault();
-          if (!this.selectedDriver) { Utils.showToast('Pilih supir terlebih dahulu', 'error'); return; }
-          const to = this.toSel.value;
-          const zone = DB.getZoneById(to);
-          if (!zone) { Utils.showToast('Tarif belum diatur untuk rute ini', 'error'); return; }
-          this.currentBooking = DB.createBooking({ csoId: this.u.id, driverId: this.selectedDriver, from: 'z0', to, price: zone.price });
-          this.openPayment();
-        });
-
-        this.btnClosePay.addEventListener('click', () => this.closePayment());
-        this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
-        this.btnQRIS.addEventListener('click', () => { this.qrisBox.classList.remove('hidden'); });
-        this.btnConfirmQR.addEventListener('click', () => this.finishPayment('QRIS'));
-        this.btnCashCSO.addEventListener('click', () => this.finishPayment('CashCSO'));
-        this.btnCashDriver.addEventListener('click', () => this.finishPayment('CashDriver'));
-        
-        document.getElementById('closeReceipt')?.addEventListener('click', () => this.hideReceipt());
-        document.getElementById('closeReceipt2')?.addEventListener('click', () => this.hideReceipt());
-        document.getElementById('printReceipt')?.addEventListener('click', () => this.printReceiptHandler());
-
-        this.historyList.addEventListener('click', (e) => {
-          const btn = e.target.closest('.btn-view-receipt');
-          if (!btn) return;
-          const txId = btn.dataset.tx;
-          const tx = DB.listTransactions().find(x => x.id === txId);
-          if (!tx) return Utils.showToast('Transaksi tidak ditemukan', 'error');
-          const booking = DB.listBookings().find(b => b.id === tx.bookingId);
-          this.showReceipt(tx, booking);
-        });
-      }
-
-      route() {
-        const hash = (location.hash || '#new').slice(1);
-        this.views.forEach(v => {
-          const el = document.getElementById('view-' + v);
-          if (el) el.classList.toggle('hidden', v !== hash);
-        });
-        document.querySelectorAll('.nav-item').forEach(item => {
-          item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
-        });
-        const titles = { new: 'Pemesanan Baru', history: 'Riwayat Transaksi' };
-        this.pageTitle.textContent = titles[hash] || 'Pemesanan Baru';
-      }
-
-      renderAll() {
-        this.renderZones();
-        this.renderDrivers();
-        this.renderHistory();
-      }
-
-      renderZones() {
-        const zones = DB.listZones().filter(z => z.id !== 'z0');
-        const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
-        this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
-      }
-
-      renderDrivers() {
-        
-        
-        this.driversList.innerHTML = `<p class="text-slate-500">Memuat data supir...</p>`;
-
-        try {
-          // Panggil API Laravel secara asynchronous
-          const response = await fetch('/api/drivers/available', {
-              headers: {
-                  'Accept': 'application/json',
-                  // Untuk keamanan, Laravel butuh token otentikasi
-                  'Authorization': `Bearer ${localStorage.getItem('api_token')}` 
-              }
-          });
-
-          if (!response.ok) throw new Error('Gagal memuat data.');
-
-          const drivers = await response.json(); // Data JSON dari Laravel
-
-          // Logika render HTML tetap sama, hanya sumber datanya yang berbeda
-          this.driversList.innerHTML = drivers.map(d => {
-              // ... kode untuk membuat HTML card supir
-              const st = DB.getDriverStatus(d.id);
-              const avail = st === 'available';
-              const statusText = avail ? 'Tersedia' : (st === 'ontrip' ? 'Sedang jalan' : 'Offline');
-              return `
-                <button type="button" data-driver="${d.id}" class="driver-card border-2 ${avail ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600'} rounded-xl p-3 text-left transition-all ${avail ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}">
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
-                      <div class="text-xs text-slate-500 dark:text-slate-400">${d.car || '-'} • ${d.plate || '-'}</div>
-                    </div>
-                    <div class="text-xs font-semibold px-2 py-0.5 rounded-full ${avail ? 'bg-success/10 text-success' : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'}">${statusText}</div>
-                  </div>
-                </button>`;
-          }).join('');
-          this.driversList.querySelectorAll('[data-driver]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.dataset.driver;
-            if (DB.getDriverStatus(id) !== 'available') return;
-            this.selectedDriver = id;
-            this.driversList.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            const zone = DB.getZoneById(this.toSel.value);
-            this.btnConfirm.disabled = !zone;
-          });
-        });
-
-        } catch (error) {
-          this.driversList.innerHTML = `<p class="text-danger">Gagal memuat data supir.</p>`;
-          console.error(error);
-        }
-        
-        
-        
-        const drivers = DB.listDrivers({ onlyActive: true });
-        this.selectedDriver = null;
-        this.driversList.innerHTML = drivers.map(d => {
-          const st = DB.getDriverStatus(d.id);
-          const avail = st === 'available';
-          const statusText = avail ? 'Tersedia' : (st === 'ontrip' ? 'Sedang jalan' : 'Offline');
-          return `
-            <button type="button" data-driver="${d.id}" class="driver-card border-2 ${avail ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600'} rounded-xl p-3 text-left transition-all ${avail ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400">${d.car || '-'} • ${d.plate || '-'}</div>
-                </div>
-                <div class="text-xs font-semibold px-2 py-0.5 rounded-full ${avail ? 'bg-success/10 text-success' : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'}">${statusText}</div>
-              </div>
-            </button>`;
-        }).join('');
-        this.driversList.querySelectorAll('[data-driver]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.dataset.driver;
-            if (DB.getDriverStatus(id) !== 'available') return;
-            this.selectedDriver = id;
-            this.driversList.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            const zone = DB.getZoneById(this.toSel.value);
-            this.btnConfirm.disabled = !zone;
-          });
-        });
-      }
-
-      openPayment() {
-        const zones = DB.listZones();
-        const zname = id => zones.find(z => z.id === id)?.name || id;
-        this.qrisBox.classList.add('hidden');
-        const b = this.currentBooking;
-        const driverName = DB.listDrivers().find(d => d.id === b.driverId)?.name;
-        this.payInfo.innerHTML = `
-          <div class="space-y-1">
-            <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">${zname(b.from)} → ${zname(b.to)}</span></div>
-            <div class="flex justify-between"><span>Supir:</span> <span class="font-semibold">${driverName}</span></div>
-            <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${Utils.formatCurrency(b.price)}</span></div>
-          </div>`;
-        this.modal.classList.remove('hidden');
-        this.modal.classList.add('flex');
-      }
-
-      closePayment() {
-        this.modal.classList.add('hidden');
-        this.modal.classList.remove('flex');
-        this.currentBooking = null;
-        this.renderDrivers();
-      }
-
-      finishPayment(method) {
-        const booking = this.currentBooking;
-        if (!booking) { Utils.showToast('Tidak ada booking aktif', 'error'); return; }
-        const tx = DB.recordPayment(booking.id, method);
-        Utils.showToast('Pembayaran tercatat', 'success');
-        this.closePayment();
-        this.renderHistory();
-        this.showReceipt(tx, booking);
-      }
-
-      renderHistory() {
-        const txs = DB.listTransactions().filter(t => t.csoId === this.u.id && Utils.isSameDay(t.createdAt, new Date()));
-        txs.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-        
-        if (txs.length === 0) {
-            this.historyList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Belum ada transaksi hari ini.</div>`;
-            return;
-        }
-
-        const zones = DB.listZones();
-        const z = id => zones.find(z => z.id === id)?.name || id;
-        const drivers = DB.listDrivers();
-        const dn = id => drivers.find(d => d.id === id)?.name || id;
-        const bookings = DB.listBookings();
-
-        this.historyList.innerHTML = txs.map(t => {
-          const b = bookings.find(b => b.id === t.bookingId);
-          return `
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
-              <div class="flex justify-between items-start">
-                  <div>
-                      <p class="font-bold text-slate-800 dark:text-slate-100">${z(b.from)} → ${z(b.to)}</p>
-                      <p class="text-xs text-slate-500 dark:text-slate-400">Supir: ${dn(t.driverId)}</p>
-                      <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(t.createdAt).toLocaleString('id-ID', { timeStyle: 'short' })}</p>
-                  </div>
-                  <p class="font-bold text-lg text-primary-600 dark:text-primary-400">${Utils.formatCurrency(t.amount)}</p>
-              </div>
-              <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium">${t.method}</span>
-                  <button class="btn-view-receipt text-xs font-semibold text-primary-600 dark:text-primary-400 hover:underline" data-tx="${t.id}">
-                    Lihat Struk
-                  </button>
-              </div>
-            </div>`;
-        }).join('');
-      }
-      
-      generateReceiptHTML(tx, booking) {
-        const zones = DB.listZones();
-        const z = id => zones.find(z=>z.id===id)?.name || id;
-        const d = new Date(tx.createdAt);
-        const tanggal = d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }).replace('.', '');
-        const waktu   = d.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' });
-        const kasir   = (this.u?.name || "-").toLowerCase();
-        const kode    = tx.id.toUpperCase();
-        const tujuan  = z(booking.to).toUpperCase();
-        const itemName= `Taksi: ${tujuan}`;
-        const money = (n)=> new Intl.NumberFormat('id-ID').format(n);
-        const harga = booking.price;
-        const metode= tx.method.includes('Cash') ? "CASH" : "QRIS";
-
-        return `<div class="rcpt58" style="color: #000;">
-            <div class="c" style="font-weight:700; font-size: 14px; margin-bottom: 4px;">KOPERASI TAKSI POS</div>
-            <div class="meta">
-                <div class="row"><div>${tanggal} ${waktu}</div><div class="r">Kasir: ${kasir}</div></div>
-                <div class="code">#${kode}</div>
-            </div>
-            <div class="hr"></div>
-            <div class="itemrow">
-                <div class="row"><div class="name">${itemName}</div><div class="amt">${money(harga)}</div></div>
-            </div>
-            <div class="hr"></div>
-            <div class="totals">
-                <div class="row" style="font-weight:700;"><div>Grand Total</div><div class="r">${money(harga)}</div></div>
-                <div class="row"><div>${metode}</div><div class="r">${money(harga)}</div></div>
-            </div>
-            <div class="foot c" style="margin-top: 8px;">Terima kasih!</div>
-        </div>`;
-      } // <<<--- THIS IS WHERE THE FIX IS. I've added the missing closing brace.
-
-      showReceipt(tx, booking) {
-        const m = document.getElementById('receiptModal');
-        const area = document.getElementById('receiptArea');
-        // Store data for clean printing
-        this.lastReceiptData = { tx, booking };
-        area.innerHTML = this.generateReceiptHTML(tx, booking);
-        m.classList.remove('hidden'); m.classList.add('flex');
-      }
-
-      hideReceipt() {
-        const m = document.getElementById('receiptModal');
-        m.classList.add('hidden'); m.classList.remove('flex');
-      }
-
-      printReceiptHandler() {
-        if (!this.lastReceiptData) {
-            Utils.showToast('Data struk tidak ditemukan.', 'error');
-            return;
-        }
-        // Regenerate clean HTML from stored data
-        const receiptHTML = this.generateReceiptHTML(this.lastReceiptData.tx, this.lastReceiptData.booking);
-        
-        const stylesheets = Array.from(document.styleSheets).map(sheet => sheet.href ? `<link rel="stylesheet" href="${sheet.href}">` : '').join('\n');
-        const win = window.open('', 'PRINT', 'height=600,width=400');
-        
-        win.document.write(`<!doctype html><html><head><title>Struk</title>${stylesheets}<style>.rcpt58{color:#000!important}</style></head><body>${receiptHTML}</body></html>`);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); win.close(); }, 500);
-      }
-    }
-
+    // Buat instance dan jalankan aplikasi
     const app = new CsoApp();
     app.init();
+
+
 
   </script>
 </body>

@@ -37,32 +37,46 @@ export class AdminApp{
   init(){
     window.addEventListener('hashchange', ()=> this.route());
     this.route();
+    // Panggil di sini agar dropdown terisi saat halaman dimuat
+    this.populateFilterDropdowns(); 
     this.initCommon();
   }
   initCommon(){
 
     // Settings form
     const formSettings = document.getElementById('formSettings');
-    formSettings?.addEventListener('submit', (e) => {
+    formSettings?.addEventListener('submit', async (e) => { // <-- Jadikan async
       e.preventDefault();
-      const rateInput = document.getElementById('commissionRate').value;
-      const rateDecimal = parseFloat(rateInput) / 100;
-      if (isNaN(rateDecimal) || rateDecimal < 0 || rateDecimal > 1) {
-        Utils.showToast('Masukkan nilai persentase antara 0 dan 100', 'error');
+      
+      const rateValue = document.getElementById('commissionRate').value;
+      
+      // Buat payload untuk dikirim ke API
+      const payload = {
+        commission_rate: parseFloat(rateValue)
+        // tambahkan pengaturan lain di sini jika ada
+      };
+
+      // Validasi sederhana di frontend
+      if (isNaN(payload.commission_rate) || payload.commission_rate < 0 || payload.commission_rate > 100) {
+        alert('Masukkan nilai persentase antara 0 dan 100');
         return;
       }
-      DB.setCommissionRate(rateDecimal);
-      Utils.showToast('Pengaturan komisi berhasil disimpan', 'success');
+
+      try {
+        // 2. Kirim data ke API untuk disimpan menggunakan POST
+        await fetchApi('/admin/settings', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        alert('Pengaturan berhasil disimpan!');
+      } catch (error) {
+        console.error("Gagal menyimpan pengaturan:", error);
+        alert('Gagal menyimpan pengaturan. Silakan coba lagi.');
+      }
     });
-    // Populate select filters with drivers and CSOs
-    const dOpt = ['<option value="">Semua</option>']
-      .concat(DB.listDrivers().map(d=>`<option value="${d.id}">${d.name}</option>`)).join('');
-    const cOpt = ['<option value="">Semua</option>']
-      .concat(DB.listCSOs().map(c=>`<option value="${c.id}">${c.name}</option>`)).join('');
-    const fltDriver = document.getElementById('fltDriver');
-    const fltCSO = document.getElementById('fltCSO');
-    if(fltDriver) fltDriver.innerHTML = dOpt;
-    if(fltCSO) fltCSO.innerHTML = cOpt;
+    
+
+    
 
     // Zones & Tariff forms
     const formZone = document.getElementById('formZone');
@@ -139,24 +153,61 @@ export class AdminApp{
     userModalCancel?.addEventListener('click', closeModal);
     userModal?.addEventListener('click', (e)=>{ if(e.target===userModal) closeModal(); });
 
-    document.getElementById('formUser')?.addEventListener('submit', (e)=>{
+    // Ganti event listener yang lama dengan yang ini
+    document.getElementById('formUser')?.addEventListener('submit', async (e) => { // <-- Jadikan async
       e.preventDefault();
+      
       const id = document.getElementById('userId').value || null;
-      const user = {
-        id,
+      const password = document.getElementById('userPassword').value;
+
+      // 1. Siapkan 'payload' dengan key yang sesuai dengan backend Laravel
+      const payload = {
         name: document.getElementById('userName').value.trim(),
         role: document.getElementById('userRole').value,
         username: document.getElementById('userUsername').value.trim(),
-        password: document.getElementById('userPassword').value,
-        car: document.getElementById('userCar').value.trim(),
-        plate: document.getElementById('userPlate').value.trim()
+        // Tambahan untuk role 'driver'
+        car_model: document.getElementById('userCar').value.trim(),
+        plate_number: document.getElementById('userPlate').value.trim()
       };
-      DB.upsertUser(user);
-      Utils.showToast('Pengguna disimpan','success');
-      closeModal();
-      // refresh tables and filters
-      this.renderUsers();
-      this.initCommon();
+
+      // Hanya kirim password jika diisi (untuk create wajib, untuk edit opsional)
+      if (password) {
+        payload.password = password;
+      } else if (!id) {
+        // Jika ini adalah user baru dan password kosong
+        alert('Password wajib diisi untuk pengguna baru.');
+        return;
+      }
+
+      try {
+        // 2. Tentukan aksi: UPDATE (PUT) atau CREATE (POST)
+        if (id) {
+          // Aksi UPDATE
+          await fetchApi(`/admin/users/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // Aksi CREATE
+          await fetchApi('/admin/users', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+        }
+
+        alert('Data pengguna berhasil disimpan!');
+        
+        // Panggil fungsi closeModal() yang sudah Anda miliki
+        closeModal(); // Pastikan fungsi ini bisa diakses di sini
+
+        // 3. Refresh data yang relevan setelah berhasil
+        await this.renderUsers(); // Muat ulang tabel pengguna
+        await this.populateFilterDropdowns(); // Muat ulang dropdown filter
+
+      } catch (error) {
+        console.error("Gagal menyimpan data pengguna:", error);
+        alert('Gagal menyimpan data pengguna. Periksa kembali isian Anda.');
+      }
     });
 
     // Finance filters
@@ -210,40 +261,31 @@ export class AdminApp{
   }
 
   // ----- Dashboard -----
-  renderDashboard(){
-    const tx = DB.listTransactions();
-    const todayRev = tx.filter(t => Utils.isSameDay(t.createdAt, new Date())).reduce((a,b)=>a+b.amount,0);
-    const driversActive = DB.listDrivers().filter(d=>DB.getDriverStatus(d.id)==='available' || DB.getDriverStatus(d.id)==='ontrip').length;
-    const pendingWd = DB.listWithdrawals().filter(w=>w.status==='Pending').length;
+  async renderDashboard() { // <-- Jadikan async
+    try {
+      // 1. BUAT SATU PANGGILAN API UNTUK SEMUA DATA DASHBOARD
+      const dashboardData = await fetchApi('/admin/dashboard-stats');
 
-    document.getElementById('metricRevenueToday').textContent = Utils.formatCurrency(todayRev);
-    document.getElementById('metricTxCount').textContent = tx.length;
-    document.getElementById('metricActiveDrivers').textContent = driversActive;
-    document.getElementById('metricPendingWd').textContent = pendingWd;
+      // 2. POPULASIKAN METRIK DARI DATA API
+      const metrics = dashboardData.metrics;
+      document.getElementById('metricRevenueToday').textContent = (metrics.revenue_today || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
+      document.getElementById('metricTxCount').textContent = metrics.transactions_today || 0;
+      document.getElementById('metricActiveDrivers').textContent = metrics.active_drivers || 0;
+      document.getElementById('metricPendingWd').textContent = metrics.pending_withdrawals || 0;
 
-    // Weekly and Monthly charts
-    const weekly = this.groupRevenue('day', 7);
-    const monthly= this.groupRevenue('month', 12);
+      // 3. POPULASIKAN GRAFIK DARI DATA API
+      const charts = dashboardData.charts;
+      this.renderLineChart('weeklyChart', charts.weekly.labels, charts.weekly.values);
+      this.renderBarChart('monthlyChart', charts.monthly.labels, charts.monthly.values);
 
-    this.renderLineChart('weeklyChart', weekly.labels, weekly.values);
-    this.renderBarChart('monthlyChart', monthly.labels, monthly.values);
-  }
-  groupRevenue(type='day', count=7){
-    const tx = DB.listTransactions();
-    const map = new Map();
-    const now = new Date();
-    for(let i=count-1;i>=0;i--){
-      const d = new Date(now);
-      if(type==='day'){ d.setDate(now.getDate()-i); const key=d.toISOString().slice(0,10); map.set(key,0); }
-      if(type==='month'){ d.setMonth(now.getMonth()-i); const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); map.set(key,0); }
+    } catch (error) {
+      console.error("Gagal memuat data dashboard:", error);
+      // Tampilkan pesan error jika gagal memuat
+      document.getElementById('metricRevenueToday').textContent = 'Error';
+      document.getElementById('metricTxCount').textContent = 'Error';
+      document.getElementById('metricActiveDrivers').textContent = 'Error';
+      document.getElementById('metricPendingWd').textContent = 'Error';
     }
-    tx.forEach(t => {
-      const dt = new Date(t.createdAt);
-      const key = (type==='day') ? dt.toISOString().slice(0,10)
-                                 : (dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0'));
-      if(map.has(key)) map.set(key, map.get(key)+t.amount);
-    });
-    return { labels: Array.from(map.keys()), values: Array.from(map.values()) };
   }
   renderLineChart(id, labels, data){
     const ctx = document.getElementById(id);
@@ -264,6 +306,35 @@ export class AdminApp{
     });
   }
 
+  async populateFilterDropdowns() {
+    try {
+      // 1. Panggil API untuk supir dan CSO secara paralel
+      const [drivers, csos] = await Promise.all([
+        fetchApi('/admin/users/role/driver'),
+        fetchApi('/admin/users/role/cso')
+      ]);
+
+      // 2. Siapkan elemen HTML <option> dari data API
+      const driverOptions = ['<option value="">Semua Supir</option>']
+        .concat(drivers.map(d => `<option value="${d.id}">${d.name}</option>`))
+        .join('');
+
+      const csoOptions = ['<option value="">Semua CSO</option>']
+        .concat(csos.map(c => `<option value="${c.id}">${c.name}</option>`))
+        .join('');
+
+      // 3. Masukkan options ke dalam elemen <select>
+      const fltDriver = document.getElementById('fltDriver');
+      const fltCSO = document.getElementById('fltCSO');
+
+      if (fltDriver) fltDriver.innerHTML = driverOptions;
+      if (fltCSO) fltCSO.innerHTML = csoOptions;
+
+    } catch (error) {
+      console.error("Gagal memuat data untuk filter:", error);
+      // Mungkin nonaktifkan atau beri pesan error di dropdown
+    }
+  }
   // ----- Zones & Tariffs -----
   async renderZones(){
     try{
@@ -541,83 +612,102 @@ export class AdminApp{
       return `<span class="px-2 py-0.5 rounded text-xs font-medium ${cls}">${s}</span>`;
   }
   // ----- Reports -----
-  renderRevReport(){
-    const range = document.getElementById('revRange')?.value || 'daily';
-    const tx = DB.listTransactions();
-    const labels=[], data=[];
-    const now = new Date();
-    if(range==='daily'){
-      for(let i=6;i>=0;i--){
-        const d = new Date(now); d.setDate(now.getDate()-i);
-        const key = d.toISOString().slice(0,10);
-        labels.push(key);
-        data.push(tx.filter(t => t.createdAt.slice(0,10)===key).reduce((a,b)=>a+b.amount,0));
+  async renderRevReport() { // <-- Jadikan async
+    try {
+      const range = document.getElementById('revRange')?.value || 'daily';
+
+      // 1. PANGGIL API UNTUK MENDAPATKAN DATA LAPORAN YANG SUDAH JADI
+      const reportData = await fetchApi(`/admin/reports/revenue?range=${range}`);
+
+      const labels = reportData.labels;
+      const data = reportData.values;
+
+      // 2. SEMUA LOGIKA LOOPING DAN HELPER DIHAPUS.
+      // Langsung render grafik dengan data dari API.
+      const ctx = document.getElementById('revChart');
+      if (!ctx) return;
+
+      if (this.charts['revChart']) {
+        this.charts['revChart'].destroy();
       }
-    }else if(range==='weekly'){
-      // last 8 weeks
-      for(let i=7;i>=0;i--){
-        const d = new Date(now); d.setDate(now.getDate()-i*7);
-        const week = getWeek(d);
-        labels.push(`${d.getFullYear()}-W${String(week).padStart(2,'0')}`);
-        data.push(sumWeek(tx, d.getFullYear(), week));
-      }
-    }else{
-      for(let i=11;i>=0;i--){
-        const d = new Date(now); d.setMonth(now.getMonth()-i);
-        const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-        labels.push(key);
-        data.push(tx.filter(t => (new Date(t.createdAt).getFullYear()===d.getFullYear() && new Date(t.createdAt).getMonth()===d.getMonth())).reduce((a,b)=>a+b.amount,0));
-      }
-    }
-    const ctx = document.getElementById('revChart');
-    if(this.charts['revChart']) this.charts['revChart'].destroy();
-    this.charts['revChart'] = new Chart(ctx, { type:'line', data:{ labels, datasets:[{ label:'Pendapatan', data, tension:.3 }] }, options:{ scales:{ y:{ beginAtZero:true }}}});
-    function getWeek(date){
-      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-      const dayNum = d.getUTCDay() || 7;
-      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-      return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
-    }
-    function sumWeek(tx, year, week){
-      return tx.filter(t => {
-        const d = new Date(t.createdAt);
-        const w = getWeek(d);
-        return d.getFullYear()===year && w===week;
-      }).reduce((a,b)=>a+b.amount,0);
+
+      this.charts['revChart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Pendapatan',
+            data: data,
+            tension: 0.3,
+            borderColor: '#3b82f6', //tailwind primary-500
+            backgroundColor: '#dbeafe' //tailwind primary-100
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error("Gagal memuat laporan pendapatan:", error);
+      // Mungkin tampilkan pesan error di canvas
     }
   }
 
-  renderDriverReport(){
-    const by = document.getElementById('driverRankBy')?.value || 'trips';
-    const drivers = DB.listDrivers();
-    const bookings = DB.listBookings();
-    const tx = DB.listTransactions();
-    const com = DB.commission();
-    const rows = drivers.map(d => {
-      const myTrips = bookings.filter(b => b.driverId===d.id && b.status==='Completed');
-      const myRevenue = tx.filter(t => t.driverId===d.id).reduce((a,b)=>a+b.amount,0);
-      const earned = tx.filter(t => t.driverId===d.id && (t.method!=='CashDriver')).reduce((a,b)=>a+Math.round(b.amount*(1-com)),0);
-      return { id:d.id, name:d.name, trips: myTrips.length, revenue: myRevenue, earned };
-    });
-    rows.sort((a,b)=> (by==='trips' ? b.trips - a.trips : b.revenue - a.revenue));
+// Fungsi getWeek() dan sumWeek() tidak lagi diperlukan dan bisa dihapus.
 
-    const tbody = document.getElementById('driverPerfTable');
-    if(!tbody) return;
-    tbody.innerHTML = rows.map(r=>`<tr class="border-t">
-      <td class="py-2">${r.name}</td>
-      <td class="py-2">${r.trips}</td>
-      <td class="py-2">${Utils.formatCurrency(r.revenue)}</td>
-    </tr>`).join('');
+  // ----- Reports: Driver Performance -----
+async renderDriverReport() { // <-- Jadikan async
+  const tbody = document.getElementById('driverPerfTable');
+  if (!tbody) return;
+
+  try {
+    const sortBy = document.getElementById('driverRankBy')?.value || 'trips';
+
+    // 1. PANGGIL API UNTUK MENDAPATKAN LAPORAN KINERJA YANG SUDAH JADI DAN TERURUT
+    const reportData = await fetchApi(`/admin/reports/driver-performance?sort_by=${sortBy}`);
+
+    if (reportData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
+      return;
+    }
+
+    // 2. SEMUA LOGIKA .map, .filter, .reduce, .sort DIHAPUS.
+    // Langsung render data yang sudah matang dari API.
+    tbody.innerHTML = reportData.map(driver => `
+      <tr class="border-t">
+        <td class="py-2">${driver.name}</td>
+        <td class="py-2">${driver.trips}</td>
+        <td class="py-2">${(driver.revenue || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
+      </tr>
+    `).join('');
+
+  } catch (error) {
+    console.error("Gagal memuat laporan kinerja supir:", error);
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Gagal memuat data.</td></tr>';
   }
+}
 
-  renderSettings(){
-    const rate = DB.commission();
+  // ----- Settings -----
+async renderSettings() { // <-- Jadikan async
+  try {
+    // 1. Panggil API untuk mendapatkan semua pengaturan
+    const settings = await fetchApi('/admin/settings');
     const rateInput = document.getElementById('commissionRate');
-    if(rateInput) {
+
+    if (rateInput && settings.commission_rate !== undefined) {
+      // Ambil nilai komisi dari hasil API
+      const rate = parseFloat(settings.commission_rate);
       // Tampilkan sebagai persen, misal 0.2 menjadi 20
-      rateInput.value = (rate * 100).toFixed(0);
+      rateInput.value = (rate * 100);
     }
+  } catch (error) {
+    console.error("Gagal memuat pengaturan:", error);
   }
+}
 
 }

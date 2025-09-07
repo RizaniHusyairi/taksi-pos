@@ -62,8 +62,8 @@
   </div>
 
   <script type="module">
-    import { requireRole, logout, currentUser } from '{{ asset("pos-assets/js/auth.js") }}';
-    import { login } from '{{ asset("pos-assets/js/auth.js") }}';
+    // import { requireRole, logout, currentUser } from '{{ asset("pos-assets/js/auth.js") }}';
+    // import { login } from '{{ asset("pos-assets/js/auth.js") }}';
   
    
   </script>

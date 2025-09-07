@@ -2,6 +2,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
+use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -32,6 +33,7 @@ Route::middleware('auth:sanctum')->group(function() {
     // =========================================================
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         // Dashboard
+        Route::get('/dashboard-stats', [ApiController::class, 'adminGetDashboardStats']);
         Route::get('/stats', [ApiController::class, 'getAdminStats']);
         Route::get('/charts', [ApiController::class, 'getAdminCharts']);
 
@@ -46,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/users', [ApiController::class, 'adminStoreUser']);
         Route::put('/users/{user}', [ApiController::class, 'adminUpdateUser']);
         Route::post('/users/{user}/toggle-status', [ApiController::class, 'adminToggleUserStatus']); // Untuk aktivasi/deaktivasi
+        Route::get('/users/role/{role}', [ApiController::class, 'adminGetUsersByRole']);
 
         // Manajemen Keuangan
         Route::get('/transactions', [ApiController::class, 'adminGetTransactions']);
@@ -60,5 +63,25 @@ Route::middleware('auth:sanctum')->group(function() {
         // Pengaturan
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
+
+
+
+    });
+
+
+    // =========================================================
+    // === RUTE BARU: Khusus untuk Panel CSO ===
+    // =========================================================
+    Route::prefix('cso')->middleware('role:cso')->group(function () {
+        // Mengambil data awal yang dibutuhkan panel
+        Route::get('/zones', [CsoApiController::class, 'getZones']);
+        Route::get('/available-drivers', [CsoApiController::class, 'getAvailableDrivers']);
+
+        // Aksi membuat booking dan pembayaran
+        Route::post('/bookings', [CsoApiController::class, 'storeBooking']);
+        Route::post('/payment', [CsoApiController::class, 'recordPayment']);
+
+        // Mengambil riwayat transaksi untuk CSO yang login
+        Route::get('/history', [CsoApiController::class, 'getHistory']);
     });
 });

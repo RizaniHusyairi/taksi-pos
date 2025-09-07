@@ -1,145 +1,240 @@
-import { DB } from './data.js';
-import { Utils } from './utils.js';
-import { currentUser } from './auth.js';
+import { DB } from '../assets/js/data.js';
+import { Utils } from '../assets/js/utils.js';
 
-export class DriverApp{
-  init(){
+
+export class DriverApp {
+  init() {
     this.u = currentUser();
+    this.initTheme(); // Panggil inisialisasi tema
     this.cacheEls();
     this.bind();
+    this.renderAll();
+    window.addEventListener('hashchange', () => this.route());
+    this.route();
+    window.addEventListener('storage', (e) => {
+      // Abaikan update storage dari tema agar tidak re-render
+      if (e.key !== 'theme') {
+        this.renderAll();
+      }
+    });
+  }
+
+  initTheme() {
+    this.themeToggleBtn = document.getElementById('theme-toggle');
+    this.sunIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>`;
+    this.moonIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>`;
+
+    const updateTheme = () => {
+        const theme = localStorage.getItem('theme') || 'system';
+        if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            this.themeToggleBtn.innerHTML = this.sunIcon;
+        } else {
+            document.documentElement.classList.remove('dark');
+            this.themeToggleBtn.innerHTML = this.moonIcon;
+        }
+    };
+
+    this.themeToggleBtn.addEventListener('click', () => {
+        const currentTheme = localStorage.getItem('theme') || 'system';
+        const isDark = document.documentElement.classList.contains('dark');
+        // Cycle: system -> light -> dark -> system
+        let newTheme;
+        if (isDark) {
+            newTheme = 'light';
+        } else {
+            newTheme = 'dark';
+        }
+        localStorage.setItem('theme', newTheme);
+        updateTheme();
+    });
+
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
+    
+    updateTheme(); // Set initial theme
+  }
+
+  cacheEls() {
+    // Views
+    this.views = ['orders', 'wallet', 'history', 'profile'];
+    this.pageTitle = document.getElementById('pageTitle');
+    
+    // Orders View
+    this.activeBox = document.getElementById('activeOrderBox');
+    this.activeInfo = document.getElementById('activeOrderInfo');
+    this.btnComplete = document.getElementById('markComplete');
+    this.statusToggle = document.getElementById('statusToggle');
+    this.statusText = document.getElementById('driverStatusText');
+
+    // Wallet View
+    this.walletBalance = document.getElementById('walletBalance');
+    this.wdForm = document.getElementById('formWd');
+    this.wdList = document.getElementById('wdList');
+
+    // History View
+    this.tripList = document.getElementById('tripList');
+
+    // Profile View
+    this.profileInitial = document.getElementById('profileInitial');
+    this.profileName = document.getElementById('profileName');
+    this.profileCar = document.getElementById('profileCar');
+    this.logoutBtn = document.getElementById('logoutBtn');
+  }
+
+  bind() {
+    this.statusToggle.addEventListener('change', (e) => {
+      const newStatus = e.target.checked ? 'available' : 'offline';
+      DB.setDriverStatus(this.u.id, newStatus);
+      this.renderStatus();
+      Utils.showToast(`Status diubah menjadi: ${newStatus === 'available' ? 'Tersedia' : 'Offline'}`);
+    });
+
+    this.btnComplete.addEventListener('click', () => {
+      const b = this.getActiveBooking();
+      if (!b) { Utils.showToast('Tidak ada order aktif'); return; }
+      DB.completeBooking(b.id);
+      Utils.showToast('Perjalanan selesai', 'success');
+      this.renderAll();
+    });
+
+    this.wdForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const amount = parseInt(document.getElementById('wdAmount').value, 10) || 0;
+      const balance = DB.driverBalance(this.u.id);
+      if (amount <= 0) { Utils.showToast('Jumlah tidak valid', 'error'); return; }
+      if (amount > balance) { Utils.showToast('Jumlah melebihi saldo', 'error'); return; }
+      DB.createWithdrawal(this.u.id, amount);
+      Utils.showToast('Pengajuan penarikan dikirim', 'success');
+      document.getElementById('wdAmount').value = '';
+      this.renderWallet();
+    });
+
+    document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
+    this.logoutBtn.addEventListener('click', () => logout());
+  }
+
+  route() {
+    const hash = (location.hash || '#orders').slice(1);
+    this.views.forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.classList.toggle('hidden', v !== hash);
+    });
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
+    });
+
+    const titles = { orders: 'Beranda', wallet: 'Dompet', history: 'Riwayat', profile: 'Profil' };
+    this.pageTitle.textContent = titles[hash] || 'Beranda';
+  }
+
+  renderAll() {
     this.renderStatus();
     this.renderActiveOrder();
     this.renderWallet();
-    this.renderWithdrawals();
-    this.renderWalletHistory();
     this.renderTrips();
-    window.addEventListener('hashchange', ()=> this.route());
-    this.route();
-    // simulate "live" updates by reacting to storage changes
-    window.addEventListener('storage', ()=>{
-      this.renderActiveOrder(); this.renderWallet(); this.renderWithdrawals(); this.renderTrips();
-    });
+    this.renderProfile();
   }
-  cacheEls(){
-    this.activeBox = document.getElementById('activeOrderBox');
-    this.activeInfo= document.getElementById('activeOrderInfo');
-    this.btnComplete = document.getElementById('markComplete');
-    this.statusBox = document.getElementById('driverStatus');
-    this.btnAvail = document.getElementById('setAvail');
-    this.btnOffline = document.getElementById('setOffline');
-    this.walletBalance = document.getElementById('walletBalance');
-    this.wdForm = document.getElementById('formWd');
-  }
-  bind(){
-    this.btnAvail.addEventListener('click', ()=>{ DB.setDriverStatus(this.u.id,'available'); this.renderStatus(); Utils.showToast('Status: Tersedia','success'); });
-    this.btnOffline.addEventListener('click', ()=>{ DB.setDriverStatus(this.u.id,'offline'); this.renderStatus(); Utils.showToast('Status: Offline'); });
-    this.btnComplete.addEventListener('click', ()=>{
-      const b = this.getActiveBooking();
-      if(!b){ Utils.showToast('Tidak ada order aktif'); return; }
-      DB.completeBooking(b.id);
-      Utils.showToast('Perjalanan selesai','success');
-      this.renderActiveOrder();
-      this.renderStatus();
-      this.renderTrips();
-    });
-    this.wdForm.addEventListener('submit',(e)=>{
-      e.preventDefault();
-      const amount = parseInt(document.getElementById('wdAmount').value,10)||0;
-      const balance = DB.driverBalance(this.u.id);
-      if(amount<=0){ Utils.showToast('Jumlah tidak valid','error'); return; }
-      if(amount>balance){ Utils.showToast('Jumlah melebihi saldo','error'); return; }
-      DB.createWithdrawal(this.u.id, amount);
-      Utils.showToast('Pengajuan pencairan dikirim','success');
-      document.getElementById('wdAmount').value='';
-      this.renderWithdrawals(); this.renderWallet();
-    });
 
-    document.getElementById('histFilter').addEventListener('click', ()=> this.renderTrips());
-  }
-  route(){
-    const hash = (location.hash || '#orders').slice(1);
-    ['orders','wallet','history'].forEach(v=>{
-      document.getElementById('view-'+v).classList.toggle('hidden', v!==hash);
-    });
-  }
-  renderStatus(){
+  renderStatus() {
     const st = DB.getDriverStatus(this.u.id);
-    const lbl = st==='available' ? '<span class="text-success">Tersedia</span>' : (st==='ontrip' ? '<span class="text-pending">Sedang jalan</span>' : '<span class="text-slate-500">Offline</span>');
-    this.statusBox.innerHTML = `Status: ${lbl}`;
+    const isAvailable = st === 'available';
+    const isOntrip = st === 'ontrip';
+    
+    this.statusToggle.checked = isAvailable;
+    this.statusToggle.disabled = isOntrip;
+
+    if (isOntrip) {
+      this.statusText.textContent = 'Sedang dalam perjalanan';
+      this.statusText.className = 'text-sm text-pending font-semibold';
+    } else if (isAvailable) {
+      this.statusText.textContent = 'Tersedia (Online)';
+      this.statusText.className = 'text-sm text-success font-semibold';
+    } else {
+      this.statusText.textContent = 'Offline';
+      this.statusText.className = 'text-sm text-slate-500 dark:text-slate-400';
+    }
   }
-  getActiveBooking(){
-    return DB.listBookings().find(b => b.driverId===this.u.id && b.status!=='Completed');
+
+  getActiveBooking() {
+    return DB.listBookings().find(b => b.driverId === this.u.id && b.status !== 'Completed');
   }
-  renderActiveOrder(){
+
+  renderActiveOrder() {
     const b = this.getActiveBooking();
-    const zones = DB.listZones(); const z = id => zones.find(z=>z.id===id)?.name || id;
-    if(b){
+    const zones = DB.listZones();
+    const z = id => zones.find(z => z.id === id)?.name || id;
+    if (b) {
       this.activeBox.classList.remove('hidden');
       this.activeInfo.innerHTML = `
-        <div>Rute: <span class="font-medium">${z(b.from)} → ${z(b.to)}</span></div>
-        <div>Tarif: <span class="font-medium">${Utils.formatCurrency(b.price)}</span></div>
-        <div>Status: <span class="font-medium">${b.status}</span></div>
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>${z(b.from)} → ${z(b.to)}</span></div>
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(b.price)}</span></div>
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${b.status}</span></div>
       `;
-      if(b.status==='Completed'){ this.activeBox.classList.add('hidden'); }
-    }else{
+    } else {
       this.activeBox.classList.add('hidden');
     }
   }
-  renderWallet(){
+
+  renderWallet() {
     const balance = DB.driverBalance(this.u.id);
     this.walletBalance.textContent = Utils.formatCurrency(balance);
-  }
-  renderWithdrawals(){
-    const wds = DB.driverWithdrawals(this.u.id);
-    const tbody = document.getElementById('wdList');
-    tbody.innerHTML = wds.map(w=>`<tr class="border-t">
-      <td class="py-2">${new Date(w.requestedAt).toLocaleString('id-ID')}</td>
-      <td class="py-2">${Utils.formatCurrency(w.amount)}</td>
-      <td class="py-2"><span class="px-2 py-0.5 rounded text-xs ${w.status==='Pending'?'bg-yellow-100 text-yellow-800':(w.status==='Approved'?'bg-blue-100 text-blue-800':(w.status==='Paid'?'bg-green-100 text-green-800':'bg-slate-100 text-slate-700'))}">${w.status}</span></td>
+    
+    const wds = DB.driverWithdrawals(this.u.id).sort((a,b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+    this.wdList.innerHTML = wds.map(w => `<tr class="border-t dark:border-slate-700">
+      <td class="py-2 pr-2">${new Date(w.requestedAt).toLocaleDateString('id-ID')}</td>
+      <td class="py-2 pr-2">${Utils.formatCurrency(w.amount)}</td>
+      <td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${w.status==='Pending'?'bg-yellow-100 text-yellow-800':(w.status==='Approved'?'bg-blue-100 text-blue-800':(w.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-700'))}">${w.status}</span></td>
     </tr>`).join('');
   }
-  renderWalletHistory(){
-    const credits = DB.driverCredits(this.u.id).map(c => ({
-      at:c.createdAt, text: `Kredit: ${c.method} (${c.bookingId})`, amount: c.credit
-    }));
-    const debits  = DB.driverWithdrawals(this.u.id)
-      .filter(w => w.status==='Approved' || w.status==='Paid')
-      .map(w => ({ at:w.processedAt||w.requestedAt, text:`Debet: Withdrawal (${w.status})`, amount: -w.amount }));
-    const all = credits.concat(debits).sort((a,b)=> new Date(b.at)-new Date(a.at));
-    const tbody = document.getElementById('walletTx');
-    tbody.innerHTML = all.map(r=>`<tr class="border-t">
-      <td class="py-2">${new Date(r.at).toLocaleString('id-ID')}</td>
-      <td class="py-2">${r.text}</td>
-      <td class="py-2 ${r.amount<0?'text-red-600':'text-success'}">${Utils.formatCurrency(r.amount)}</td>
-    </tr>`).join('');
-  }
-  renderTrips(){
-    const tbody = document.getElementById('tripTable');
+
+  renderTrips() {
     const from = document.getElementById('histFrom').value;
-    const to   = document.getElementById('histTo').value;
+    const to = document.getElementById('histTo').value;
     const df = from ? new Date(from) : null;
     const dt = to ? new Date(to) : null;
-    if(df){ df.setHours(0,0,0,0); }
-    if(dt){ dt.setHours(0,0,0,0); }
-    const zones = DB.listZones(); const z = id => zones.find(z=>z.id===id)?.name || id;
-    const tx = DB.listTransactions().filter(t => t.driverId===this.u.id);
-    const bookings = DB.listBookings();
-    const rows = tx.filter(t => {
-      const d = new Date(t.createdAt); d.setHours(0,0,0,0);
-      if(df && d < df) return false;
-      if(dt && d > dt) return false;
-      return true;
-    }).map(t => {
-      const b = bookings.find(b => b.id===t.bookingId);
-      return { t, b };
-    }).sort((a,b) => new Date(b.t.createdAt) - new Date(a.t.createdAt));
+    if (df) { df.setHours(0, 0, 0, 0); }
+    if (dt) { dt.setHours(23, 59, 59, 999); }
 
-    tbody.innerHTML = rows.map(({t,b})=>`<tr class="border-t">
-      <td class="py-2">${new Date(t.createdAt).toLocaleString('id-ID')}</td>
-      <td class="py-2">${z(b.from)} → ${z(b.to)}</td>
-      <td class="py-2">${t.method}</td>
-      <td class="py-2">${Utils.formatCurrency(t.amount)}</td>
-      <td class="py-2">${b.status}</td>
-    </tr>`).join('');
+    const zones = DB.listZones();
+    const z = id => zones.find(z => z.id === id)?.name || id;
+    const bookings = DB.listBookings();
+    const tx = DB.listTransactions().filter(t => {
+        if (t.driverId !== this.u.id) return false;
+        const d = new Date(t.createdAt);
+        if (df && d < df) return false;
+        if (dt && d > dt) return false;
+        return true;
+    }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (tx.length === 0) {
+        this.tripList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Tidak ada riwayat perjalanan pada rentang tanggal yang dipilih.</div>`;
+        return;
+    }
+
+    this.tripList.innerHTML = tx.map(t => {
+        const b = bookings.find(b => b.id === t.bookingId);
+        return `
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-bold text-slate-800 dark:text-slate-100">${z(b.from)} → ${z(b.to)}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(t.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                </div>
+                <p class="font-bold text-lg text-success">${Utils.formatCurrency(t.amount)}</p>
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between text-xs">
+                <span class="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-800 dark:text-primary-300 font-medium">${t.method}</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium">${b.status}</span>
+            </div>
+        </div>`;
+    }).join('');
+  }
+
+  renderProfile() {
+    this.profileInitial.textContent = this.u.name.charAt(0).toUpperCase();
+    this.profileName.textContent = this.u.name;
+    this.profileCar.textContent = `${this.u.car || '-'} • ${this.u.plate || '-'}`;
   }
 }
