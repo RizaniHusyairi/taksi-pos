@@ -7,6 +7,7 @@ async function fetchApi(endpoint, options = {}) {
         'Accept': 'application/json',
         // Pastikan Anda memiliki meta tag CSRF di admin.blade.php jika menggunakan web routes
         // 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
     };
 
     // Asumsi token disimpan di localStorage setelah login
@@ -16,7 +17,11 @@ async function fetchApi(endpoint, options = {}) {
     }
 
     try {
-        const response = await fetch(`/api${endpoint}`, { ...options, headers });
+        const response = await fetch(`/api${endpoint}`, { 
+          ...options, 
+          headers,
+          credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+        });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Terjadi kesalahan pada server');

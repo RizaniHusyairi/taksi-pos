@@ -22,7 +22,7 @@ class PageController extends Controller
     public function showAdmin(): View
     {
         // Mengembalikan view 'admin.blade.php'
-        return view('admin');
+        return view('pages.admin');
     }
 
     /**
@@ -32,7 +32,7 @@ class PageController extends Controller
     public function showCso(): View
     {
         // Mengembalikan view 'cso.blade.php'
-        return view('cso');
+        return view('pages.cso');
     }
 
     /**
@@ -42,7 +42,7 @@ class PageController extends Controller
     public function showDriver(): View
     {
         // Mengembalikan view 'driver.blade.php'
-        return view('driver');
+        return view('pages.driver');
     }
 
 

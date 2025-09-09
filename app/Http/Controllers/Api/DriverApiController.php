@@ -21,18 +21,17 @@ class DriverApiController extends Controller
     {
         $driver = $request->user()->load('driverProfile');
 
-        // Cari booking yang belum selesai untuk driver ini
         $activeBooking = Booking::where('driver_id', $driver->id)
             ->whereNotIn('status', ['Completed', 'CashDriver', 'Paid', 'Cancelled'])
             ->with('zoneTo:id,name')
             ->first();
 
-        return response()->json([
-            'user' => $driver,
-            'active_booking' => $activeBooking,
-        ]);
-    }
+        // Tambahkan active_booking sebagai properti baru langsung ke objek driver
+        $driver->active_booking = $activeBooking;
 
+        // Kembalikan objek driver itu sendiri sebagai respons utama
+        return response()->json($driver);
+    }
     /**
      * Mengubah status driver (available/offline).
      */

@@ -13,7 +13,11 @@ async function fetchApi(endpoint, options = {}) {
   // if (token) headers['Authorization'] = `Bearer ${token}`;
 
   try {
-      const response = await fetch(`/api${endpoint}`, { ...options, headers });
+      const response = await fetch(`/api${endpoint}`, { 
+        ...options, 
+        headers,
+        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+    });
       if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.message || 'Terjadi kesalahan pada server');
@@ -119,6 +123,8 @@ class CsoApp {
       document.getElementById('closeReceipt')?.addEventListener('click', () => this.hideReceipt());
       document.getElementById('closeReceipt2')?.addEventListener('click', () => this.hideReceipt());
       // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
+
+      document.getElementById('printReceipt')?.addEventListener('click', () => this.printReceiptHandler());
   }
   route() {
       // Fungsi routing tidak berubah, sudah bagus
@@ -330,6 +336,8 @@ class CsoApp {
   }
 
   showReceipt(txOrBookingObject) {
+
+        this.lastReceiptData = txOrBookingObject; // <-- TAMBAHKAN BARIS INI
         // Fungsi ini sekarang bisa menerima objek transaksi dari riwayat
         // atau objek booking dari proses pembayaran baru
         const receiptHTML = this.generateReceiptHTML(txOrBookingObject);
@@ -341,6 +349,36 @@ class CsoApp {
     hideReceipt() {
         this.receiptModal.classList.add('hidden');
         this.receiptModal.classList.remove('flex');
+    }
+    printReceiptHandler() {
+        // Cek apakah ada data struk yang tersimpan
+        if (!this.lastReceiptData) {
+            Utils.showToast('Data struk tidak ditemukan.', 'error');
+            return;
+        }
+
+        // Buat ulang HTML struk untuk memastikan formatnya bersih
+        const receiptHTML = this.generateReceiptHTML(this.lastReceiptData);
+        
+        // Buka jendela baru untuk dicetak
+        const printWindow = window.open('', 'PRINT', 'height=600,width=400');
+        
+        printWindow.document.write('<!doctype html><html><head><title>Struk Pembayaran</title>');
+        // Salin style dari halaman utama agar struk terlihat sama
+        printWindow.document.write('<link rel="stylesheet" href="{{ asset("pos-assets/css/style.css") }}">'); // Sesuaikan path jika perlu
+        printWindow.document.write('<style>body { margin: 0; background: #fff; } .rcpt58 { color: #000 !important; }</style>');
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(receiptHTML);
+        printWindow.document.write('</body></html>');
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Beri waktu sejenak untuk memuat, lalu cetak dan tutup
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
     }
 
     generateReceiptHTML(tx) {
@@ -360,7 +398,8 @@ class CsoApp {
     const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
     const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     const kasir = tx.cso?.name?.toLowerCase() || 'cso'; // Menggunakan nama CSO dari data API jika ada
-    const kode = (tx.id || booking?.id || 'N/A').toUpperCase();
+    // Ubah ID menjadi String terlebih dahulu, baru diubah ke huruf besar
+    const kode = String(tx.id || booking?.id || 'N/A').toUpperCase();
     const itemName = `Taksi: ${(zoneName || 'N/A').toUpperCase()}`;
     const metode = tx.method?.includes('Cash') ? "CASH" : "QRIS";
     

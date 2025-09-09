@@ -12,7 +12,7 @@ use App\Models\Zone;
 use App\Models\DriverProfile;
 use App\Models\Booking;
 use App\Models\Transaction;
-use App\Models\Withdrawal;
+use App\Models\Withdrawals;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
@@ -28,7 +28,7 @@ class ApiController extends Controller
                             ->whereHas('driverProfile', function ($query) {
                                 $query->whereIn('status', ['available', 'ontrip']);
                             })->count();
-        $pendingWithdrawals = Withdrawal::where('status', 'Pending')->count();
+        $pendingWithdrawals = Withdrawals::where('status', 'Pending')->count();
 
         // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
         $weeklyChartData = Transaction::select(
@@ -340,33 +340,31 @@ class ApiController extends Controller
         return response()->json($transactions);
     }
 
-    // app/Http/Controllers/Api/ApiController.php
-
     // Ambil semua withdrawal request dengan data supirnya
     public function adminGetWithdrawals()
     {
-        $withdrawals = Withdrawal::with('driver') // Eager load relasi 'driver'
+        $withdrawals = Withdrawals::with('driver') // Eager load relasi 'driver'
                                 ->orderBy('requested_at', 'desc')
                                 ->get();
         return response()->json($withdrawals);
     }
 
     // Setujui permintaan
-    public function adminApproveWithdrawal(Withdrawal $withdrawal)
+    public function adminApproveWithdrawal(Withdrawals $withdrawal)
     {
         $withdrawal->update(['status' => 'Approved', 'processed_at' => now()]);
         return response()->json(['message' => 'Withdrawal approved']);
     }
 
     // Tolak permintaan
-    public function adminRejectWithdrawal(Withdrawal $withdrawal)
+    public function adminRejectWithdrawal(Withdrawals $withdrawal)
     {
         $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
         return response()->json(['message' => 'Withdrawal rejected']);
     }
 
     // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda
-    public function adminMarkAsPaid(Withdrawal $withdrawal)
+    public function adminMarkAsPaid(Withdrawals $withdrawal)
     {
         // Hanya bisa di-set Paid jika status sebelumnya Approved
         if ($withdrawal->status !== 'Approved') {

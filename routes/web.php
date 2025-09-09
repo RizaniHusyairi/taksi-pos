@@ -11,7 +11,7 @@ use App\Http\Controllers\PageController;
 // Halaman Login
 Route::get('/', [PageController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/logout', [AuthController::class, 'logout']);
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Halaman yang butuh login
 Route::middleware('auth')->group(function () {

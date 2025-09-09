@@ -1,5 +1,5 @@
-import { DB } from '../assets/js/data.js';
-import { Utils } from '../assets/js/utils.js';
+// import { DB } from '../assets/js/data.js';
+import { Utils } from './utils.js';
 
 async function fetchApi(endpoint, options = {}) {
     // ... (copy paste fungsi fetchApi dari cso.js) ...
@@ -9,7 +9,11 @@ async function fetchApi(endpoint, options = {}) {
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
     };
     try {
-        const response = await fetch(`/api${endpoint}`, { ...options, headers });
+        const response = await fetch(`/api${endpoint}`, { 
+          ...options, 
+          headers,
+          credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+        });
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Terjadi kesalahan');
@@ -112,6 +116,18 @@ export class DriverApp {
     this.wdForm.addEventListener('submit', (e) => this.handleWithdrawalRequest(e));
     document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
 
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault(); // Mencegah perilaku default dari tag <a>
+            const targetHash = item.getAttribute('href');
+            
+            // Hanya ubah hash jika berbeda untuk memicu event 'hashchange'
+            if (window.location.hash !== targetHash) {
+                window.location.hash = targetHash;
+            }
+        });
+    });
+
   }
 
   route() {
@@ -144,17 +160,21 @@ export class DriverApp {
   // --- FUNGSI BARU UNTUK MEMUAT DATA ---
   async loadInitialData() {
       try {
-          const data = await fetchApi('/driver/profile');
-          this.driverData = data.user;
-          this.activeBooking = data.active_booking;
-          
-          this.renderProfile();
-          this.renderStatus();
-          this.renderActiveOrder();
-      } catch (error) {
-          console.error("Gagal memuat data awal driver:", error);
-          // Mungkin tampilkan pesan error fullscreen
-      }
+        // Sekarang 'data' adalah objek driver itu sendiri
+        const data = await fetchApi('/driver/profile');
+        
+        // Langsung simpan seluruh respons sebagai data driver
+        this.driverData = data;
+        
+        // Ambil active_booking dari properti yang sudah kita tambahkan
+        this.activeBooking = data.active_booking;
+        
+        this.renderProfile();
+        this.renderStatus();
+        this.renderActiveOrder();
+    } catch (error) {
+        console.error("Gagal memuat data awal driver:", error);
+    }
   }
 
   renderProfile() {
