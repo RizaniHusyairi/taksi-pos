@@ -38,12 +38,14 @@ class DriverApiController extends Controller
     public function setStatus(Request $request)
     {
         $validated = $request->validate([
-            'status' => 'required|in:available,offline',
-        ]);
+        'status' => 'required|in:available,offline',
+    ]);
 
-        $request->user()->driverProfile()->update(['status' => $validated['status']]);
+    $user = $request->user();
+    $user->driverProfile()->update(['status' => $validated['status']]);
 
-        return response()->json(['message' => 'Status updated successfully.']);
+    // Kembalikan data user yang sudah di-update beserta profilnya
+    return response()->json($user->load('driverProfile'));
     }
 
     /**

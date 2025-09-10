@@ -35,14 +35,12 @@ export class DriverApp {
     this.bind();
     // Muat data awal yang penting saat aplikasi start
     await this.loadInitialData();
-    this.renderAll();
+    
     window.addEventListener('hashchange', () => this.route());
     this.route();
     window.addEventListener('storage', (e) => {
       // Abaikan update storage dari tema agar tidak re-render
-      if (e.key !== 'theme') {
-        this.renderAll();
-      }
+    
     });
   }
 
@@ -288,15 +286,23 @@ export class DriverApp {
   async handleStatusChange(e) {
       const newStatus = e.target.checked ? 'available' : 'offline';
       try {
-          await fetchApi('/driver/status', {
+          // Panggil API dan simpan data driver yang baru sebagai hasilnya
+          const updatedDriverData = await fetchApi('/driver/status', {
               method: 'POST',
               body: JSON.stringify({ status: newStatus })
           });
+
+          // Perbarui state lokal dengan data baru dari server
+          this.driverData = updatedDriverData;
+          
+          // Render ulang komponen yang relevan dengan data baru
+          this.renderStatus();
+          this.renderProfile();
+
           Utils.showToast(`Status diubah menjadi: ${newStatus === 'available' ? 'Tersedia' : 'Offline'}`, 'success');
-          // Muat ulang data awal untuk sinkronisasi
-          await this.loadInitialData();
+
       } catch (error) {
-          // Revert toggle jika gagal
+          // Kembalikan toggle ke posisi semula jika terjadi error
           e.target.checked = !e.target.checked;
       }
   }
@@ -327,109 +333,6 @@ export class DriverApp {
           document.getElementById('wdAmount').value = '';
           this.renderWallet(); // Refresh data dompet
       } catch (error) { /* error ditangani fetchApi */ }
-  }
-
-  renderAll() {
-    this.renderStatus();
-    this.renderActiveOrder();
-    this.renderWallet();
-    this.renderTrips();
-    this.renderProfile();
-  }
-
-  renderStatus() {
-    const st = DB.getDriverStatus(this.u.id);
-    const isAvailable = st === 'available';
-    const isOntrip = st === 'ontrip';
-    
-    this.statusToggle.checked = isAvailable;
-    this.statusToggle.disabled = isOntrip;
-
-    if (isOntrip) {
-      this.statusText.textContent = 'Sedang dalam perjalanan';
-      this.statusText.className = 'text-sm text-pending font-semibold';
-    } else if (isAvailable) {
-      this.statusText.textContent = 'Tersedia (Online)';
-      this.statusText.className = 'text-sm text-success font-semibold';
-    } else {
-      this.statusText.textContent = 'Offline';
-      this.statusText.className = 'text-sm text-slate-500 dark:text-slate-400';
-    }
-  }
-
-  getActiveBooking() {
-    return DB.listBookings().find(b => b.driverId === this.u.id && b.status !== 'Completed');
-  }
-
-  renderActiveOrder() {
-    const b = this.getActiveBooking();
-    const zones = DB.listZones();
-    const z = id => zones.find(z => z.id === id)?.name || id;
-    if (b) {
-      this.activeBox.classList.remove('hidden');
-      this.activeInfo.innerHTML = `
-        <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>${z(b.from)} → ${z(b.to)}</span></div>
-        <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(b.price)}</span></div>
-        <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${b.status}</span></div>
-      `;
-    } else {
-      this.activeBox.classList.add('hidden');
-    }
-  }
-
-  renderWallet() {
-    const balance = DB.driverBalance(this.u.id);
-    this.walletBalance.textContent = Utils.formatCurrency(balance);
-    
-    const wds = DB.driverWithdrawals(this.u.id).sort((a,b) => new Date(b.requestedAt) - new Date(a.requestedAt));
-    this.wdList.innerHTML = wds.map(w => `<tr class="border-t dark:border-slate-700">
-      <td class="py-2 pr-2">${new Date(w.requestedAt).toLocaleDateString('id-ID')}</td>
-      <td class="py-2 pr-2">${Utils.formatCurrency(w.amount)}</td>
-      <td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${w.status==='Pending'?'bg-yellow-100 text-yellow-800':(w.status==='Approved'?'bg-blue-100 text-blue-800':(w.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-700'))}">${w.status}</span></td>
-    </tr>`).join('');
-  }
-
-  renderTrips() {
-    const from = document.getElementById('histFrom').value;
-    const to = document.getElementById('histTo').value;
-    const df = from ? new Date(from) : null;
-    const dt = to ? new Date(to) : null;
-    if (df) { df.setHours(0, 0, 0, 0); }
-    if (dt) { dt.setHours(23, 59, 59, 999); }
-
-    const zones = DB.listZones();
-    const z = id => zones.find(z => z.id === id)?.name || id;
-    const bookings = DB.listBookings();
-    const tx = DB.listTransactions().filter(t => {
-        if (t.driverId !== this.u.id) return false;
-        const d = new Date(t.createdAt);
-        if (df && d < df) return false;
-        if (dt && d > dt) return false;
-        return true;
-    }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    if (tx.length === 0) {
-        this.tripList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Tidak ada riwayat perjalanan pada rentang tanggal yang dipilih.</div>`;
-        return;
-    }
-
-    this.tripList.innerHTML = tx.map(t => {
-        const b = bookings.find(b => b.id === t.bookingId);
-        return `
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="font-bold text-slate-800 dark:text-slate-100">${z(b.from)} → ${z(b.to)}</p>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(t.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
-                </div>
-                <p class="font-bold text-lg text-success">${Utils.formatCurrency(t.amount)}</p>
-            </div>
-            <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between text-xs">
-                <span class="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-800 dark:text-primary-300 font-medium">${t.method}</span>
-                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium">${b.status}</span>
-            </div>
-        </div>`;
-    }).join('');
   }
 
   renderProfile() {

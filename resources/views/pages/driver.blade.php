@@ -212,14 +212,7 @@
             <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Aksi</h2>
             <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
                 
-              <button id="logoutBtn" class="w-full flex items-center justify-center gap-2 bg-danger/10 hover:bg-danger/20 text-danger font-bold py-3 rounded-lg transition-transform active:scale-95">
-                    
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" />
-                    </svg>
-                    Keluar
-                </button>
-
+            
                 <a href="{{ route('logout') }}" 
                   onclick="event.preventDefault(); document.getElementById('logout-form').submit();"
                   class="w-full flex items-center justify-center gap-2 bg-danger/10 hover:bg-danger/20 text-danger font-bold py-3 rounded-lg ...">

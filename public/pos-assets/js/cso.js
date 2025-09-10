@@ -218,8 +218,9 @@ class CsoApp {
         }
 
         this.historyList.innerHTML = transactions.map(tx => {
+            
             const booking = tx.booking;
-            const driver = tx.driver;
+            const driver = tx.booking.driver;
             const zoneTo = booking.zone_to;
             return `
             <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
