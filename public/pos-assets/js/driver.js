@@ -309,12 +309,23 @@
     }
 
     async handleCompleteBooking() {
-        if (!this.activeBooking) { Utils.showToast('Tidak ada order aktif', 'error'); return; }
-        if (!confirm('Apakah Anda yakin perjalanan ini sudah selesai?')) return;
-        try {
-            await fetchApi(`/driver/bookings/${this.activeBooking.id}/complete`, { method: 'POST' });
-            Utils.showToast('Perjalanan selesai', 'success');
-            await this.loadInitialData(); // Muat ulang data untuk refresh status dan order
+       if (!this.activeBooking) { Utils.showToast('Tidak ada order aktif', 'error'); return; }
+    if (!confirm('Apakah Anda yakin perjalanan ini sudah selesai?')) return;
+    
+    try {
+        // Panggil API, yang sekarang akan mengembalikan data profil terbaru
+        const updatedProfile = await fetchApi(`/driver/bookings/${this.activeBooking.id}/complete`, { method: 'POST' });
+        
+        // Perbarui state lokal dengan data terbaru dari server
+        this.driverData = updatedProfile;
+        this.activeBooking = updatedProfile.active_booking; // Ini akan menjadi null
+        
+        // Render ulang semua komponen yang relevan
+        this.renderStatus();
+        this.renderActiveOrder();
+        this.renderProfile();
+
+        Utils.showToast('Perjalanan selesai', 'success');
         } catch (error) { /* error ditangani fetchApi */ }
     }
     

@@ -62,8 +62,11 @@ class DriverApiController extends Controller
             $booking->update(['status' => 'Completed']);
             $booking->driver->driverProfile()->update(['status' => 'available']);
         });
-
-        return response()->json(['message' => 'Booking completed.']);
+    // === PERBAIKAN DI SINI ===
+        // Setelah menyelesaikan booking, panggil metode getProfile
+        // untuk mendapatkan dan mengembalikan data terbaru.
+        return $this->getProfile($request);
+        
     }
 
     /**
