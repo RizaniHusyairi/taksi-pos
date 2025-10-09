@@ -86,19 +86,14 @@ class CsoApiController extends Controller
 
         $booking = Booking::findOrFail($validated['booking_id']);
 
-        // Mulai transaksi database
-        DB::transaction(function () use ($booking, $validated) {
-            // 1. Buat record transaksi
-            Transaction::create([
-                'booking_id' => $booking->id,
-                'method'     => $validated['method'],
-                'amount'     => $booking->price,
-            ]);
-
-            // 2. Update status booking menjadi 'Paid' atau 'CashDriver'
-            $bookingStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
-            $booking->update(['status' => $bookingStatus]);
-        });
+        // Fungsi ini sekarang HANYA membuat record transaksi
+        Transaction::create([
+            'booking_id' => $booking->id,
+            'method'     => $validated['method'],
+            'amount'     => $booking->price,
+        ]);
+        
+        // Status booking TIDAK diubah. Biarkan tetap 'Assigned'.
 
         return response()->json(['message' => 'Payment recorded successfully'], 201);
     }

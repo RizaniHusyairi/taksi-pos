@@ -160,7 +160,7 @@
         try {
             // Sekarang 'data' adalah objek driver itu sendiri
             const data = await fetchApi('/driver/profile');
-            
+            console.log('Data awal driver:', data);
             // Langsung simpan seluruh respons sebagai data driver
             this.driverData = data;
             
@@ -214,9 +214,11 @@
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(this.activeBooking.price)}</span></div>
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${this.activeBooking.status}</span></div>
         `;
+            console.log('Order aktif ditemukan:', this.activeBooking);
 
         } else {
             this.activeBox.classList.add('hidden');
+            console.log('Tidak ada order aktif');
         }
     }
 
@@ -344,7 +346,8 @@
             Utils.showToast('Pengajuan penarikan dikirim', 'success');
             document.getElementById('wdAmount').value = '';
             this.renderWallet(); // Refresh data dompet
-        } catch (error) { /* error ditangani fetchApi */ }
+        } 
+        catch (error) { /* error ditangani fetchApi */ }
     }
 
 

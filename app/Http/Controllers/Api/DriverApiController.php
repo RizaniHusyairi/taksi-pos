@@ -17,21 +17,31 @@ class DriverApiController extends Controller
     /**
      * Mengambil data utama untuk driver: info profil dan order aktif.
      */
-    public function getProfile(Request $request)
-    {
-        $driver = $request->user()->load('driverProfile');
+    // app/Http/Controllers/Api/DriverApiController.php
 
+public function getProfile(Request $request)
+{
+    $driver = $request->user()->load('driverProfile');
+    $activeBooking = null; // Default-nya tidak ada booking aktif
+
+    // HANYA JIKA status supir adalah 'ontrip', kita cari booking aktifnya.
+    if ($driver->driver_profile?->status === 'ontrip') {
+        
+        // Cari booking TERAKHIR untuk supir ini yang belum selesai secara permanen.
+        // Kita longgarkan filternya, yang penting belum 'Completed' atau 'Cancelled'.
         $activeBooking = Booking::where('driver_id', $driver->id)
-            ->whereNotIn('status', ['Completed', 'CashDriver', 'Paid', 'Cancelled'])
+            ->whereNotIn('status', ['Completed', 'Cancelled'])
+            ->latest() // Ambil yang paling baru untuk menghindari data anomali
             ->with('zoneTo:id,name')
             ->first();
-
-        // Tambahkan active_booking sebagai properti baru langsung ke objek driver
-        $driver->active_booking = $activeBooking;
-
-        // Kembalikan objek driver itu sendiri sebagai respons utama
-        return response()->json($driver);
     }
+
+    // Tambahkan active_booking sebagai properti baru langsung ke objek driver
+    $driver->active_booking = $activeBooking;
+
+    // Kembalikan objek driver itu sendiri sebagai respons utama
+    return response()->json($driver);
+}
     /**
      * Mengubah status driver (available/offline).
      */
