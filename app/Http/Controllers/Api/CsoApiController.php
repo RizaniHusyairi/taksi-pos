@@ -111,7 +111,7 @@ class CsoApiController extends Controller
             ->whereDate('created_at', today())
             ->with([
                 'booking.zoneTo:id,name', // Ambil nama zona tujuan
-                'booking.driver:id,name'          // Ambil nama supir
+                'booking.driver:id,name' // Ambil nama supir
             ])
             ->orderBy('created_at', 'desc')
             ->get();
