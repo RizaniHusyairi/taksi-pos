@@ -12,51 +12,30 @@ use App\Models\Transaction;
 use App\Models\Withdrawal;
 use App\Models\Setting;
 
-class DriverApiController extends Controller
+class   DriverApiController extends Controller
 {
     /**
      * Mengambil data utama untuk driver: info profil dan order aktif.
      */
-    // app/Http/Controllers/Api/DriverApiController.php
+    public function getProfile(Request $request)
+    {
+        // Gunakan nama fungsi relasinya: 'driverProfile'
+        $driver = $request->user()->load('driverProfile'); 
+        $activeBooking = null; 
 
-// app/Http/Controllers/Api/DriverApiController.php
+        if ($driver->driverProfile?->status === 'ontrip') {
+            
+            $activeBooking = Booking::where('driver_id', $driver->id)
+                ->whereNotIn('status', ['Completed', 'Cancelled']) 
+                ->latest() 
+                ->with('zoneTo:id,name')
+                ->first();
+        }
 
-public function getProfile(Request $request)
-{
-    $driver = $request->user()->load('driver_profile');
-    
-    // LANGKAH 1: Verifikasi status driver yang didapat server
-    $driverStatus = $driver->driver_profile?->status;
-
-    if ($driverStatus !== 'ontrip') {
-        // Jika kode berhenti di sini, berarti status driver di database BUKAN 'ontrip'
-        dd([
-            'DEBUGGING_RESULT' => 'LANGKAH 1 GAGAL',
-            'MESSAGE' => 'Server melihat status driver Anda bukan ontrip.',
-            'STATUS_DITEMUKAN' => $driverStatus,
-        ]);
+        // Kembalikan respons JSON yang normal
+        $driver->active_booking = $activeBooking;
+        return response()->json($driver);
     }
-
-    // LANGKAH 2: Jalankan query dan lihat hasilnya
-    $activeBooking = Booking::where('driver_id', $driver->id)
-        ->whereNotIn('status', ['Completed', 'Cancelled']) // Ini akan mencari status 'Assigned', 'Paid', dll.
-        ->latest()
-        ->with('zoneTo:id,name')
-        ->first();
-
-    // LANGKAH 3: Hentikan eksekusi dan tampilkan semua yang ditemukan
-    // Ini adalah hasil akhir yang dilihat oleh server sebelum dikirim.
-    dd([
-        'DEBUGGING_RESULT' => 'LANGKAH 2 & 3 BERHASIL',
-        'MESSAGE' => 'Ini adalah data yang ditemukan oleh server.',
-        'DRIVER_STATUS' => $driverStatus,
-        'BOOKING_YANG_DITEMUKAN' => $activeBooking, // <-- Perhatikan nilai ini!
-    ]);
-
-    // Kode di bawah ini tidak akan dijalankan karena ada dd()
-    $driver->active_booking = $activeBooking;
-    return response()->json($driver);
-}
     /**
      * Mengubah status driver (available/offline).
      */

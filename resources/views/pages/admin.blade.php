@@ -53,7 +53,7 @@
     <!-- Main -->
     <main class="flex-1">
       <!-- Topbar -->
-      <header class="bg-white border-b border-slate-200 p-3 flex items-center justify-between sticky top-0 z-10">
+      <header class="bg-white border-b border-slate-200 p-3 flex items-center justify-between sticky top-0">
         <button id="mobileMenu" class="md:hidden inline-flex items-center px-3 py-2 rounded-lg border">
           ☰
         </button>
