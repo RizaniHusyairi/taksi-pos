@@ -67,7 +67,7 @@
     <!-- View: Beranda / Pesanan -->
     <section id="view-orders" class="view-section space-y-5">
       <!-- Active Order Card -->
-      <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Pesanan Aktif</h2>
+      <h2 id="text-book" class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Pesanan Aktif</h2>
       <div id="activeOrderBox" class="hidden">
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg border-2 border-pending p-4">
           <div class="flex items-center justify-between mb-3">

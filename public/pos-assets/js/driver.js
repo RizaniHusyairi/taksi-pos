@@ -86,6 +86,7 @@
         this.pageTitle = document.getElementById('pageTitle');
         
         // Orders View
+        this.textBook = document.getElementById('text-book');
         this.activeBox = document.getElementById('activeOrderBox');
         this.activeInfo = document.getElementById('activeOrderInfo');
         this.btnComplete = document.getElementById('markComplete');
@@ -209,6 +210,7 @@
     renderActiveOrder() {
         if (this.activeBooking) {
             this.activeBox.classList.remove('hidden');
+            this.textBook.textContent = 'Pesanan Aktif';
             this.activeInfo.innerHTML = `
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>Bandara → ${this.activeBooking.zone_to.name}</span></div>
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(this.activeBooking.price)}</span></div>
@@ -218,6 +220,7 @@
 
         } else {
             this.activeBox.classList.add('hidden');
+            this.textBook.textContent = '';
             console.log('Tidak ada order aktif');
         }
     }
