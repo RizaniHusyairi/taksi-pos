@@ -12,24 +12,28 @@ use App\Models\Transaction;
 use App\Models\Withdrawal;
 use App\Models\Setting;
 
-class DriverApiController extends Controller
+class   DriverApiController extends Controller
 {
     /**
      * Mengambil data utama untuk driver: info profil dan order aktif.
      */
     public function getProfile(Request $request)
     {
-        $driver = $request->user()->load('driverProfile');
+        // Gunakan nama fungsi relasinya: 'driverProfile'
+        $driver = $request->user()->load('driverProfile'); 
+        $activeBooking = null; 
 
-        $activeBooking = Booking::where('driver_id', $driver->id)
-            ->whereNotIn('status', ['Completed', 'CashDriver', 'Paid', 'Cancelled'])
-            ->with('zoneTo:id,name')
-            ->first();
+        if ($driver->driverProfile?->status === 'ontrip') {
+            
+            $activeBooking = Booking::where('driver_id', $driver->id)
+                ->whereNotIn('status', ['Completed', 'Cancelled']) 
+                ->latest() 
+                ->with('zoneTo:id,name')
+                ->first();
+        }
 
-        // Tambahkan active_booking sebagai properti baru langsung ke objek driver
+        // Kembalikan respons JSON yang normal
         $driver->active_booking = $activeBooking;
-
-        // Kembalikan objek driver itu sendiri sebagai respons utama
         return response()->json($driver);
     }
     /**
