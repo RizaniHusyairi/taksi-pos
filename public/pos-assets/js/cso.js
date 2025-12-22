@@ -1,34 +1,10 @@
 
 import { Utils } from './utils.js';
+import { apiFetch } from './core/api.js';
+import { escapeHTML } from './core/sanitize.js';
 
 
-async function fetchApi(endpoint, options = {}) {
-  const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-  };
-  // Untuk API Sanctum, session cookie sudah cukup, tapi jika butuh token:
-  // const token = localStorage.getItem('authToken');
-  // if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  try {
-      const response = await fetch(`/api${endpoint}`, { 
-        ...options, 
-        headers,
-        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
-    });
-      if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Terjadi kesalahan pada server');
-      }
-      return response.json();
-  } catch (error) {
-      console.error(`API Error on ${endpoint}:`, error);
-      Utils.showToast(error.message, 'error');
-      throw error;
-  }
-}
 
 class CsoApp {
   init() {
@@ -61,16 +37,7 @@ class CsoApp {
         updateTheme(); // Jalankan saat pertama kali dimuat
     }
 
-//   initTheme() {
-//     const updateTheme = () => {
-//         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-//             document.documentElement.classList.add('dark');
-//         } else {
-//             document.documentElement.classList.remove('dark');
-//         }
-//     };
-//     updateTheme();
-//   }
+
 
   cacheEls() {
       this.views = ['new', 'history'];
@@ -152,7 +119,7 @@ class CsoApp {
 
   async renderZones() {
       try {
-          const zones = await fetchApi('/cso/zones');
+          const zones = await apiFetch('/api/cso/zones');
           this.zones = zones; // Simpan data zona
           const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
           this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
@@ -167,7 +134,7 @@ class CsoApp {
     this.updateConfirmButtonState();
 
     try {
-        const drivers = await fetchApi('/cso/available-drivers');
+        const drivers = await apiFetch('/api/cso/available-drivers');
 
         if (drivers.length === 0) {
             this.driversList.innerHTML = `<p class="text-center col-span-full p-4 bg-white dark:bg-slate-800 rounded-xl">Tidak ada supir yang tersedia.</p>`;
@@ -182,7 +149,7 @@ class CsoApp {
             <button type="button" data-driver-id="${d.id}" class="driver-card border-2 ${isAvailable ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600'} rounded-xl p-3 text-left transition-all ${isAvailable ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}">
                 <div class="flex items-center justify-between">
                     <div>
-                        <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
+                        <div class="font-bold text-slate-800 dark:text-slate-100">${escapeHTML(d.name)}</div>
                         <div class="text-xs text-slate-500 dark:text-slate-400">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
                     </div>
                     <div class="text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-success/10 text-success' : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'}">
@@ -210,7 +177,7 @@ class CsoApp {
   async renderHistory() {
     this.historyList.innerHTML = `<div class="text-center text-slate-500">Memuat riwayat...</div>`;
     try {
-        const transactions = await fetchApi('/cso/history');
+        const transactions = await apiFetch('/api/cso/history');
 
         if (transactions.length === 0) {
             this.historyList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Belum ada transaksi hari ini.</div>`;
@@ -226,8 +193,8 @@ class CsoApp {
             <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
                 <div class="flex justify-between items-start">
                     <div>
-                        <p class="font-bold text-slate-800 dark:text-slate-100">Bandara → ${zoneTo?.name || 'N/A'}</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">Supir: ${driver?.name || 'N/A'}</p>
+                        <p class="font-bold text-slate-800 dark:text-slate-100">Bandara → ${escapeHTML(zoneTo?.name || 'N/A')}</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Supir: ${escapeHTML(driver?.name || 'N/A')}</p>
                         <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(tx.created_at).toLocaleString('id-ID', { timeStyle: 'short' })}</p>
                     </div>
                     <p class="font-bold text-lg text-primary-600 dark:text-primary-400">${tx.amount.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0})}</p>
@@ -278,7 +245,7 @@ class CsoApp {
               driver_id: this.selectedDriverId,
               zone_id: this.toSel.value
           };
-          this.currentBooking = await fetchApi('/cso/bookings', {
+          this.currentBooking = await apiFetch('/api/cso/bookings', {
               method: 'POST',
               body: JSON.stringify(bookingData)
           });
@@ -296,7 +263,7 @@ class CsoApp {
 
       this.payInfo.innerHTML = `
       <div class="space-y-1">
-          <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${selectedZone?.name || 'N/A'}</span></div>
+          <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${escapeHTML(selectedZone?.name || 'N/A')}</span></div>
           <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${booking.price.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0})}</span></div>
       </div>`;
       this.modal.classList.add('flex');
@@ -321,7 +288,7 @@ class CsoApp {
               booking_id: this.currentBooking.id,
               method: method
           };
-          const transaction = await fetchApi('/cso/payment', {
+          const transaction = apiFetch('/api/cso/payment', {
               method: 'POST',
               body: JSON.stringify(paymentData)
           });

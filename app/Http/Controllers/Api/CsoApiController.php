@@ -11,9 +11,15 @@ use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\DriverProfile;
+use App\Services\PaymentService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class CsoApiController extends Controller
 {
+
+    use AuthorizesRequests;
+
+
     /**
      * Mengambil daftar semua zona tujuan.
      */
@@ -74,6 +80,30 @@ class CsoApiController extends Controller
         return response()->json($booking, 201); // 201 Created
     }
 
+    public function confirmPayment(Request $request)
+    {
+        $data = $request->validate([
+            'booking_id' => 'required|exists:bookings,id',
+            'method' => 'required|in:QRIS,CashCSO',
+        ]);
+
+        $booking = Booking::findOrFail($data['booking_id']);
+
+        $this->authorize('confirmPaymentByCso', [$booking, $data['method']]);
+
+        DB::transaction(function () use ($booking, $data) {
+            Transaction::create([
+                'booking_id' => $booking->id,
+                'method' => $data['method'],
+                'amount' => $booking->price,
+            ]);
+
+            $booking->update(['status' => 'Paid']);
+        });
+
+        return response()->json(['message' => 'Payment confirmed']);
+    }
+
     /**
      * Mencatat pembayaran untuk sebuah booking.
      */
@@ -81,27 +111,30 @@ class CsoApiController extends Controller
     {
         $validated = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
-            'method'     => 'required|in:QRIS,CashCSO,CashDriver',
+            'method' => 'required|in:QRIS,CashCSO,CashDriver',
         ]);
 
         $booking = Booking::findOrFail($validated['booking_id']);
 
-        // Mulai transaksi database
-        DB::transaction(function () use ($booking, $validated) {
-            // 1. Buat record transaksi
-            Transaction::create([
-                'booking_id' => $booking->id,
-                'method'     => $validated['method'],
-                'amount'     => $booking->price,
-            ]);
+        $this->authorize('recordPayment', $booking);
 
-            // 2. Update status booking menjadi 'Paid' atau 'CashDriver'
-            $bookingStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
-            $booking->update(['status' => $bookingStatus]);
+        DB::transaction(function () use ($booking, $validated) {
+
+            $transaction = $paymentService->pay(
+                $validated['booking_id'],
+                $validated['method']
+            );
+
+            $newStatus = $validated['method'] === 'CashDriver'
+                ? Booking::STATUS_CASH_DRIVER
+                : Booking::STATUS_PAID;
+
+            $booking->transitionTo($newStatus);
         });
 
-        return response()->json(['message' => 'Payment recorded successfully'], 201);
+        return response()->json(['message' => 'Payment recorded']);
     }
+
 
     /**
      * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.

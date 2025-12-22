@@ -158,11 +158,10 @@ class ApiController extends Controller
         // Mulai transaksi database untuk memastikan konsistensi data
         DB::transaction(function () use ($booking, $validated) {
             // 1. Buat record transaksi
-            Transaction::create([
-                'booking_id' => $booking->id,
-                'method'     => $validated['method'],
-                'amount'     => $booking->price,
-            ]);
+           $transaction = $paymentService->pay(
+                $validated['booking_id'],
+                $validated['method']
+            );
 
             // 2. Update status booking
             $newStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';

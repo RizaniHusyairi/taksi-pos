@@ -1,4 +1,7 @@
 import { Utils } from './utils.js';
+import { apiFetch } from './core/api.js';
+import { escapeHTML } from './core/sanitize.js';
+
 
 // Helper function untuk memanggil API
 async function fetchApi(endpoint, options = {}) {
@@ -10,12 +13,7 @@ async function fetchApi(endpoint, options = {}) {
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
     };
 
-    // Asumsi token disimpan di localStorage setelah login
-    const token = localStorage.getItem('authToken'); 
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-
+   
     try {
         const response = await fetch(`/api${endpoint}`, { 
           ...options, 
@@ -69,7 +67,7 @@ export class AdminApp{
 
       try {
         // 2. Kirim data ke API untuk disimpan menggunakan POST
-        await fetchApi('/admin/settings', {
+        apiFetch('/api/admin/settings', {
           method: 'POST',
           body: JSON.stringify(payload)
         });
@@ -100,13 +98,13 @@ export class AdminApp{
       try {
         if (id) {
             // Jika ada ID, ini adalah UPDATE (PUT)
-            await fetchApi(`/admin/zones/${id}`, {
+            apiFetch(`/api/admin/zones/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
         } else {
             // Jika tidak ada ID, ini adalah CREATE (POST)
-            await fetchApi('/admin/zones', {
+            apiFetch('/api/admin/zones', {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -188,13 +186,13 @@ export class AdminApp{
         // 2. Tentukan aksi: UPDATE (PUT) atau CREATE (POST)
         if (id) {
           // Aksi UPDATE
-          await fetchApi(`/admin/users/${id}`, {
+          apiFetch(`/api/admin/users/${id}`, {
             method: 'PUT',
             body: JSON.stringify(payload)
           });
         } else {
           // Aksi CREATE
-          await fetchApi('/admin/users', {
+          apiFetch('/api/admin/users', {
             method: 'POST',
             body: JSON.stringify(payload)
           });
@@ -269,7 +267,7 @@ export class AdminApp{
   async renderDashboard() { // <-- Jadikan async
     try {
       // 1. BUAT SATU PANGGILAN API UNTUK SEMUA DATA DASHBOARD
-      const dashboardData = await fetchApi('/admin/dashboard-stats');
+      const dashboardData = await apiFetch('/api/admin/dashboard-stats');
 
       // 2. POPULASIKAN METRIK DARI DATA API
       const metrics = dashboardData.metrics;
@@ -315,8 +313,8 @@ export class AdminApp{
     try {
       // 1. Panggil API untuk supir dan CSO secara paralel
       const [drivers, csos] = await Promise.all([
-        fetchApi('/admin/users/role/driver'),
-        fetchApi('/admin/users/role/cso')
+        apiFetch('/api/admin/users/role/driver'),
+        apiFetch('/api/admin/users/role/cso')
       ]);
 
       // 2. Siapkan elemen HTML <option> dari data API
@@ -343,11 +341,11 @@ export class AdminApp{
   // ----- Zones & Tariffs -----
   async renderZones(){
     try{
-      const zones = await fetchApi('/admin/zones'); 
+      const zones = await apiFetch('/api/admin/zones'); 
       const tbody = document.getElementById('zonesTable');
       if(!tbody) return;
       tbody.innerHTML = zones.map(z=>`<tr class="border-t">
-        <td class="py-2">${z.name}</td>
+        <td class="py-2">${escapeHTML(z.name)}</td>
         <td class="py-2">${Utils.formatCurrency(z.price)}</td>
         <td class="py-2">
           <button class="text-primary-700 text-sm" data-edit-zone='${JSON.stringify(z)}'>Edit</button>
@@ -368,7 +366,7 @@ export class AdminApp{
             try {
               const zoneId = btn.dataset.delZone;
               // Ganti DB.deleteZone dengan fetchApi
-              await fetchApi(`/admin/zones/${zoneId}`, {
+              apiFetch(`/api/admin/zones/${zoneId}`, {
                 method: 'DELETE'
               });
               
@@ -383,7 +381,7 @@ export class AdminApp{
       });
     }
     catch(err){
-      console.error("Gagal memuat data zona:", error);
+      console.error("Gagal memuat data zona:", err);
       document.getElementById('zonesTable').innerHTML = '<tr><td colspan="3">Gagal memuat data.</td></tr>';
     }
     
@@ -394,7 +392,7 @@ export class AdminApp{
   async renderUsers(){
     try {
       // 1. GANTI DB.listUsers() DENGAN PANGGILAN API
-      const users = await fetchApi('/admin/users');
+      const users = await apiFetch('/api/admin/users');
       const tbody = document.getElementById('usersTable');
       if (!tbody) return;
 
@@ -410,11 +408,11 @@ export class AdminApp{
 
         return `<tr class="border-t">
           <td class="py-2">
-            <div class="font-medium">${u.name}</div>
+            <div class="font-medium">${escapeHTML(u.name)}</div>
             ${carInfo}
           </td>
           <td class="py-2 capitalize">${u.role}</td>
-          <td class="py-2">${u.username}</td>
+          <td class="py-2">${escapeHTML(u.username)}</td>
           <td class="py-2">${statusBadge}</td>
           <td class="py-2">
             <button class="text-primary-700 text-sm" data-edit-u='${JSON.stringify(u)}'>Edit</button>
@@ -441,7 +439,7 @@ export class AdminApp{
           if (confirm('Anda yakin ingin mengubah status pengguna ini?')) {
             try {
               // 3. GANTI DB.setUserActive DENGAN PANGGILAN API
-              await fetchApi(`/admin/users/${userId}/toggle-status`, {
+              apiFetch(`/api/admin/users/${userId}/toggle-status`, {
                 method: 'POST',
               });
               alert('Status pengguna berhasil diubah.');
@@ -510,7 +508,7 @@ export class AdminApp{
 
       // 3. Panggil API dengan filter. Server akan melakukan sisanya.
       // Perhatikan bahwa properti 'data' mungkin perlu disesuaikan jika Anda menggunakan paginasi
-      const response = await fetchApi(`/admin/transactions?${params.toString()}`);
+      const response = await apiFetch(`/api/admin/transactions?${params.toString()}`);
       const transactions = response.data; // Jika menggunakan paginasi, data ada di properti 'data'
 
       if (transactions.length === 0) {
@@ -528,8 +526,8 @@ export class AdminApp{
 
         return `<tr class="border-t">
           <td class="py-2">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-          <td class="py-2">${csoName}</td>
-          <td class="py-2">${driverName}</td>
+          <td class="py-2">${escapeHTML(csoName)}</td>
+          <td class="py-2">${escapeHTML(driverName)}</td>
           <td class="py-2">${route}</td>
           <td class="py-2">${t.method}</td>
           <td class="py-2">${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
@@ -549,7 +547,7 @@ export class AdminApp{
 
     try {
       // 1. GANTI DB.list... DENGAN SATU PANGGILAN API
-      const withdrawals = await fetchApi('/admin/withdrawals');
+      const withdrawals = await apiFetch('/api/admin/withdrawals');
 
       if (withdrawals.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Tidak ada permintaan penarikan dana.</td></tr>';
@@ -590,11 +588,11 @@ export class AdminApp{
           if (confirm(`Anda yakin ingin ${actionText[action] || 'memproses'} permintaan ini?`)) {
             try {
               // Tentukan endpoint berdasarkan aksi
-              let endpoint = `/admin/withdrawals/${withdrawalId}/${action}`;
+              let endpoint = `/api/admin/withdrawals/${withdrawalId}/${action}`;
 
               // Panggil API dengan method POST
-              await fetchApi(endpoint, { method: 'POST' });
-              
+              apiFetch(endpoint, { method: 'POST' });
+
               alert(`Permintaan berhasil di-${action === 'paid' ? 'tandai lunas' : (action === 'approve' ? 'setujui' : 'tolak')}.`);
               await this.renderWithdrawals(); // Refresh tabel
             } catch (error) {
@@ -622,7 +620,7 @@ export class AdminApp{
       const range = document.getElementById('revRange')?.value || 'daily';
 
       // 1. PANGGIL API UNTUK MENDAPATKAN DATA LAPORAN YANG SUDAH JADI
-      const reportData = await fetchApi(`/admin/reports/revenue?range=${range}`);
+      const reportData = await apiFetch(`/api/admin/reports/revenue?range=${range}`);
 
       const labels = reportData.labels;
       const data = reportData.values;
@@ -674,7 +672,7 @@ async renderDriverReport() { // <-- Jadikan async
     const sortBy = document.getElementById('driverRankBy')?.value || 'trips';
 
     // 1. PANGGIL API UNTUK MENDAPATKAN LAPORAN KINERJA YANG SUDAH JADI DAN TERURUT
-    const reportData = await fetchApi(`/admin/reports/driver-performance?sort_by=${sortBy}`);
+    const reportData = await apiFetch(`/api/admin/reports/driver-performance?sort_by=${sortBy}`);
 
     if (reportData.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
@@ -685,8 +683,8 @@ async renderDriverReport() { // <-- Jadikan async
     // Langsung render data yang sudah matang dari API.
     tbody.innerHTML = reportData.map(driver => `
       <tr class="border-t">
-        <td class="py-2">${driver.name}</td>
-        <td class="py-2">${driver.trips}</td>
+        <td class="py-2">${escapeHTML(driver.name)}</td>
+        <td class="py-2">${escapeHTML(driver.trips)}</td>
         <td class="py-2">${(driver.revenue || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
       </tr>
     `).join('');
@@ -701,7 +699,7 @@ async renderDriverReport() { // <-- Jadikan async
 async renderSettings() { // <-- Jadikan async
   try {
     // 1. Panggil API untuk mendapatkan semua pengaturan
-    const settings = await fetchApi('/admin/settings');
+    const settings = await apiFetch('/api/admin/settings');
     const rateInput = document.getElementById('commissionRate');
 
     if (rateInput && settings.commission_rate !== undefined) {

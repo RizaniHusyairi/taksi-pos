@@ -7,6 +7,7 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
 
   <script src="https://cdn.tailwindcss.com"></script>
+
   <script>
     // Tailwind config - primary palette
     tailwind.config = {
@@ -63,11 +64,6 @@
     </div>
   </div>
 
-  <script type="module">
-    // import { requireRole, logout, currentUser } from '{{ asset("pos-assets/js/auth.js") }}';
-    // import { login } from '{{ asset("pos-assets/js/auth.js") }}';
-  
-   
-  </script>
+
 </body>
 </html>

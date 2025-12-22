@@ -33,7 +33,7 @@ class DriverApiController extends Controller
         return response()->json($driver);
     }
     /**
-     * Mengubah status driver (available/offline).
+     * Mengubah status driver (available/offline).PP
      */
     public function setStatus(Request $request)
     {
@@ -53,19 +53,14 @@ class DriverApiController extends Controller
      */
     public function completeBooking(Request $request, Booking $booking)
     {
-        // Pastikan driver yang menyelesaikan adalah driver dari booking tersebut
-        if ($request->user()->id !== $booking->driver_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
+        
+        $this->authorize('complete', $booking);
 
         DB::transaction(function () use ($booking) {
-            $booking->update(['status' => 'Completed']);
+            $booking->transitionTo(Booking::STATUS_COMPLETED);
             $booking->driver->driverProfile()->update(['status' => 'available']);
         });
-    // === PERBAIKAN DI SINI ===
-        // Setelah menyelesaikan booking, panggil metode getProfile
-        // untuk mendapatkan dan mengembalikan data terbaru.
-        return $this->getProfile($request);
+        return response()->json(['message' => 'Booking completed']);
         
     }
 
