@@ -83,17 +83,27 @@
 
       <!-- Driver Status Card -->
       <div>
-        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Status Kerja</h2>
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 flex items-center justify-between">
-          <div>
-            <div class="font-bold text-slate-800 dark:text-slate-100">Status Saya</div>
-            <div id="driverStatusText" class="text-sm text-slate-500 dark:text-slate-400">Offline</div>
+        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Antrian Bandara</h2>
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-4">
+          
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">Status Saat Ini</div>
+              <div id="driverStatusText" class="font-bold text-lg text-slate-800 dark:text-slate-100">Offline</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-500 dark:text-slate-400">Jarak ke Titik Kumpul</div>
+              <div id="distanceText" class="font-mono font-semibold text-primary-600 dark:text-primary-400">Mencari GPS...</div>
+            </div>
           </div>
-          <label for="statusToggle" class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="statusToggle" class="sr-only peer">
-            <div class="w-14 h-8 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-focus:ring-2 peer-focus:ring-primary-300 peer-checked:bg-success transition-colors"></div>
-            <span class="absolute left-1 top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform peer-checked:translate-x-6"></span>
-          </label>
+
+          <button id="btnQueueAction" disabled class="w-full py-3 rounded-xl font-bold text-white shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-slate-400">
+            Memuat Lokasi...
+          </button>
+          
+          <p class="text-[10px] text-center text-slate-400">
+            *Fitur ini menggunakan GPS. Pastikan Anda berada dalam radius 2 KM dari Bandara APT Pranoto.
+          </p>
         </div>
       </div>
     </section>
@@ -110,7 +120,7 @@
                       <p id="walletBalance" class="text-4xl font-bold tracking-tight">Rp0</p>
                   </div>
                   <div class="w-8 h-8 rounded-full bg-white/20 text-white grid place-items-center font-bold">KT</div>
-              </div>
+              </div>`
               <p class="text-xs opacity-70 mt-4">*Saldo setelah dipotong komisi koperasi.</p>
           </div>
       </div>

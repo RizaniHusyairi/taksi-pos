@@ -42,14 +42,65 @@ class   DriverApiController extends Controller
     public function setStatus(Request $request)
     {
         $validated = $request->validate([
-        'status' => 'required|in:available,offline',
-    ]);
+            'status' => 'required|in:available,offline',
+            // Jika ingin 'available' (masuk antrian), wajib kirim lat & lng
+            'latitude'  => 'required_if:status,available|numeric',
+            'longitude' => 'required_if:status,available|numeric',
+        ]);
 
-    $user = $request->user();
-    $user->driverProfile()->update(['status' => $validated['status']]);
+        $user = $request->user();
 
-    // Kembalikan data user yang sudah di-update beserta profilnya
-    return response()->json($user->load('driverProfile'));
+        // --- LOGIKA GEO-FENCING (Hanya jika mau ONLINE/Masuk Antrian) ---
+        if ($validated['status'] === 'available') {
+            
+            // KOORDINAT BANDARA APT PRANOTO SAMARINDA (Sesuaikan titik presisinya)
+            $airportLat = -0.372158; 
+            $airportLng = 117.258153;
+            
+            // Jarak maksimal (Radius) dalam Kilometer
+            $radiusKm = 2.0; 
+
+            $driverLat = $request->latitude;
+            $driverLng = $request->longitude;
+
+            $distance = $this->calculateDistance($airportLat, $airportLng, $driverLat, $driverLng);
+
+            // Tolak jika diluar radius
+            if ($distance > $radiusKm) {
+                return response()->json([
+                    'message' => 'Anda berada di luar area Bandara (' . number_format($distance, 1) . ' km). Harap mendekat ke lokasi.',
+                    'distance' => $distance
+                ], 422); 
+            }
+        }
+
+        // Update status jika lolos validasi
+        $user->driverProfile()->update(['status' => $validated['status']]);
+
+        return response()->json([
+            'message' => 'Status berhasil diperbarui',
+            'data' => $user->load('driverProfile')
+        ]);
+    }
+
+
+    /**
+     * Fungsi helper menghitung jarak dua titik koordinat (Haversine Formula)
+     * Return dalam Kilometer
+     */
+    private function calculateDistance($lat1, $lon1, $lat2, $lon2) {
+        $earthRadius = 6371; 
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($dLat/2) * sin($dLat/2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon/2) * sin($dLon/2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+
+        return $earthRadius * $c;
     }
 
     /**
@@ -87,7 +138,7 @@ class   DriverApiController extends Controller
             ->whereIn('method', ['QRIS', 'CashCSO'])
             ->sum('amount');
         
-        $driverShare = $totalCredits * (1 - ($commissionRate / 100)); // asumsi komisi disimpan sbg 20 bukan 0.2
+        $driverShare = $totalCredits * (1 - $commissionRate); // asumsi komisi disimpan sbg 20 bukan 0.2
 
         $totalDebits = $driver->withdrawals()
             ->whereIn('status', ['Approved', 'Paid'])

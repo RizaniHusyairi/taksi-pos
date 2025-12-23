@@ -29,12 +29,28 @@
 
 
     export class DriverApp {
+
+    // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
+    constructor() {
+        // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
+        this.AIRPORT_LAT = -0.372158; 
+        this.AIRPORT_LNG = 117.258153;
+        this.MAX_RADIUS_KM = 2.0; // Radius toleransi
+        
+        this.currentLat = null;
+        this.currentLng = null;
+        this.watchId = null;
+    }
+
     async init() {
         this.initTheme(); // Panggil inisialisasi tema
         this.cacheEls();
         this.bind();
         // Muat data awal yang penting saat aplikasi start
         await this.loadInitialData();
+
+        // Mulai pantau lokasi GPS segera setelah init
+        this.startLocationWatcher();
         
         window.addEventListener('hashchange', () => this.route());
         this.route();
@@ -93,6 +109,11 @@
         this.statusToggle = document.getElementById('statusToggle');
         this.statusText = document.getElementById('driverStatusText');
 
+        // -- UPDATE BAGIAN INI UNTUK UI BARU --
+        this.statusText = document.getElementById('driverStatusText');
+        this.distanceText = document.getElementById('distanceText');
+        this.btnQueue = document.getElementById('btnQueueAction');
+
         // Wallet View
         this.walletBalance = document.getElementById('walletBalance');
         this.wdForm = document.getElementById('formWd');
@@ -110,7 +131,7 @@
 
     bind() {
 
-        this.statusToggle.addEventListener('change', (e) => this.handleStatusChange(e));
+        this.btnQueue?.addEventListener('click', () => this.handleQueueAction());
         this.btnComplete.addEventListener('click', () => this.handleCompleteBooking());
         this.wdForm.addEventListener('submit', (e) => this.handleWithdrawalRequest(e));
         document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
@@ -127,6 +148,109 @@
             });
         });
 
+    }
+
+    // --- METODE BARU: PEMANTAUAN LOKASI ---
+    startLocationWatcher() {
+        if (!navigator.geolocation) {
+            this.distanceText.textContent = "GPS Error";
+            Utils.showToast('Browser tidak mendukung GPS', 'error');
+            return;
+        }
+
+        // Pantau lokasi secara real-time
+        this.watchId = navigator.geolocation.watchPosition(
+            (position) => {
+                this.currentLat = position.coords.latitude;
+                this.currentLng = position.coords.longitude;
+                // Setiap lokasi berubah, cek apakah tombol boleh aktif
+                this.updateQueueUI(); 
+            },
+            (error) => {
+                console.error("GPS Error:", error);
+                this.distanceText.textContent = "Hilang Sinyal";
+                this.updateQueueUI(true); // true = ada error
+            },
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+        );
+    }
+
+    // Hitung jarak (Haversine Formula) di Javascript
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Radius bumi KM
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    // --- UPDATE TAMPILAN TOMBOL & STATUS ---
+    updateQueueUI(gpsError = false) {
+        if (!this.driverData) return;
+
+        const status = this.driverData.driver_profile.status;
+        const isAvailable = status === 'available';
+        const isOntrip = status === 'ontrip';
+
+        // 1. Update Teks Status
+        if (isOntrip) {
+            this.statusText.textContent = 'Sedang Jalan';
+            this.statusText.className = 'font-bold text-lg text-pending';
+        } else if (isAvailable) {
+            this.statusText.textContent = 'Online (Antri)';
+            this.statusText.className = 'font-bold text-lg text-success';
+        } else {
+            this.statusText.textContent = 'Offline';
+            this.statusText.className = 'font-bold text-lg text-slate-500 dark:text-slate-400';
+        }
+
+        // 2. Hitung Jarak
+        let dist = 9999;
+        if (this.currentLat && this.currentLng) {
+            dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, this.currentLat, this.currentLng);
+            this.distanceText.textContent = dist.toFixed(2) + " km";
+        }
+
+        // 3. Logika Tombol (Disable/Enable)
+        const btn = this.btnQueue;
+        
+        // Reset class dasar
+        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all ";
+
+        if (isOntrip) {
+            btn.disabled = true;
+            btn.textContent = "Sedang Mengantar...";
+            btn.classList.add('bg-slate-300', 'dark:bg-slate-700', 'cursor-not-allowed');
+        } 
+        else if (isAvailable) {
+            // Jika sudah Online, tombol jadi "Keluar Antrian" (Selalu Aktif dimanapun)
+            btn.disabled = false;
+            btn.textContent = "Keluar Antrian (Off)";
+            btn.classList.add('bg-danger', 'hover:bg-red-600', 'active:scale-95');
+        } 
+        else {
+            // Jika Offline -> Cek Jarak dulu
+            if (gpsError || !this.currentLat) {
+                btn.disabled = true;
+                btn.textContent = "Menunggu GPS...";
+                btn.classList.add('bg-slate-400', 'cursor-not-allowed');
+            } 
+            else if (dist > this.MAX_RADIUS_KM) {
+                // DI LUAR AREA -> TOMBOL MATI (DISABLED)
+                btn.disabled = true;
+                btn.textContent = `Di Luar Area (${dist.toFixed(1)} km)`;
+                btn.classList.add('bg-slate-400', 'cursor-not-allowed', 'opacity-70');
+            } 
+            else {
+                // DI DALAM AREA -> TOMBOL HIDUP
+                btn.disabled = false;
+                btn.textContent = "Masuk Antrian (On)";
+                btn.classList.add('bg-primary-600', 'hover:bg-primary-700', 'active:scale-95');
+            }
+        }
     }
 
     route() {
@@ -185,27 +309,55 @@
     }
 
     renderStatus() {
-        if (!this.driverData) return;
-        const status = this.driverData.driver_profile.status;
-        const isAvailable = status === 'available';
-        const isOntrip = status === 'ontrip';
-
-        this.statusToggle.checked = isAvailable;
-        this.statusToggle.disabled = isOntrip;
-
-        if (isOntrip) {
-            this.statusText.textContent = 'Sedang dalam perjalanan';
-            this.statusText.className = 'text-sm text-pending font-semibold';
-        } else if (isAvailable) {
-            this.statusText.textContent = 'Tersedia (Online)';
-            this.statusText.className = 'text-sm text-success font-semibold';
-        } else {
-            this.statusText.textContent = 'Offline';
-            this.statusText.className = 'text-sm text-slate-500 dark:text-slate-400';
-        }
+        this.updateQueueUI();
 
         // ... (logika untuk mengubah teks status tidak berubah) ...
     }
+
+    // --- ACTION HANDLER ---
+    // --- HANDLE KLIK TOMBOL ---
+    async handleQueueAction() {
+        const status = this.driverData.driver_profile.status;
+        // Jika available -> jadi offline. Jika offline -> jadi available.
+        const targetStatus = status === 'available' ? 'offline' : 'available';
+
+        const payload = { status: targetStatus };
+        
+        // Kirim koordinat untuk validasi di backend
+        if (targetStatus === 'available') {
+            if (this.currentLat && this.currentLng) {
+                payload.latitude = this.currentLat;
+                payload.longitude = this.currentLng;
+            } else {
+                Utils.showToast('Lokasi GPS belum ditemukan', 'error');
+                return;
+            }
+        }
+
+        // Loading state
+        const btn = this.btnQueue;
+        btn.disabled = true;
+        btn.textContent = "Memproses...";
+
+        try {
+            const response = await fetchApi('/driver/status', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            // Update data dan UI
+            this.driverData = response.data;
+            this.updateQueueUI();
+
+            const msg = targetStatus === 'available' ? 'Anda masuk antrian!' : 'Anda keluar antrian.';
+            Utils.showToast(msg, 'success');
+
+        } catch (error) {
+            // Jika error (misal ditolak server), kembalikan UI
+            this.updateQueueUI(); 
+        }
+    }
+
 
     renderActiveOrder() {
         if (this.activeBooking) {
@@ -290,26 +442,96 @@
     // --- FUNGSI AKSI (sekarang memanggil API) ---
         
     async handleStatusChange(e) {
-        const newStatus = e.target.checked ? 'available' : 'offline';
-        try {
-            // Panggil API dan simpan data driver yang baru sebagai hasilnya
-            const updatedDriverData = await fetchApi('/driver/status', {
-                method: 'POST',
-                body: JSON.stringify({ status: newStatus })
-            });
+        // 1. Mencegah toggle berubah dulu sebelum validasi server sukses
+        e.preventDefault(); 
+        
+        const targetCheckbox = e.target;
+        const wantToOnline = !targetCheckbox.checked; // Keadaan saat ini (sebelum di-klik user adalah checked=false jika offline)
+        // Koreksi logika checkbox:
+        // Jika checkbox tadi tidak dicentang, dan user klik, maka user ingin mencentang (Online)
+        // e.preventDefault() membuat checked tidak berubah secara visual dulu.
+        
+        // Logika: 
+        // Status awal visual: OFFLINE (unchecked). User klik.
+        // Kita preventDefault.
+        // Kita cek lokasi. Jika sukses -> set checked = true.
+        
+        const nextStatus = targetCheckbox.checked ? 'offline' : 'available'; 
+        // Karena preventDefault(), 'checked' masih status LAMA.
+        // Jadi jika checkbox sekarang false (offline), user klik ingin jadi 'available'.
 
-            // Perbarui state lokal dengan data baru dari server
-            this.driverData = updatedDriverData;
+        if (nextStatus === 'available') {
+            // --- JIKA INGIN MASUK ANTRIAN (ONLINE) ---
+            Utils.showToast('Sedang memeriksa lokasi Anda...', 'info');
+
+            if (!navigator.geolocation) {
+                Utils.showToast('Browser Anda tidak mendukung Geolocation.', 'error');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    // Sukses dapat lokasi
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    await this.sendStatusUpdate(nextStatus, lat, lng, targetCheckbox);
+                },
+                (error) => {
+                    // Gagal dapat lokasi
+                    console.error(error);
+                    let msg = 'Gagal mengambil lokasi GPS.';
+                    if(error.code === 1) msg = 'Izin lokasi ditolak. Mohon aktifkan GPS.';
+                    Utils.showToast(msg, 'error');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+
+        } else {
+            // --- JIKA INGIN KELUAR ANTRIAN (OFFLINE) ---
+            // Tidak perlu cek lokasi untuk offline
+            await this.sendStatusUpdate('offline', null, null, targetCheckbox);
+        }
+    }
+
+    async sendStatusUpdate(status, lat, lng, checkboxEl) {
+        try {
+            const payload = { status: status };
+            if (lat && lng) {
+                payload.latitude = lat;
+                payload.longitude = lng;
+            }
+
+            // Panggil API (Note: API response structure kita ubah sedikit di backend tadi)
+            const response = await fetchApi('/driver/status', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
             
-            // Render ulang komponen yang relevan dengan data baru
+            // Jika sukses (tidak throw error):
+            // 1. Update visual checkbox secara manual
+            checkboxEl.checked = (status === 'available');
+            
+            // 2. Update data lokal
+            // response.data berisi user object dr backend
+            this.driverData = response.data; 
+
+            // 3. Render ulang UI
             this.renderStatus();
             this.renderProfile();
 
-            Utils.showToast(`Status diubah menjadi: ${newStatus === 'available' ? 'Tersedia' : 'Offline'}`, 'success');
+            const msg = status === 'available' 
+                ? 'Berhasil masuk antrian bandara!' 
+                : 'Anda sekarang Offline.';
+            Utils.showToast(msg, 'success');
 
         } catch (error) {
-            // Kembalikan toggle ke posisi semula jika terjadi error
-            e.target.checked = !e.target.checked;
+            // Error sudah ditangani fetchApi (toast muncul), 
+            // tapi kita pastikan checkbox visual sesuai status asli (batal berubah)
+            checkboxEl.checked = (status !== 'available');
+            
+            // Pesan spesifik jika error 422 (Kejauhan) sudah muncul via Utils.showToast dari fetchApi,
+            // tapi jika ingin custom handling bisa di sini.
         }
     }
 
