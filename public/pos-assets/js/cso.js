@@ -125,6 +125,8 @@ class CsoApp {
       // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
 
       document.getElementById('printReceipt')?.addEventListener('click', () => this.printReceiptHandler());
+      // TAMBAHKAN LISTENER INI:
+      document.getElementById('shareReceipt')?.addEventListener('click', () => this.shareReceiptHandler());
   }
   route() {
       // Fungsi routing tidak berubah, sudah bagus
@@ -162,7 +164,12 @@ class CsoApp {
   }
 
   async renderDrivers() {
-    this.driversList.innerHTML = `<p class="text-slate-500">Memuat data supir...</p>`;
+    this.driversList.innerHTML = `
+        <div class="p-8 text-center text-slate-400 flex flex-col items-center animate-pulse">
+            <svg class="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span class="text-sm">Memuat antrian...</span>
+        </div>`;
+    
     this.selectedDriverId = null;
     this.updateConfirmButtonState();
 
@@ -170,40 +177,87 @@ class CsoApp {
         const drivers = await fetchApi('/cso/available-drivers');
 
         if (drivers.length === 0) {
-            this.driversList.innerHTML = `<p class="text-center col-span-full p-4 bg-white dark:bg-slate-800 rounded-xl">Tidak ada supir yang tersedia.</p>`;
+            this.driversList.innerHTML = `
+            <div class="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
+                <p class="text-slate-500 font-medium">Antrian Kosong</p>
+                <p class="text-xs text-slate-400 mt-1">Belum ada supir yang masuk antrian.</p>
+            </div>`;
             return;
         }
 
-        this.driversList.innerHTML = drivers.map(d => {
+        // Render List
+        this.driversList.innerHTML = drivers.map((d, index) => {
             const profile = d.driver_profile || {};
-            const status = profile.status || 'offline';
-            const isAvailable = status === 'available';
+            const queueNumber = index + 1; // Urutan 1, 2, 3...
+            const isFirst = index === 0; // Cek apakah ini antrian pertama
+
+            // Style khusus untuk urutan #1 (Rekomendasi)
+            const wrapperClass = isFirst 
+                ? 'bg-white dark:bg-slate-800 border-primary-500 ring-1 ring-primary-500 shadow-md transform scale-[1.01]' 
+                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary-300';
+            
+            const numBadgeClass = isFirst
+                ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
+
             return `
-            <button type="button" data-driver-id="${d.id}" class="driver-card border-2 ${isAvailable ? 'border-slate-200 dark:border-slate-700' : 'border-dashed border-slate-300 dark:border-slate-600'} rounded-xl p-3 text-left transition-all ${isAvailable ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
-                        <div class="text-xs text-slate-500 dark:text-slate-400">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
+            <button type="button" data-driver-id="${d.id}" class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 group ${wrapperClass}">
+                <div class="flex items-center gap-4">
+                    
+                    <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${numBadgeClass}">
+                        ${queueNumber}
                     </div>
-                    <div class="text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-success/10 text-success' : 'bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300'}">
-                        ${status.charAt(0).toUpperCase() + status.slice(1)}
+
+                    <div class="flex-grow min-w-0">
+                        <div class="flex justify-between items-start">
+                            <div class="truncate pr-2">
+                                <div class="font-bold text-slate-800 dark:text-slate-100 text-base group-hover:text-primary-600 transition-colors">
+                                    ${d.name}
+                                </div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                                    <span class="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono tracking-wide text-slate-600 dark:text-slate-300">
+                                        ${profile.plate_number || '---'}
+                                    </span>
+                                    <span class="truncate">${profile.car_model || 'Kendaraan ?'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex-shrink-0">
+                    <div class="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600 group-hover:border-primary-400 flex items-center justify-center">
+                                    <div class="w-3 h-3 rounded-full bg-primary-600 opacity-0 group-[.selected]:opacity-100 transition-opacity"></div>
+                               </div>
+                         
                     </div>
                 </div>
+                
+                <div class="absolute inset-0 border-2 border-primary-600 rounded-xl opacity-0 group-[.selected]:opacity-100 pointer-events-none transition-opacity"></div>
             </button>`;
         }).join('');
 
-        // Bind event listener ke tombol supir yang baru dirender
+        // Re-bind Event Listeners
         this.driversList.querySelectorAll('[data-driver-id]').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.selectedDriverId = btn.dataset.driverId;
-                this.driversList.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+                
+                // Hapus class selected dari semua
+                this.driversList.querySelectorAll('.driver-card').forEach(b => b.classList.remove('selected'));
+                
+                // Tambah class selected ke yang diklik
                 btn.classList.add('selected');
+                
                 this.updateConfirmButtonState();
             });
         });
 
     } catch (error) {
-        this.driversList.innerHTML = `<p class="text-danger">Gagal memuat data supir.</p>`;
+        console.error(error);
+        this.driversList.innerHTML = `
+            <div class="text-center p-4 text-danger bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-200">
+                Gagal memuat antrian supir. <br>
+                <button onclick="window.location.reload()" class="underline text-sm mt-1">Muat Ulang</button>
+            </div>`;
     }
   }
 
@@ -352,79 +406,245 @@ class CsoApp {
         this.receiptModal.classList.remove('flex');
     }
     printReceiptHandler() {
-        // Cek apakah ada data struk yang tersimpan
+        // 1. Cek data
         if (!this.lastReceiptData) {
             Utils.showToast('Data struk tidak ditemukan.', 'error');
             return;
         }
 
-        // Buat ulang HTML struk untuk memastikan formatnya bersih
+        // 2. Generate HTML Struk
         const receiptHTML = this.generateReceiptHTML(this.lastReceiptData);
-        
-        // Buka jendela baru untuk dicetak
-        const printWindow = window.open('', 'PRINT', 'height=600,width=400');
-        
-        printWindow.document.write('<!doctype html><html><head><title>Struk Pembayaran</title>');
-        // Salin style dari halaman utama agar struk terlihat sama
-        printWindow.document.write('<link rel="stylesheet" href="{{ asset("pos-assets/css/style.css") }}">'); // Sesuaikan path jika perlu
-        printWindow.document.write('<style>body { margin: 0; background: #fff; } .rcpt58 { color: #000 !important; }</style>');
-        printWindow.document.write('</head><body>');
-        printWindow.document.write(receiptHTML);
-        printWindow.document.write('</body></html>');
-        
-        printWindow.document.close();
-        printWindow.focus();
-        
-        // Beri waktu sejenak untuk memuat, lalu cetak dan tutup
-        setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-        }, 500);
+
+        // 3. Deteksi apakah user menggunakan Android
+        const isAndroid = /Android/i.test(navigator.userAgent);
+
+        if (isAndroid) {
+            // --- METODE CETAK BLUETOOTH (VIA RAWBT) ---
+            
+            // Kita perlu mengubah HTML menjadi Base64 agar bisa dikirim lewat URL
+            // Trik 'unescape' + 'encodeURIComponent' digunakan untuk menangani karakter UTF-8 (seperti Rp, emoji, dll)
+            const base64Data = btoa(unescape(encodeURIComponent(receiptHTML)));
+            
+            // Format URL Scheme untuk RawBT
+            // Opsi: cut=1 (potong kertas), h=auto (tinggi otomatis)
+            const rawbtUrl = `rawbt:data:text/html;base64,${base64Data}`;
+            
+            // Buka aplikasi RawBT
+            window.location.href = rawbtUrl;
+
+        } else {
+            // --- METODE CETAK STANDARD (DESKTOP/LAPTOP) ---
+            
+            const printWindow = window.open('', 'PRINT', 'height=600,width=400');
+            
+            printWindow.document.write('<!doctype html><html><head><title>Struk</title>');
+            // Sertakan CSS agar tampilan sama
+            printWindow.document.write('<link rel="stylesheet" href="/pos-assets/css/style.css">'); 
+            printWindow.document.write('<style>body { margin: 0; padding: 0; } @page { margin: 0; }</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write(receiptHTML);
+            printWindow.document.write('</body></html>');
+            
+            printWindow.document.close();
+            printWindow.focus();
+            
+            // Beri jeda sedikit agar style termuat
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+        }
+    }
+
+    
+    async shareReceiptHandler() {
+        if (!this.lastReceiptData) {
+            Utils.showToast('Data struk tidak ditemukan.', 'error');
+            return;
+        }
+
+        // 1. Minta Nomor WA Penumpang dulu
+        let phoneNumber = prompt("Masukkan Nomor WhatsApp Penumpang untuk mengirim PDF:");
+        if (!phoneNumber) return; // Batal jika kosong
+
+        // Format nomor HP (08xx -> 628xx)
+        phoneNumber = phoneNumber.replace(/\D/g, '');
+        if (phoneNumber.startsWith('0')) {
+            phoneNumber = '62' + phoneNumber.substring(1);
+        }
+
+        // 2. Beri Feedback Loading
+        const btn = document.getElementById('shareReceipt');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Membuat PDF...';
+        btn.disabled = true;
+
+        try {
+            // Ambil elemen struk yang sedang tampil di modal
+            const element = document.getElementById('receiptArea');
+            
+            // Kode Transaksi untuk nama file
+            const code = this.lastReceiptData.id || 'TRX';
+
+            // 3. Gunakan html2canvas untuk memotret HTML menjadi Gambar
+            // scale: 2 agar hasil PDF tajam (tidak pecah)
+            const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+
+            // 4. Setup PDF (Ukuran kertas disesuaikan dengan struk)
+            // 58mm = 58 unit di jsPDF (kurang lebih)
+            // Kita pakai format custom width 58, height menyesuaikan panjang struk
+            const imgWidth = 58; 
+            const pageHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            // Akses jsPDF dari window (karena pakai CDN)
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', [imgWidth, pageHeight + 10]); // +10mm padding bawah
+
+            // Masukkan gambar ke PDF
+            doc.addImage(imgData, 'PNG', 0, 0, imgWidth, pageHeight);
+
+            // 5. Download File PDF
+            const fileName = `Struk_Pembayaran_${code}.pdf`;
+            doc.save(fileName);
+
+            Utils.showToast('PDF berhasil didownload!', 'success');
+
+            // 6. Buka WhatsApp
+            // Beri jeda sedikit agar download selesai dulu
+            setTimeout(() => {
+                const message = `Halo, berikut adalah struk pembayaran taksi Anda (Kode: #${code}). Silakan unduh file PDF di atas. Terima kasih.`;
+                const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+                
+                // Buka WA di tab baru
+                window.open(url, '_blank');
+                
+                // Beri instruksi ke CSO
+                alert(`File "${fileName}" telah didownload ke perangkat ini.\n\nWhatsApp akan terbuka sekarang. Silakan KLIK tombol lampiran (Paperclip) di WhatsApp dan kirim file PDF tersebut.`);
+            }, 1000);
+
+        } catch (error) {
+            console.error(error);
+            Utils.showToast('Gagal membuat PDF.', 'error');
+        } finally {
+            // Kembalikan tombol seperti semula
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     }
 
     generateReceiptHTML(tx) {
-         // tx di sini bisa berupa objek booking (dari pembayaran baru)
-    // atau objek transaksi (dari riwayat)
-    const isBooking = tx.zone_id !== undefined;
-    const booking = isBooking ? tx : tx.booking;
+        // Logika penentuan variabel (Booking vs Transaction)
+        const isBooking = tx.zone_id !== undefined;
+        const booking = isBooking ? tx : tx.booking;
 
-    // --- Variabel Baru Didefinisikan Di Sini ---
-    const dateTime = new Date(tx.created_at || Date.now());
-    const amount = tx.price || tx.amount;
-    const zoneName = isBooking 
-        ? this.zones.find(z => z.id == tx.zone_id)?.name 
-        : tx.booking?.zone_to?.name;
+        // Data-data Struk
+        const dateTime = new Date(tx.created_at || Date.now());
+        const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        
+        // Data Transaksi
+        const zoneName = isBooking 
+            ? this.zones.find(z => z.id == tx.zone_id)?.name 
+            : tx.booking?.zone_to?.name;
+        
+        const price = tx.price || tx.amount;
+        const amountStr = new Intl.NumberFormat('id-ID').format(price);
+        const code = String(tx.id || booking?.id || 'N/A').toUpperCase();
+        
+        // Nama Kasir (CSO)
+        const kasirName = tx.cso?.name?.split(' ')[0] || 'Admin'; // Ambil nama depan saja biar muat
 
-    // Variabel untuk struk
-    const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '');
-    const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-    const kasir = tx.cso?.name?.toLowerCase() || 'cso'; // Menggunakan nama CSO dari data API jika ada
-    // Ubah ID menjadi String terlebih dahulu, baru diubah ke huruf besar
-    const kode = String(tx.id || booking?.id || 'N/A').toUpperCase();
-    const itemName = `Taksi: ${(zoneName || 'N/A').toUpperCase()}`;
-    const metode = tx.method?.includes('Cash') ? "CASH" : "QRIS";
-    
-    // Helper untuk format mata uang
-    const money = (n) => new Intl.NumberFormat('id-ID').format(n);
+        // Metode Pembayaran
+        const methodDisplay = tx.method?.includes('Cash') ? "CASH" : "QRIS";
 
-    // --- HTML Struk (Struktur tidak berubah) ---
-    return `<div class="rcpt58" style="color: #000;">
-        <div class="c" style="font-weight:700; font-size: 14px; margin-bottom: 4px;">KOPERASI TAKSI POS</div>
-        <div class="meta">
-            <div class="row"><div>${tanggal} ${waktu}</div><div class="r">Kasir: ${kasir}</div></div>
-            <div class="code">#${kode}</div>
-        </div>
-        <div class="hr"></div>
-        <div class="itemrow">
-            <div class="row"><div class="name">${itemName}</div><div class="amt">${money(amount)}</div></div>
-        </div>
-        <div class="hr"></div>
-        <div class="totals">
-            <div class="row" style="font-weight:700;"><div>Grand Total</div><div class="r">${money(amount)}</div></div>
-            <div class="row"><div>${metode}</div><div class="r">${money(amount)}</div></div>
-        </div>
-        <div class="foot c" style="margin-top: 8px;">Terima kasih!</div>
-    </div>`;
+        // --- STYLE CSS INLINE (Agar tercetak rapi di printer thermal) ---
+        // Kita menggunakan font Courier New agar lebar huruf sama (Monospace)
+        const style = `
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            width: 100%;
+            max-width: 58mm; /* Lebar kertas thermal standar */
+            color: #000;
+            line-height: 1.2;
+        `;
+        
+        const center = `text-align: center;`;
+        const bold = `font-weight: bold;`;
+        const flexBetween = `display: flex; justify-content: space-between;`;
+        const dashedLine = `border-bottom: 1px dashed #000; margin: 5px 0;`;
+        const mb1 = `margin-bottom: 4px;`;
+        const mt2 = `margin-top: 8px;`;
+
+        // Logo Placeholder (Ganti src dengan URL logo koperasimu)
+        // Gunakan filter grayscale agar logo tercetak jelas di printer hitam putih
+        const logoHtml = `
+            <div style="${center} margin-bottom: 8px;">
+                <div style="font-size: 24px; line-height: 1;">✈️</div> 
+                <div style="${bold} font-size: 14px; margin-top: 4px;">KOPERASI ANGKASA JAYA</div>
+            </div>
+        `;
+
+        // --- HTML STRUK ---
+        return `
+        <div style="${style}">
+            
+            ${logoHtml}
+
+            <div style="${flexBetween} ${mb1}">
+                <div>
+                    <div style="font-size: 10px;">Waktu Penjualan</div>
+                    <div>${tanggal} ${waktu}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 10px;">Kasir</div>
+                    <div>${kasirName}</div>
+                </div>
+            </div>
+
+            <div style="${mb1}">#${code}</div>
+
+            <div style="${dashedLine}"></div>
+
+            <div style="${flexBetween} ${bold} ${mb1}">
+                <div>Item</div>
+                <div>Jumlah</div>
+            </div>
+
+            <div style="${dashedLine}"></div>
+
+            <div style="${mb1}">
+                <div style="${bold} text-transform: uppercase;">${zoneName || 'ZONA ?'}</div>
+                <div style="${flexBetween}">
+                    <div style="padding-left: 10px;">${amountStr} x1</div>
+                    <div>${amountStr}</div>
+                </div>
+            </div>
+
+            <div style="${dashedLine}"></div>
+
+            <div style="${flexBetween} ${mb1}">
+                <div>Subtotal</div>
+                <div>${amountStr}</div>
+            </div>
+            
+            <div style="${flexBetween} ${bold} ${mb1} font-size: 14px;">
+                <div>Grand Total</div>
+                <div>Rp ${amountStr}</div>
+            </div>
+
+            <div style="${flexBetween} ${mb1}">
+                <div>${methodDisplay}</div>
+                <div>Rp ${amountStr}</div>
+            </div>
+
+            <div style="${center} ${mt2} font-size: 10px; color: #555;">
+                <div style="${dashedLine}"></div>
+                <div style="margin-top: 5px;">Powered by IT Bandara</div>
+                <div>Simpan struk ini sebagai bukti.</div>
+            </div>
+
+        </div>`;
     }
   
 }

@@ -56,7 +56,6 @@ class UserSeeder extends Seeder
             [
                 'car_model' => 'Toyota Avanza',
                 'plate_number' => 'KT 1234 AB',
-                'status' => 'available',
             ]
         );
 
@@ -77,7 +76,6 @@ class UserSeeder extends Seeder
         $driver2->driverProfile()->updateOrCreate(
             ['user_id' => $driver2->id],
             [
-                'status' => 'available',
                 'car_model' => 'Daihatsu Xenia',
                 'plate_number' => 'KT 5678 CD',
             ]

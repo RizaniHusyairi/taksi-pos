@@ -11,29 +11,56 @@ use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\Withdrawal;
 use App\Models\Setting;
+use App\Models\DriverQueue;
 
 class   DriverApiController extends Controller
 {
+
+    /**
+     * Helper untuk menyuntikkan "Status Virtual" ke objek user
+     * agar Frontend JS tidak error.
+     */
+    private function attachVirtualStatus($user)
+    {
+        // Cek apakah user ada di tabel antrian
+        $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
+        
+        // Buat properti dinamis 'status' di driverProfile
+        // Frontend tahunya: 'available' (Online) atau 'offline'
+        $user->driverProfile->status = $isInQueue ? 'available' : 'offline';
+        
+        return $user;
+    }
+
+
     /**
      * Mengambil data utama untuk driver: info profil dan order aktif.
      */
     public function getProfile(Request $request)
     {
-        // Gunakan nama fungsi relasinya: 'driverProfile'
-        $driver = $request->user()->load('driverProfile'); 
-        $activeBooking = null; 
+        // Load relasi profile
+        $driver = $request->user()->load('driverProfile');
 
-        if ($driver->driverProfile?->status === 'ontrip') {
-            
-            $activeBooking = Booking::where('driver_id', $driver->id)
-                ->whereNotIn('status', ['Completed', 'Cancelled']) 
-                ->latest() 
-                ->with('zoneTo:id,name')
-                ->first();
+        // Suntikkan status virtual (berdasarkan tabel queue)
+        $driver = $this->attachVirtualStatus($driver);
+
+        // Cek Booking Aktif (Logika lama)
+        $activeBooking = null;
+        // Kita anggap jika sedang 'ontrip' itu didapat dari Booking yang belum selesai
+        // Bukan dari status profile lagi.
+        $ongoingBooking = Booking::where('driver_id', $driver->id)
+            ->whereNotIn('status', ['Completed', 'Cancelled', 'Paid', 'CashDriver']) // Sesuaikan status akhirmu
+            ->latest()
+            ->with('zoneTo:id,name')
+            ->first();
+
+        if ($ongoingBooking) {
+            $driver->driverProfile->status = 'ontrip'; // Override status jadi ontrip jika ada order
+            $activeBooking = $ongoingBooking;
         }
 
-        // Kembalikan respons JSON yang normal
         $driver->active_booking = $activeBooking;
+        
         return response()->json($driver);
     }
     /**
@@ -42,44 +69,54 @@ class   DriverApiController extends Controller
     public function setStatus(Request $request)
     {
         $validated = $request->validate([
-            'status' => 'required|in:available,offline',
-            // Jika ingin 'available' (masuk antrian), wajib kirim lat & lng
-            'latitude'  => 'required_if:status,available|numeric',
-            'longitude' => 'required_if:status,available|numeric',
+            'action' => 'required|in:join,leave', // Frontend kirim 'join' atau 'leave'
+            'latitude'  => 'required_if:action,join|numeric',
+            'longitude' => 'required_if:action,join|numeric',
         ]);
 
         $user = $request->user();
 
-        // --- LOGIKA GEO-FENCING (Hanya jika mau ONLINE/Masuk Antrian) ---
-        if ($validated['status'] === 'available') {
+        if ($validated['action'] === 'join') {
+            // --- LOGIKA MASUK ANTRIAN ---
             
-            // KOORDINAT BANDARA APT PRANOTO SAMARINDA (Sesuaikan titik presisinya)
+            // 1. Cek Jarak (Geo-fencing)
             $airportLat = -0.372158; 
             $airportLng = 117.258153;
-            
-            // Jarak maksimal (Radius) dalam Kilometer
-            $radiusKm = 2.0; 
+            $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
 
-            $driverLat = $request->latitude;
-            $driverLng = $request->longitude;
-
-            $distance = $this->calculateDistance($airportLat, $airportLng, $driverLat, $driverLng);
-
-            // Tolak jika diluar radius
-            if ($distance > $radiusKm) {
+            if ($distance > 2.0) { // Toleransi 2 KM
                 return response()->json([
-                    'message' => 'Anda berada di luar area Bandara (' . number_format($distance, 1) . ' km). Harap mendekat ke lokasi.',
-                    'distance' => $distance
-                ], 422); 
+                    'message' => 'Anda berada di luar area Bandara (' . number_format($distance, 1) . ' km).',
+                ], 422);
             }
+
+            // 2. Cek Duplikasi (Idempotency)
+            // Jika sudah ada, biarkan saja sukses (biar frontend sinkron)
+            DriverQueue::firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    // created_at otomatis terisi, menjadi penentu nomor urut
+                ]
+            );
+
+            $msg = 'Berhasil masuk antrian';
+
+        } else {
+            // --- LOGIKA KELUAR ANTRIAN ---
+            DriverQueue::where('user_id', $user->id)->delete();
+            $msg = 'Berhasil keluar antrian';
         }
 
-        // Update status jika lolos validasi
-        $user->driverProfile()->update(['status' => $validated['status']]);
+        // Kembalikan data user terbaru dengan status virtualnya
+        // agar UI tombol langsung berubah
+        $user->load('driverProfile');
+        $userWithStatus = $this->attachVirtualStatus($user);
 
         return response()->json([
-            'message' => 'Status berhasil diperbarui',
-            'data' => $user->load('driverProfile')
+            'message' => $msg,
+            'data' => $userWithStatus
         ]);
     }
 
@@ -108,18 +145,16 @@ class   DriverApiController extends Controller
      */
     public function completeBooking(Request $request, Booking $booking)
     {
-        // Pastikan driver yang menyelesaikan adalah driver dari booking tersebut
         if ($request->user()->id !== $booking->driver_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        DB::transaction(function () use ($booking) {
-            $booking->update(['status' => 'Completed']);
-            $booking->driver->driverProfile()->update(['status' => 'available']);
-        });
-    // === PERBAIKAN DI SINI ===
-        // Setelah menyelesaikan booking, panggil metode getProfile
-        // untuk mendapatkan dan mengembalikan data terbaru.
+        // Update status booking saja. 
+        // Tidak perlu update status driver_profile (karena kolomnya sudah dihapus).
+        // Driver otomatis jadi 'offline' (tidak di queue) setelah trip selesai.
+        $booking->update(['status' => 'Completed']);
+        
+        // Panggil getProfile untuk mengembalikan data terbaru ke frontend
         return $this->getProfile($request);
         
     }

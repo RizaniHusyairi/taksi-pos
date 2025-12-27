@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\DriverProfile;
+use App\Models\DriverQueue; 
 
 class CsoApiController extends Controller
 {
@@ -29,16 +30,17 @@ class CsoApiController extends Controller
      */
     public function getAvailableDrivers()
     {
-        $drivers = User::where('role', 'driver')
-            ->where('active', true)
-            ->whereHas('driverProfile', function ($query) {
-                $query->where('status', 'available');
-            })
-            ->with('driverProfile:user_id,car_model,plate_number,status') // Hanya ambil data yang perlu
-            ->select('id', 'name')
-            ->get();
+        // Ambil data dari tabel antrian, urutkan berdasarkan created_at (Siapa cepat dia dapat posisi atas)
+        $queues = DriverQueue::with(['driver.driverProfile']) // Load data user & profil mobil
+        ->orderBy('created_at', 'asc') 
+        ->get();
 
-        return response()->json($drivers);
+        // Mapping agar format JSON tetap sama dengan yang diharapkan Frontend
+        $formatted = $queues->map(function ($q) {
+            return $q->driver; // Mengembalikan object User (driver)
+        });
+
+        return response()->json($formatted);
     }
 
     /**
@@ -50,6 +52,8 @@ class CsoApiController extends Controller
             'driver_id' => 'required|exists:users,id',
             'zone_id'   => 'required|exists:zones,id',
         ]);
+
+
 
         $zone = Zone::findOrFail($validated['zone_id']);
         $cso = Auth::user();
@@ -65,8 +69,8 @@ class CsoApiController extends Controller
                 'status'    => 'Assigned',
             ]);
 
-            // 2. Update status driver menjadi 'ontrip'
-            DriverProfile::where('user_id', $validated['driver_id'])->update(['status' => 'ontrip']);
+            // 2. HAPUS DARI ANTRIAN (Kick from queue)
+            DriverQueue::where('user_id', $validated['driver_id'])->delete();
 
             return $newBooking;
         });

@@ -19,7 +19,6 @@ return new class extends Migration
             // Kolom-kolom spesifik driver
             $table->string('car_model'); // <-- Ubah dari 'car'
             $table->string('plate_number'); // <-- Ubah dari 'plate'
-            $table->enum('status', ['available', 'ontrip', 'offline'])->default('offline');
 
             $table->timestamps();
         });

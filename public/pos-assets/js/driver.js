@@ -187,69 +187,78 @@
         return R * c;
     }
 
-    // --- UPDATE TAMPILAN TOMBOL & STATUS ---
+    // --- LOGIKA UTAMA UI (YANG KAMU MINTA) ---
     updateQueueUI(gpsError = false) {
         if (!this.driverData) return;
 
-        const status = this.driverData.driver_profile.status;
-        const isAvailable = status === 'available';
-        const isOntrip = status === 'ontrip';
+        // 1. Ambil "Status Virtual" dari Backend
+        // Backend mengirim 'available' jika ada di tabel Queue.
+        // Backend mengirim 'ontrip' jika ada active_booking.
+        // Backend mengirim 'offline' jika tidak keduanya.
+        const virtualStatus = this.driverData.driver_profile.status;
+        
+        // 2. Terjemahkan ke Bahasa Manusia (Boolean)
+        const isInQueue = (virtualStatus === 'available'); 
+        const isOnTrip  = (virtualStatus === 'ontrip' || this.driverData.active_booking != null);
 
-        // 1. Update Teks Status
-        if (isOntrip) {
-            this.statusText.textContent = 'Sedang Jalan';
-            this.statusText.className = 'font-bold text-lg text-pending';
-        } else if (isAvailable) {
-            this.statusText.textContent = 'Online (Antri)';
-            this.statusText.className = 'font-bold text-lg text-success';
-        } else {
-            this.statusText.textContent = 'Offline';
-            this.statusText.className = 'font-bold text-lg text-slate-500 dark:text-slate-400';
-        }
-
-        // 2. Hitung Jarak
+        // 3. Hitung Jarak
         let dist = 9999;
         if (this.currentLat && this.currentLng) {
             dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, this.currentLat, this.currentLng);
             this.distanceText.textContent = dist.toFixed(2) + " km";
         }
 
-        // 3. Logika Tombol (Disable/Enable)
-        const btn = this.btnQueue;
-        
-        // Reset class dasar
-        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all ";
+        // 4. Update Teks Status (Label Atas)
+        if (isOnTrip) {
+            this.statusText.textContent = 'Sedang Mengantar';
+            this.statusText.className = 'font-bold text-lg text-pending';
+        } else if (isInQueue) {
+            this.statusText.textContent = 'Dalam Antrian (Online)';
+            this.statusText.className = 'font-bold text-lg text-success';
+        } else {
+            this.statusText.textContent = 'Belum Antri (Offline)';
+            this.statusText.className = 'font-bold text-lg text-slate-500 dark:text-slate-400';
+        }
 
-        if (isOntrip) {
+        // 5. Update Tombol Aksi
+        const btn = this.btnQueue;
+        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all"; // Reset class
+
+        // KONDISI 1: SEDANG JALAN (Orderan)
+        if (isOnTrip) {
             btn.disabled = true;
-            btn.textContent = "Sedang Mengantar...";
+            btn.textContent = "Selesaikan Order Dulu";
             btn.classList.add('bg-slate-300', 'dark:bg-slate-700', 'cursor-not-allowed');
-        } 
-        else if (isAvailable) {
-            // Jika sudah Online, tombol jadi "Keluar Antrian" (Selalu Aktif dimanapun)
+            return;
+        }
+
+        // KONDISI 2: SUDAH DALAM ANTRIAN
+        // Driver bisa keluar antrian kapan saja, tidak peduli jarak.
+        if (isInQueue) {
             btn.disabled = false;
-            btn.textContent = "Keluar Antrian (Off)";
+            btn.textContent = "Keluar Antrian";
             btn.classList.add('bg-danger', 'hover:bg-red-600', 'active:scale-95');
+            return;
+        }
+
+        // KONDISI 3: BELUM ANTRI (Mau Masuk)
+        // Cek GPS dulu
+        if (gpsError || !this.currentLat) {
+            btn.disabled = true;
+            btn.textContent = "Menunggu Sinyal GPS...";
+            btn.classList.add('bg-slate-400', 'cursor-not-allowed');
+        } 
+        else if (dist > this.MAX_RADIUS_KM) {
+            // Diluar Jangkauan
+            btn.disabled = true;
+            btn.textContent = `Terlalu Jauh (${dist.toFixed(1)} km)`;
+            btn.classList.add('bg-slate-400', 'cursor-not-allowed', 'opacity-70');
         } 
         else {
-            // Jika Offline -> Cek Jarak dulu
-            if (gpsError || !this.currentLat) {
-                btn.disabled = true;
-                btn.textContent = "Menunggu GPS...";
-                btn.classList.add('bg-slate-400', 'cursor-not-allowed');
-            } 
-            else if (dist > this.MAX_RADIUS_KM) {
-                // DI LUAR AREA -> TOMBOL MATI (DISABLED)
-                btn.disabled = true;
-                btn.textContent = `Di Luar Area (${dist.toFixed(1)} km)`;
-                btn.classList.add('bg-slate-400', 'cursor-not-allowed', 'opacity-70');
-            } 
-            else {
-                // DI DALAM AREA -> TOMBOL HIDUP
-                btn.disabled = false;
-                btn.textContent = "Masuk Antrian (On)";
-                btn.classList.add('bg-primary-600', 'hover:bg-primary-700', 'active:scale-95');
-            }
+            // Aman: Dalam Jangkauan & GPS Oke
+            btn.disabled = false;
+            btn.textContent = "Masuk Antrian";
+            btn.classList.add('bg-primary-600', 'hover:bg-primary-700', 'active:scale-95');
         }
     }
 
@@ -285,7 +294,6 @@
         try {
             // Sekarang 'data' adalah objek driver itu sendiri
             const data = await fetchApi('/driver/profile');
-            console.log('Data awal driver:', data);
             // Langsung simpan seluruh respons sebagai data driver
             this.driverData = data;
             
@@ -293,7 +301,7 @@
             this.activeBooking = data.active_booking;
             
             this.renderProfile();
-            this.renderStatus();
+            this.updateQueueUI();
             this.renderActiveOrder();
         } catch (error) {
             console.error("Gagal memuat data awal driver:", error);
@@ -315,29 +323,28 @@
     }
 
     // --- ACTION HANDLER ---
-    // --- HANDLE KLIK TOMBOL ---
     async handleQueueAction() {
-        const status = this.driverData.driver_profile.status;
-        // Jika available -> jadi offline. Jika offline -> jadi available.
-        const targetStatus = status === 'available' ? 'offline' : 'available';
+        // Logika sederhana: 
+        // Kalau status 'available' (queue), berarti user klik tombol "Keluar".
+        // Kalau status 'offline', berarti user klik tombol "Masuk".
+        const virtualStatus = this.driverData.driver_profile.status;
+        const action = (virtualStatus === 'available') ? 'leave' : 'join';
 
-        const payload = { status: targetStatus };
-        
-        // Kirim koordinat untuk validasi di backend
-        if (targetStatus === 'available') {
+        // Validasi GPS hanya jika mau JOIN
+        const payload = { action: action };
+        if (action === 'join') {
             if (this.currentLat && this.currentLng) {
                 payload.latitude = this.currentLat;
                 payload.longitude = this.currentLng;
             } else {
-                Utils.showToast('Lokasi GPS belum ditemukan', 'error');
+                Utils.showToast('Lokasi GPS belum siap.', 'error');
                 return;
             }
         }
 
-        // Loading state
-        const btn = this.btnQueue;
-        btn.disabled = true;
-        btn.textContent = "Memproses...";
+        // Loading State
+        this.btnQueue.disabled = true;
+        this.btnQueue.textContent = "Memproses...";
 
         try {
             const response = await fetchApi('/driver/status', {
@@ -345,15 +352,17 @@
                 body: JSON.stringify(payload)
             });
 
-            // Update data dan UI
+            // Update Data Lokal
+            // Backend mengembalikan user object terbaru dengan status virtual yang sudah diupdate
             this.driverData = response.data;
-            this.updateQueueUI();
 
-            const msg = targetStatus === 'available' ? 'Anda masuk antrian!' : 'Anda keluar antrian.';
+            this.updateQueueUI();
+            
+            const msg = (action === 'join') ? 'Berhasil masuk antrian!' : 'Anda keluar antrian.';
             Utils.showToast(msg, 'success');
 
         } catch (error) {
-            // Jika error (misal ditolak server), kembalikan UI
+            // Jika gagal (misal ditolak server), kembalikan tombol
             this.updateQueueUI(); 
         }
     }
@@ -536,24 +545,22 @@
     }
 
     async handleCompleteBooking() {
-       if (!this.activeBooking) { Utils.showToast('Tidak ada order aktif', 'error'); return; }
-    if (!confirm('Apakah Anda yakin perjalanan ini sudah selesai?')) return;
+        if (!this.driverData.active_booking) return;
+        if (!confirm('Selesaikan perjalanan ini?')) return;
     
-    try {
-        // Panggil API, yang sekarang akan mengembalikan data profil terbaru
-        const updatedProfile = await fetchApi(`/driver/bookings/${this.activeBooking.id}/complete`, { method: 'POST' });
-        
-        // Perbarui state lokal dengan data terbaru dari server
-        this.driverData = updatedProfile;
-        this.activeBooking = updatedProfile.active_booking; // Ini akan menjadi null
-        
-        // Render ulang semua komponen yang relevan
-        this.renderStatus();
-        this.renderActiveOrder();
-        this.renderProfile();
-
-        Utils.showToast('Perjalanan selesai', 'success');
-        } catch (error) { /* error ditangani fetchApi */ }
+        try {
+            // Backend akan return profile terbaru (status akan kembali ke 'offline' otomatis)
+            const updatedProfile = await fetchApi(`/driver/bookings/${this.driverData.active_booking.id}/complete`, { method: 'POST' });
+            
+            this.driverData = updatedProfile;
+            
+            // UI Update
+            this.renderActiveOrder(); // Kotak order hilang
+            this.updateQueueUI(); // Tombol antrian aktif kembali (bisa klik Masuk)
+            this.renderProfile();
+    
+            Utils.showToast('Perjalanan selesai', 'success');
+        } catch (error) { /* handled */ }
     }
     
     async handleWithdrawalRequest(e) {
