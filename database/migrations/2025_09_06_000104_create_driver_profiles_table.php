@@ -19,6 +19,8 @@ return new class extends Migration
             // Kolom-kolom spesifik driver
             $table->string('car_model'); // <-- Ubah dari 'car'
             $table->string('plate_number'); // <-- Ubah dari 'plate'
+            $table->string('bank_name')->nullable();
+            $table->string('account_number')->nullable(); 
 
             $table->timestamps();
         });

@@ -274,6 +274,24 @@
           </div>
         </div>
       </section>
+      <div id="modalUploadProof" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-lg p-5 max-w-sm w-full">
+            <h3 class="font-bold text-lg mb-2">Setujui Pencairan</h3>
+            <p class="text-sm text-slate-500 mb-4">
+                Silakan transfer ke rekening supir, lalu upload bukti transfer di sini untuk menyetujui (Approve).
+            </p>
+            
+            <form id="formUploadProof">
+                <input type="hidden" id="wdIdToPay">
+                <input type="file" id="fileProof" accept="image/*" class="w-full text-sm mb-4 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" required>
+                
+                <div class="flex justify-end gap-2">
+                    <button type="button" id="btnCancelProof" class="px-4 py-2 text-slate-600 text-sm">Batal</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Setujui & Kirim</button>
+                </div>
+            </form>
+        </div>
+      </div>
 
       <section id="view-report-revenue" class="p-4 hidden">
         <div class="bg-white rounded-xl shadow-sm p-4">

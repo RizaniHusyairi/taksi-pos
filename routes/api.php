@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/withdrawals', [ApiController::class, 'adminGetWithdrawals']);
         Route::post('/withdrawals/{withdrawal}/approve', [ApiController::class, 'adminApproveWithdrawal']);
         Route::post('/withdrawals/{withdrawal}/reject', [ApiController::class, 'adminRejectWithdrawal']);
+        Route::post('/withdrawals/{withdrawal}/paid', [ApiController::class, 'adminMarkAsPaid']);
         
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);
@@ -64,6 +65,7 @@ Route::middleware('auth:sanctum')->group(function() {
         // Pengaturan
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
+
 
 
 
@@ -105,5 +107,7 @@ Route::middleware('auth:sanctum')->group(function() {
 
         // Riwayat Perjalanan
         Route::get('/history', [DriverApiController::class, 'getTripHistory']);
+
+        Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
     });
 });

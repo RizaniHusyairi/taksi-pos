@@ -204,6 +204,16 @@
                     <p id="profileCar" class="font-semibold text-slate-700 dark:text-slate-200">Avanza - B 1234 CD</p>
                 </div>
             </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
+              <div class="flex justify-between items-center">
+                  <h3 class="font-semibold text-slate-700 dark:text-slate-200">Rekening Pencairan</h3>
+                  <button id="btnEditBank" class="text-xs text-primary-600 font-bold">Ubah</button>
+              </div>
+              <div>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">Bank & No. Rek</p>
+                  <p id="txtBankInfo" class="font-semibold text-slate-800 dark:text-slate-100 text-lg">-</p>
+              </div>
+          </div>
         </div>
          <!-- Theme Settings Card -->
          <div>
@@ -239,6 +249,38 @@
     </section>
 
   </main>
+
+  <div id="bankModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-4">
+            <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Atur Rekening Bank</h3>
+            <form id="formBank" class="space-y-3">
+                <div>
+                    <label class="block text-sm mb-1 text-slate-600 dark:text-slate-300">Nama Bank / E-Wallet</label>
+                    <input id="inBankName" type="text" placeholder="Contoh: BCA, DANA" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white" required>
+                </div>
+                <div>
+                    <label class="block text-sm mb-1 text-slate-600 dark:text-slate-300">Nomor Rekening</label>
+                    <input id="inAccNumber" type="number" placeholder="Contoh: 1234567890" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white" required>
+                </div>
+                <div class="flex gap-2 justify-end mt-4">
+                    <button type="button" id="closeBankModal" class="px-4 py-2 text-slate-500">Batal</button>
+                    <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-lg">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="proofModal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-50 backdrop-blur-sm" onclick="this.classList.add('hidden')">
+      <div class="relative max-w-sm w-full animate-in fade-in zoom-in duration-200">
+          <img id="imgProof" src="" class="w-full rounded-xl shadow-2xl border-2 border-white/20 object-contain max-h-[80vh] bg-black">
+          
+          <div class="text-center mt-4">
+              <span class="text-xs text-white/80 bg-white/10 px-3 py-1.5 rounded-full">
+                  Ketuk layar untuk menutup
+              </span>
+          </div>
+      </div>
+    </div>
 
   <!-- Bottom Navigation -->
   <nav class="bottom-nav bg-white dark:bg-slate-800 w-full fixed bottom-0 left-0 z-20 h-20 flex justify-around items-center border-t border-slate-200 dark:border-slate-700">

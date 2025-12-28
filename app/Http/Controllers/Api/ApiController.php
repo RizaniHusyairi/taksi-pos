@@ -13,8 +13,10 @@ use App\Models\DriverProfile;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\Withdrawals;
+use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+
 
 class ApiController extends Controller
 {
@@ -24,10 +26,17 @@ class ApiController extends Controller
         // 1. Hitung Semua Metrik
         $revenueToday = Transaction::whereDate('created_at', today())->sum('amount');
         $transactionsToday = Transaction::whereDate('created_at', today())->count();
-        $activeDrivers = User::where('role', 'driver')
-                            ->whereHas('driverProfile', function ($query) {
-                                $query->whereIn('status', ['available', 'ontrip']);
-                            })->count();
+        // A. Hitung driver di antrian (Online/Available)
+        $driversInQueue = DriverQueue::count();
+
+        // B. Hitung driver yang sedang OnTrip (Ada booking belum selesai)
+        // Kita hitung jumlah User ID unik yang memiliki booking aktif
+        $driversOnTrip = Booking::whereIn('status', ['Assigned']) // Sesuaikan status on trip di sistemmu
+            ->distinct('driver_id')
+            ->count('driver_id');
+
+        // Total Aktif = Queue + OnTrip (Asumsi driver on trip otomatis keluar dari queue, jadi tidak double count)
+        $activeDrivers = $driversInQueue + $driversOnTrip;
         $pendingWithdrawals = Withdrawals::where('status', 'Pending')->count();
 
         // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
@@ -262,7 +271,6 @@ class ApiController extends Controller
             $user->driverProfile()->create([
                 'car' => $validated['car_model'],
                 'plate' => $validated['plate_number'],
-                'status' => 'offline', // default status
             ]);
         }
 
@@ -343,36 +351,50 @@ class ApiController extends Controller
     // Ambil semua withdrawal request dengan data supirnya
     public function adminGetWithdrawals()
     {
-        $withdrawals = Withdrawals::with('driver') // Eager load relasi 'driver'
+        $withdrawals = Withdrawals::with('driver.driverProfile') 
                                 ->orderBy('requested_at', 'desc')
                                 ->get();
         return response()->json($withdrawals);
     }
 
     // Setujui permintaan
-    public function adminApproveWithdrawal(Withdrawals $withdrawal)
+    // [UBAH INI] Setujui Permintaan + Upload Bukti (Satu Langkah)
+    public function adminApproveWithdrawal(Request $request, Withdrawals $withdrawal)
     {
-        $withdrawal->update(['status' => 'Approved', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal approved']);
+        // Validasi: Wajib ada gambar bukti transfer
+        $request->validate([
+            'proof_image' => 'required|image|mimes:jpeg,png,jpg|max:2048', // Max 2MB
+        ]);
+
+        // 1. Simpan file gambar
+        if ($request->hasFile('proof_image')) {
+            $path = $request->file('proof_image')->store('proofs', 'public');
+            
+            // 2. Update database: Status langsung 'Approved' & simpan bukti
+            $withdrawal->update([
+                'status' => 'Approved', 
+                'processed_at' => now(),
+                'proof_image' => $path
+            ]);
+            
+            return response()->json([
+                'message' => 'Permintaan disetujui & bukti transfer berhasil diupload.',
+                'path' => $path
+            ]);
+        }
+
+        return response()->json(['message' => 'Gagal mengupload bukti transfer.'], 400);
     }
 
     // Tolak permintaan
     public function adminRejectWithdrawal(Withdrawals $withdrawal)
     {
         $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal rejected']);
+        return response()->json(['message' => 'Permintaan ditolak (Rejected).']);
     }
 
     // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda
-    public function adminMarkAsPaid(Withdrawals $withdrawal)
-    {
-        // Hanya bisa di-set Paid jika status sebelumnya Approved
-        if ($withdrawal->status !== 'Approved') {
-            return response()->json(['message' => 'Hanya permintaan yang sudah disetujui yang bisa ditandai lunas.'], 422);
-        }
-        $withdrawal->update(['status' => 'Paid', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal marked as paid']);
-    }
+    
 
     public function adminGetRevenueReport(Request $request)
     {

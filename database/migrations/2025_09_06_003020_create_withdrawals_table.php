@@ -22,10 +22,12 @@ return new class extends Migration
             // Jumlah dana yang diajukan untuk ditarik.
             $table->decimal('amount', 10, 2);
 
+            
             // Status pengajuan saat ini.
             $table->enum('status', ['Pending', 'Approved', 'Rejected', 'Paid'])
-                  ->default('Pending');
-
+            ->default('Pending');
+            
+            $table->string('proof_image')->nullable();  
             // Waktu pengajuan dibuat.
             $table->timestamp('requested_at')->nullable();
 

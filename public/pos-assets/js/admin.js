@@ -1,5 +1,57 @@
 import { Utils } from './utils.js';
 
+window.openPayModal = (id) => {
+    document.getElementById('wdIdToPay').value = id;
+    document.getElementById('modalUploadProof').classList.remove('hidden');
+    document.getElementById('modalUploadProof').classList.add('flex');
+};
+
+document.getElementById('btnCancelProof')?.addEventListener('click', () => {
+    document.getElementById('modalUploadProof').classList.add('hidden');
+    document.getElementById('modalUploadProof').classList.remove('flex');
+});
+
+document.getElementById('formUploadProof')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('wdIdToPay').value;
+    const fileInput = document.getElementById('fileProof');
+    
+    if (fileInput.files.length === 0) return alert('Wajib upload bukti transfer untuk menyetujui!');
+
+    const formData = new FormData();
+    formData.append('proof_image', fileInput.files[0]);
+
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.textContent = 'Memproses...';
+    submitBtn.disabled = true;
+
+    try {
+        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        
+        // Panggil endpoint APPROVE (bukan paid lagi)
+        const res = await fetch(`/api/admin/withdrawals/${id}/approve`, { 
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': token },
+            body: formData
+        });
+
+        if (!res.ok) throw new Error('Gagal memproses.');
+
+        alert('Berhasil Disetujui & Bukti Terkirim!');
+        document.getElementById('modalUploadProof').classList.add('hidden');
+        document.getElementById('modalUploadProof').classList.remove('flex');
+        
+        window.location.reload(); 
+
+    } catch (err) {
+        alert('Terjadi kesalahan saat upload.');
+        console.error(err);
+    } finally {
+        submitBtn.textContent = 'Setujui & Kirim';
+        submitBtn.disabled = false;
+    }
+});
+
 // Helper function untuk memanggil API
 async function fetchApi(endpoint, options = {}) {
     const headers = {
@@ -399,7 +451,6 @@ export class AdminApp{
       if (!tbody) return;
 
       tbody.innerHTML = users.map(u => {
-        // 2. SESUAIKAN CARA AKSES DATA SUPIR DENGAN OPTIONAL CHAINING (?.)
         const carInfo = u.role === 'driver'
           ? `<div class="text-xs text-slate-500">${u.driver_profile?.car_model || '-'} • ${u.driver_profile?.plate_number || '-'}</div>`
           : '';
@@ -559,52 +610,67 @@ export class AdminApp{
       // 2. HAPUS FUNGSI MANUAL LOOKUP 'byName'
       // Nama supir kini bisa diakses langsung via w.driver.name
       tbody.innerHTML = withdrawals.map(w => {
-          // Hanya tampilkan tombol aksi jika statusnya masih 'Pending' atau 'Approved'
-          const actionButtons = w.status === 'Pending' 
-              ? `<button class="text-xs rounded border px-2 py-1" data-wd-act="approve" data-id="${w.id}">Approve</button>
-                <button class="text-xs rounded border px-2 py-1 ml-1" data-wd-act="reject" data-id="${w.id}">Reject</button>`
-              : (w.status === 'Approved' 
-                  ? `<button class="text-xs rounded border px-2 py-1 ml-1 bg-success text-white" data-wd-act="paid" data-id="${w.id}">Mark Paid</button>`
-                  : ''); // Jangan tampilkan tombol jika sudah Paid atau Rejected
 
-          return `<tr class="border-t">
-            <td class="py-2">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
-            <td class="py-2">${w.driver?.name || 'Supir tidak ditemukan'}</td>
-            <td class="py-2">${w.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
-            <td class="py-2">${this.wdBadge(w.status)}</td>
-            <td class="py-2">${actionButtons}</td>
-          </tr>`
+        // --- BAGIAN INI YANG HILANG SEBELUMNYA (Definisi bankInfo) ---
+        const bankInfo = w.driver && w.driver.driver_profile 
+            ? `<div class="text-xs font-bold text-slate-700">${w.driver.driver_profile.bank_name || '-'}</div>
+               <div class="text-xs font-mono text-slate-500">${w.driver.driver_profile.account_number || '-'}</div>`
+            : '<span class="text-xs text-red-500 italic">Belum set rekening</span>';
+        // ---
+        console.log("driver:",w);
+        // Tampilkan Info Bank
+        const currentStatus = w.status.toLowerCase(); 
+            let actionButtons = '';
+
+            // LOGIKA BARU:
+            // Pending -> Tampil tombol "Setujui" (Buka Modal) & "Tolak" (API Reject)
+            // Approved -> Tampil tombol "Lihat Bukti" (Hanya info)
+            // Rejected -> Tampil teks "Ditolak"
+
+            if (currentStatus === 'pending') {
+                actionButtons = `
+                    <div class="flex gap-1">
+                        <button class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow" onclick="window.openPayModal(${w.id})">Setujui</button>
+                        <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-wd-act="reject" data-id="${w.id}">Tolak</button>
+                    </div>
+                `;
+            } else if (currentStatus === 'approved') {
+                // Jika sudah Approved, tampilkan tombol lihat bukti jika ada
+                if (w.proof_image) {
+                    actionButtons = `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open( '/storage/${w.proof_image}', '_blank')">Lihat Bukti</button>`;
+                } else {
+                    actionButtons = `<span class="text-xs text-emerald-600 font-bold">Disetujui</span>`;
+                }
+            } else if (currentStatus === 'rejected') {
+                actionButtons = `<span class="text-xs text-red-500 italic">Ditolak</span>`;
+            }
+
+            return `<tr class="border-t hover:bg-slate-50">
+                <td class="py-2 align-top">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
+                <td class="py-2 align-top">
+                    <div class="font-medium">${w.driver?.name || 'Supir Dihapus'}</div>
+                    ${bankInfo}
+                </td>
+                <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', {style:'currency', currency:'IDR'})}</td>
+                <td class="py-2 align-top">${this.wdBadge(w.status)}</td>
+                <td class="py-2 align-top">${actionButtons}</td>
+            </tr>`;
       }).join('');
 
-      // 3. UBAH EVENT LISTENER UNTUK MEMANGGIL API
-      tbody.querySelectorAll('[data-wd-act]').forEach(btn => {
-        btn.addEventListener('click', async () => { // <-- Jadikan async
-          const action = btn.dataset.wdAct; // 'approve', 'reject', 'paid'
-          const withdrawalId = btn.dataset.id;
-          const actionText = {
-              approve: 'menyetujui',
-              reject: 'menolak',
-              paid: 'menandai lunas'
-          };
-
-          if (confirm(`Anda yakin ingin ${actionText[action] || 'memproses'} permintaan ini?`)) {
-            try {
-              // Tentukan endpoint berdasarkan aksi
-              let endpoint = `/admin/withdrawals/${withdrawalId}/${action}`;
-
-              // Panggil API dengan method POST
-              await fetchApi(endpoint, { method: 'POST' });
-              
-              alert(`Permintaan berhasil di-${action === 'paid' ? 'tandai lunas' : (action === 'approve' ? 'setujui' : 'tolak')}.`);
-              await this.renderWithdrawals(); // Refresh tabel
-            } catch (error) {
-              console.error(`Gagal melakukan aksi '${action}':`, error);
-              alert('Gagal memproses permintaan.');
-            }
-          }
+      tbody.querySelectorAll('[data-wd-act="reject"]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                if(!confirm('Yakin ingin MENOLAK pencairan ini?')) return;
+                try {
+                    const id = btn.dataset.id;
+                    await fetchApi(`/admin/withdrawals/${id}/reject`, { method: 'POST' });
+                    alert('Permintaan ditolak.');
+                    this.renderWithdrawals();
+                } catch(e) { console.error(e); }
+            });
         });
-      });
 
+      // 3. UBAH EVENT LISTENER UNTUK MEMANGGIL API
+      
     } catch (error) {
       console.error("Gagal memuat data withdrawal:", error);
       tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Gagal memuat data.</td></tr>';
@@ -612,10 +678,15 @@ export class AdminApp{
   }
 
   // Fungsi wdBadge tidak perlu diubah, karena ini hanya helper untuk styling
-  wdBadge(s) {
-      const cls = s === 'Pending' ? 'bg-yellow-100 text-yellow-800' : (s === 'Approved' ? 'bg-blue-100 text-blue-800' : (s === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'));
-      return `<span class="px-2 py-0.5 rounded text-xs font-medium ${cls}">${s}</span>`;
-  }
+ wdBadge(s) {
+        const status = s.toLowerCase();
+        let cls = 'bg-slate-100 text-slate-600';
+        if (status === 'pending') cls = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+        if (status === 'approved') cls = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        if (status === 'rejected') cls = 'bg-red-100 text-red-800 border border-red-200';
+        
+        return `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}">${s}</span>`;
+    }
   // ----- Reports -----
   async renderRevReport() { // <-- Jadikan async
     try {
@@ -713,6 +784,28 @@ async renderSettings() { // <-- Jadikan async
   } catch (error) {
     console.error("Gagal memuat pengaturan:", error);
   }
+}
+
+// Helper function openUserModal perlu disesuaikan sedikit untuk field car/plate
+  openUserModal(data) {
+  const isEditing = data !== null;
+  document.getElementById('userModal').classList.remove('hidden');
+  document.getElementById('userModalTitle').textContent = isEditing ? 'Edit Pengguna' : 'Tambah Pengguna';
+  
+  document.getElementById('userId').value = isEditing ? data.id : '';
+  document.getElementById('userName').value = isEditing ? data.name : '';
+  document.getElementById('userRole').value = isEditing ? data.role : 'cso';
+  document.getElementById('userUsername').value = isEditing ? data.username : '';
+  
+  document.getElementById('userPassword').value = '';
+  document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+
+  // Sesuaikan nama properti object data dari backend
+  document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
+  document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+
+  const role = document.getElementById('userRole').value;
+  document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
 }
 
 }

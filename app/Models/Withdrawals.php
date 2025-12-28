@@ -21,6 +21,7 @@ class Withdrawals extends Model
         'status',
         'requested_at',
         'processed_at',
+        'proof_image'
     ];
 
     /**

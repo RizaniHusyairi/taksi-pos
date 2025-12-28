@@ -237,4 +237,31 @@ class   DriverApiController extends Controller
         $history = $query->orderBy('created_at', 'desc')->get();
         return response()->json($history);
     }
+
+    /**
+     * Update Informasi Rekening Bank Driver
+     */
+    public function updateBankDetails(Request $request)
+    {
+        $validated = $request->validate([
+            'bank_name' => 'required|string|max:50',
+            'account_number' => 'required|string|max:50',
+        ]);
+
+        $user = $request->user();
+        
+        // Update atau Create profile jika belum ada
+        $user->driverProfile()->updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'bank_name' => $validated['bank_name'],
+                'account_number' => $validated['account_number']
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Informasi rekening berhasil disimpan.',
+            'data' => $user->load('driverProfile')
+        ]);
+    }
 }

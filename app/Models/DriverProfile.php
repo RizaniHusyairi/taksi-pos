@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class DriverProfile extends Model
 {
-    protected $fillable = ['user_id', 'car', 'plate', 'status'];
+    protected $fillable = ['user_id', 'car_model', 'plate_number', 'bank_name', 'account_number'];
 
     public function user()
     {

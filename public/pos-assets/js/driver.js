@@ -1,35 +1,52 @@
-    // import { DB } from '../assets/js/data.js';
-    import { Utils } from './utils.js';
+// import { DB } from '../assets/js/data.js';
+import { Utils } from './utils.js';
 
-    async function fetchApi(endpoint, options = {}) {
-        // ... (copy paste fungsi fetchApi dari cso.js) ...
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-        };
-        try {
-            const response = await fetch(`/api${endpoint}`, { 
-            ...options, 
-            headers,
-            credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Terjadi kesalahan');
-            }
-            // Handle respons kosong (misal: 204 No Content)
-            if (response.status === 204) return null;
-            return response.json();
-        } catch (error) {
-            Utils.showToast(error.message, 'error');
-            throw error;
+async function fetchApi(endpoint, options = {}) {
+    // ... (copy paste fungsi fetchApi dari cso.js) ...
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+    };
+    try {
+        const response = await fetch(`/api${endpoint}`, { 
+        ...options, 
+        headers,
+        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Terjadi kesalahan');
         }
+        // Handle respons kosong (misal: 204 No Content)
+        if (response.status === 204) return null;
+        return response.json();
+    } catch (error) {
+        Utils.showToast(error.message, 'error');
+        throw error;
     }
+}
 
+// Tambahkan helper global untuk akses dari onclick HTML string
 
-    export class DriverApp {
+window.viewProof = (path) => {
+    if (!path || path === 'null') {
+        Utils.showToast('Bukti transfer tidak ditemukan', 'error');
+        return;
+    }
+    // Set src gambar
+    const imgEl = document.getElementById('imgProof');
+    // Pastikan path diawali /storage/
+    imgEl.src = `/storage/${path}`;
+    
+    // Buka Modal
+    const modal = document.getElementById('proofModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+};
 
+export class DriverApp {
+    
     // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
     constructor() {
         // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
@@ -127,6 +144,12 @@
         this.profileName = document.getElementById('profileName');
         this.profileCar = document.getElementById('profileCar');
         this.logoutBtn = document.getElementById('logoutBtn');
+
+        this.bankModal = document.getElementById('bankModal');
+        this.formBank = document.getElementById('formBank');
+        this.txtBankInfo = document.getElementById('txtBankInfo');
+        this.proofModal = document.getElementById('proofModal');
+        this.imgProof = document.getElementById('imgProof');
     }
 
     bind() {
@@ -147,6 +170,24 @@
                 }
             });
         });
+
+        document.getElementById('btnEditBank')?.addEventListener('click', () => {
+            this.bankModal.classList.remove('hidden');
+            this.bankModal.classList.add('flex');
+            // Isi form dengan data lama jika ada
+            const p = this.driverData?.driver_profile;
+            if(p) {
+                document.getElementById('inBankName').value = p.bank_name || '';
+                document.getElementById('inAccNumber').value = p.account_number || '';
+            }
+        });
+
+        document.getElementById('closeBankModal')?.addEventListener('click', () => {
+            this.bankModal.classList.add('hidden');
+            this.bankModal.classList.remove('flex');
+        });
+
+        this.formBank?.addEventListener('submit', (e) => this.handleUpdateBank(e));
 
     }
 
@@ -314,6 +355,17 @@
         this.profileName.textContent = this.driverData.name;
         const profile = this.driverData.driver_profile;
         this.profileCar.textContent = `${profile.car_model || '-'} • ${profile.plate_number || '-'}`;
+
+        const p = this.driverData.driver_profile;
+        
+        // Render Info Bank
+        if (p.bank_name && p.account_number) {
+            this.txtBankInfo.textContent = `${p.bank_name} - ${p.account_number}`;
+            this.txtBankInfo.classList.remove('text-red-500');
+        } else {
+            this.txtBankInfo.textContent = 'Belum diatur (Wajib isi)';
+            this.txtBankInfo.classList.add('text-red-500');
+        }
     }
 
     renderStatus() {
@@ -392,15 +444,59 @@
                 fetchApi('/driver/balance'),
                 fetchApi('/driver/withdrawals')
             ]);
+            
             this.walletBalance.textContent = Utils.formatCurrency(balance.balance);
-            // ... (logika render tabel riwayat withdrawal tidak berubah, gunakan data 'withdrawals') ...
-            this.wdList.innerHTML = withdrawals.map(w => `<tr class="border-t dark:border-slate-700">
-        <td class="py-2 pr-2">${new Date(w.requested_at).toLocaleDateString('id-ID')}</td>
-        <td class="py-2 pr-2">${Utils.formatCurrency(w.amount)}</td>
-        <td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${w.status==='Pending'?'bg-yellow-100 text-yellow-800':(w.status==='Approved'?'bg-blue-100 text-blue-800':(w.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-700'))}">${w.status}</span></td>
-        </tr>`).join('');
-        } catch (error) {
-            console.error("Gagal memuat data dompet:", error);
+            
+            // Render Tabel Riwayat
+            if (withdrawals.length === 0) {
+                this.wdList.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-slate-400 text-xs">Belum ada riwayat penarikan.</td></tr>`;
+                return;
+            }
+
+            this.wdList.innerHTML = withdrawals.map(w => {
+                // Logika Tombol Bukti
+                // Tombol muncul jika status Approved/Paid DAN ada file gambarnya
+                let proofBtn = '';
+                if (['Approved', 'Paid'].includes(w.status) && w.proof_image) {
+                    proofBtn = `
+                    <button onclick="event.stopPropagation(); window.viewProof('${w.proof_image}')" 
+                        class="mt-1 text-[10px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-900/30 border border-primary-200 dark:border-primary-800 px-2 py-1 rounded flex items-center gap-1 hover:bg-primary-100 transition-colors">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        Lihat Bukti
+                    </button>`;
+                }
+
+                // Warna badge status
+                let badgeClass = 'bg-slate-100 text-slate-600';
+                if(w.status === 'Pending') badgeClass = 'bg-yellow-100 text-yellow-800';
+                if(w.status === 'Approved' || w.status === 'Paid') badgeClass = 'bg-emerald-100 text-emerald-800';
+                if(w.status === 'Rejected') badgeClass = 'bg-red-100 text-red-800';
+
+                return `
+                <tr class="border-t border-slate-100 dark:border-slate-700">
+                    <td class="py-3 pr-2 align-top">
+                        <div class="text-slate-700 dark:text-slate-200 font-medium text-sm">
+                            ${new Date(w.requested_at).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}
+                        </div>
+                        <div class="text-[10px] text-slate-400">
+                            ${new Date(w.requested_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                        ${proofBtn}
+                    </td>
+                    <td class="py-3 pr-2 align-top font-mono font-medium text-slate-800 dark:text-slate-100">
+                        ${Utils.formatCurrency(w.amount)}
+                    </td>
+                    <td class="py-3 align-top text-left">
+                        <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${badgeClass}">
+                            ${w.status}
+                        </span>
+                    </td>
+                </tr>`;
+            }).join('');
+
+        } catch (error) { 
+            console.error(error);
+            this.wdList.innerHTML = `<tr><td colspan="3" class="text-center text-red-500 py-4">Gagal memuat data.</td></tr>`;
         }
     }
     async renderTrips() {
@@ -582,5 +678,25 @@
         catch (error) { /* error ditangani fetchApi */ }
     }
 
-
+    async handleUpdateBank(e) {
+        e.preventDefault();
+        const payload = {
+            bank_name: document.getElementById('inBankName').value,
+            account_number: document.getElementById('inAccNumber').value
+        };
+        
+        try {
+            const res = await fetchApi('/driver/bank-details', { // Buat route baru di api.php
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            this.driverData = res.data;
+            this.renderProfile();
+            this.bankModal.classList.add('hidden');
+            this.bankModal.classList.remove('flex');
+            Utils.showToast('Rekening berhasil disimpan', 'success');
+        } catch(err) { /* handled */ }
     }
+
+
+}
