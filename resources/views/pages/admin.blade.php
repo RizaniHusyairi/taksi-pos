@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Admin - Koperasi Taksi POS</title>
+  <title>Admin - Taksi POS</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -32,7 +32,7 @@
         <div class="w-10 h-10 rounded-lg bg-primary-600 text-white grid place-items-center font-semibold">KT</div>
         <div>
           <div class="text-sm text-slate-500">Admin</div>
-          <div class="font-semibold">Koperasi Taksi POS</div>
+          <div class="font-semibold">Taksi POS</div>
         </div>
       </div>
       <nav class="p-3">

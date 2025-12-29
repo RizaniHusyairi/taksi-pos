@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
 
-  <title>Supir - Koperasi Taksi POS</title>
+  <title>Supir - Taksi POS</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     // Konfigurasi Tailwind CSS dengan dark mode berbasis class
@@ -55,7 +55,7 @@
     <div class="flex items-center gap-3">
       <div class="w-9 h-9 rounded-full bg-primary-600 text-white grid place-items-center font-bold text-lg">KT</div>
       <div>
-        <h1 class="font-bold text-slate-800 dark:text-slate-100">Koperasi Taksi POS</h1>
+        <h1 class="font-bold text-slate-800 dark:text-slate-100">Taksi POS</h1>
         <p id="pageTitle" class="text-xs text-slate-500 dark:text-slate-400">Beranda</p>
       </div>
     </div>
@@ -196,7 +196,7 @@
                     </div>
                     <div>
                         <p id="profileName" class="font-bold text-lg text-slate-800 dark:text-slate-100">Nama Supir</p>
-                        <p class="text-sm text-slate-500 dark:text-slate-400">Supir Koperasi Taksi</p>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Supir Taksi</p>
                     </div>
                 </div>
                 <div>
