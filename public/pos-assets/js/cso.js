@@ -112,6 +112,9 @@ class CsoApp {
       this.btnConfirm.addEventListener('click', () => this.processBooking());
 
       // Event listener pembayaran
+
+      this.proofInput.addEventListener('change', (e) => this.handleProofSelect(e));
+      this.removeProofBtn.addEventListener('click', () => this.resetProof());
       this.btnClosePay.addEventListener('click', () => this.closePayment());
       this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
       this.btnQRIS.addEventListener('click', () => { this.qrisBox.classList.remove('hidden'); });
@@ -364,31 +367,108 @@ class CsoApp {
       this.renderDrivers(); // Refresh driver list
   }
 
-  async finishPayment(method) {
-      if (!this.currentBooking) { 
-        Utils.showToast('Tidak ada booking aktif', 'error'); // <-- Gunakan Utils
-        return; 
+  // --- LOGIKA PREVIEW FOTO ---
+    handleProofSelect(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Tampilkan Preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                this.proofPreviewImg.src = e.target.result;
+                this.proofPreviewBox.classList.remove('hidden');
+                // Aktifkan Tombol Konfirmasi (Ubah warna jadi Hijau)
+                this.btnConfirmQR.disabled = false;
+                this.btnConfirmQR.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed', 'dark:bg-slate-700');
+                this.btnConfirmQR.classList.add('bg-success', 'text-white', 'hover:bg-emerald-600', 'shadow-lg');
+            };
+            reader.readAsDataURL(file);
+        }
     }
 
-      try {
-          const paymentData = {
-              booking_id: this.currentBooking.id,
-              method: method
-          };
-          const transaction = await fetchApi('/cso/payment', {
-              method: 'POST',
-              body: JSON.stringify(paymentData)
-          });
-          
-          Utils.showToast('Pembayaran berhasil dicatat', 'success'); // <-- Gunakan Utils
-        
-        this.showReceipt(this.currentBooking);
-        this.closePayment();
-        this.renderHistory();
-      } catch (error) {
-          // error ditangani fetchApi
-      }
-  }
+    resetProof() {
+        this.proofInput.value = ''; // Reset input file
+        this.proofPreviewBox.classList.add('hidden');
+        // Matikan Tombol Konfirmasi
+        this.btnConfirmQR.disabled = true;
+        this.btnConfirmQR.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed', 'dark:bg-slate-700');
+        this.btnConfirmQR.classList.remove('bg-success', 'text-white', 'hover:bg-emerald-600', 'shadow-lg');
+    }
+
+
+
+    // --- UPDATE LOGIKA PEMBAYARAN (FormData) ---
+    async finishPayment(method) {
+        if (!this.currentBooking) { 
+            Utils.showToast('Tidak ada booking aktif', 'error'); 
+            return; 
+        }
+
+        // Setup Loading State
+        let originalBtnText = '';
+        let btnElement = null;
+
+        if (method === 'QRIS') {
+            btnElement = this.btnConfirmQR;
+            originalBtnText = btnElement.textContent;
+            btnElement.textContent = 'Mengupload Bukti...';
+            btnElement.disabled = true;
+        }
+
+        try {
+            // GUNAKAN FORMDATA (Wajib untuk upload file)
+            const formData = new FormData();
+            formData.append('booking_id', this.currentBooking.id);
+            formData.append('method', method);
+
+            // Jika QRIS, tambahkan file foto
+            if (method === 'QRIS') {
+                const file = this.proofInput.files[0];
+                if (!file) {
+                    throw new Error("Wajib menyertakan foto bukti transfer untuk QRIS.");
+                }
+                formData.append('payment_proof', file);
+            }
+
+            // Panggil API (Perhatikan fetchApi di cso.js harus mendukung FormData)
+            // KITA HARUS MODIFIKASI fetchApi SEDIKIT atau panggil fetch manual di sini
+            // Agar aman, kita panggil fetch manual khusus upload ini
+            
+            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const response = await fetch('/api/cso/payment', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json'
+                    // JANGAN SET Content-Type manually saat pakai FormData! Browser akan otomatis set boundary.
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || 'Gagal memproses pembayaran');
+            }
+            
+            const transaction = await response.json(); // Hasil sukses
+
+            Utils.showToast('Pembayaran berhasil & Bukti tersimpan', 'success');
+            
+            this.showReceipt(this.currentBooking);
+            this.closePayment();
+            this.renderHistory();
+            this.resetProof(); // Reset form foto untuk order berikutnya
+
+        } catch (error) {
+            console.error(error);
+            Utils.showToast(error.message, 'error');
+        } finally {
+            // Reset Loading State
+            if (btnElement) {
+                btnElement.textContent = originalText;
+                btnElement.disabled = false;
+            }
+        }
+    }
 
   showReceipt(txOrBookingObject) {
 

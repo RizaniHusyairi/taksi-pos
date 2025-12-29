@@ -86,22 +86,45 @@ class CsoApiController extends Controller
         $validated = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
             'method'     => 'required|in:QRIS,CashCSO,CashDriver',
+            // Validasi: payment_proof wajib ada JIKA methodnya QRIS
+            'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB
+        ], [
+            'payment_proof.required_if' => 'Mohon upload foto bukti transfer QRIS.',
+            'payment_proof.image' => 'File bukti harus berupa gambar.',
         ]);
 
         $booking = Booking::findOrFail($validated['booking_id']);
-
-        // Fungsi ini sekarang HANYA membuat record transaksi
-        Transaction::create([
-            'booking_id' => $booking->id,
-            'method'     => $validated['method'],
-            'amount'     => $booking->price,
-        ]);
         
-        // Status booking TIDAK diubah. Biarkan tetap 'Assigned'.
+        DB::transaction(function () use ($booking, $validated, $request) {
+            
+            $proofPath = null;
 
+            // Proses Upload Gambar jika ada
+            if ($request->hasFile('payment_proof')) {
+                // Simpan di folder 'public/payment_proofs'
+                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+            }
+
+            // 1. Buat record transaksi
+            Transaction::create([
+                'booking_id'    => $booking->id,
+                'method'        => $validated['method'],
+                'amount'        => $booking->price,
+                'payment_proof' => $proofPath, // Simpan path gambar ke database
+            ]);
+
+            // 2. Update status booking (Logika lama tetap jalan)
+            // Jika CashDriver statusnya beda, jika QRIS/CashCSO jadi 'Paid' (atau logic existing kamu)
+            $newStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
+            
+            // Khusus QRIS, status 'Paid' sudah valid karena bukti sudah diupload CSO
+            $booking->update(['status' => $newStatus]);
+        });
+        
         return response()->json(['message' => 'Payment recorded successfully'], 201);
     }
 
+    
     /**
      * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.
      */

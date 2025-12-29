@@ -26,6 +26,7 @@ return new class extends Migration
             // Kolom untuk jumlah uang. (total 10 digit, 2 digit di belakang koma)
             // Sangat direkomendasikan untuk nilai moneter.
             $table->decimal('amount', 10, 2);
+            $table->string('payment_proof')->nullable();
 
             // Kolom created_at dan updated_at (TIMESTAMP)
             $table->timestamps();
