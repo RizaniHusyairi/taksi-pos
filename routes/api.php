@@ -86,6 +86,8 @@ Route::middleware('auth:sanctum')->group(function() {
 
         // Mengambil riwayat transaksi untuk CSO yang login
         Route::get('/history', [CsoApiController::class, 'getHistory']);
+
+        Route::post('/process-order', [CsoApiController::class, 'processOrder']);
     });
 
 

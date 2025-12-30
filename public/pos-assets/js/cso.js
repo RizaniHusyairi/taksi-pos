@@ -88,6 +88,10 @@ class CsoApp {
       this.btnCashCSO = document.getElementById('payCashCSO');
       this.btnCashDriver = document.getElementById('payCashDriver');
       this.qrisBox = document.getElementById('qrisBox');
+      this.proofInput = document.getElementById('proofInput');
+      this.proofPreviewBox = document.getElementById('proofPreviewBox');
+      this.proofPreviewImg = document.getElementById('proofPreviewImg');
+      this.removeProofBtn = document.getElementById('removeProof');
       this.btnConfirmQR = document.getElementById('confirmQR');
       
       // Riwayat & Struk
@@ -99,7 +103,7 @@ class CsoApp {
       // State
       this.zones = [];
       this.selectedDriverId = null;
-      this.currentBooking = null;
+      this.selectedOrderData = null;
   }
 
 
@@ -325,47 +329,51 @@ class CsoApp {
   }
 
   async processBooking() {
-      if (!this.selectedDriverId || !this.toSel.value) {
-          alert('Silakan pilih tujuan dan supir terlebih dahulu.');
-          return;
-      }
+        if (!this.selectedDriverId || !this.toSel.value) {
+            alert('Silakan pilih tujuan dan supir terlebih dahulu.');
+            return;
+        }
 
-      try {
-          const bookingData = {
-              driver_id: this.selectedDriverId,
-              zone_id: this.toSel.value
-          };
-          this.currentBooking = await fetchApi('/cso/bookings', {
-              method: 'POST',
-              body: JSON.stringify(bookingData)
-          });
-          this.openPayment();
-      } catch (error) {
-          // Error sudah ditangani oleh fetchApi
-      }
-  }
+        // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
+        const zoneId = this.toSel.value;
+        const zoneObj = this.zones.find(z => z.id == zoneId); // Cari object zona dari array zones
+        
+        this.selectedOrderData = {
+            driver_id: this.selectedDriverId,
+            zone_id: zoneId,
+            price: zoneObj.price,
+            zone_name: zoneObj.name
+        };
+
+        // 2. Langsung Buka Modal Pembayaran
+        this.openPayment();
+    }
 
   openPayment() {
-      if (!this.currentBooking) return;
-      this.qrisBox.classList.add('hidden');
-      const booking = this.currentBooking;
-      const selectedZone = this.zones.find(z => z.id == booking.zone_id);
+        if (!this.selectedOrderData) return;
+        
+        // Reset UI Modal
+        this.qrisBox.classList.add('hidden');
+        this.resetProof(); 
 
-      this.payInfo.innerHTML = `
-      <div class="space-y-1">
-          <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${selectedZone?.name || 'N/A'}</span></div>
-          <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${booking.price.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0})}</span></div>
-      </div>`;
-      this.modal.classList.add('flex');
-      this.modal.classList.remove('hidden');
-  }
+        // Tampilkan Info di Modal
+        this.payInfo.innerHTML = `
+        <div class="space-y-1">
+            <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${this.selectedOrderData.zone_name}</span></div>
+            <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${Utils.formatCurrency(this.selectedOrderData.price)}</span></div>
+        </div>`;
+        
+        this.modal.classList.add('flex');
+        this.modal.classList.remove('hidden');
+    }
 
   closePayment() {
-      this.modal.classList.add('hidden');
-      this.modal.classList.remove('flex');
-      this.currentBooking = null;
-      this.renderDrivers(); // Refresh driver list
-  }
+        this.modal.classList.add('hidden');
+        this.modal.classList.remove('flex');
+        // Tidak perlu cancelBooking ke API karena data belum masuk DB
+        this.selectedOrderData = null; 
+        this.resetProof();
+    }
 
   // --- LOGIKA PREVIEW FOTO ---
     handleProofSelect(e) {
@@ -397,79 +405,76 @@ class CsoApp {
 
 
     // --- UPDATE LOGIKA PEMBAYARAN (FormData) ---
+    // --- LOGIKA FINALISASI (Satu-satunya API Call) ---
     async finishPayment(method) {
-        if (!this.currentBooking) { 
-            Utils.showToast('Tidak ada booking aktif', 'error'); 
-            return; 
-        }
+        if (!this.selectedOrderData) return;
 
-        // Setup Loading State
+        // Setup Loading UI
         let originalBtnText = '';
         let btnElement = null;
 
         if (method === 'QRIS') {
             btnElement = this.btnConfirmQR;
             originalBtnText = btnElement.textContent;
-            btnElement.textContent = 'Mengupload Bukti...';
+            btnElement.textContent = 'Memproses...';
             btnElement.disabled = true;
         }
 
         try {
-            // GUNAKAN FORMDATA (Wajib untuk upload file)
             const formData = new FormData();
-            formData.append('booking_id', this.currentBooking.id);
+            // Ambil data dari memori sementara
+            formData.append('driver_id', this.selectedOrderData.driver_id);
+            formData.append('zone_id', this.selectedOrderData.zone_id);
             formData.append('method', method);
 
-            // Jika QRIS, tambahkan file foto
+            // Validasi Bukti QRIS
             if (method === 'QRIS') {
                 const file = this.proofInput.files[0];
-                if (!file) {
-                    throw new Error("Wajib menyertakan foto bukti transfer untuk QRIS.");
-                }
+                if (!file) throw new Error("Wajib foto bukti transfer QRIS.");
                 formData.append('payment_proof', file);
             }
 
-            // Panggil API (Perhatikan fetchApi di cso.js harus mendukung FormData)
-            // KITA HARUS MODIFIKASI fetchApi SEDIKIT atau panggil fetch manual di sini
-            // Agar aman, kita panggil fetch manual khusus upload ini
-            
             const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            const response = await fetch('/api/cso/payment', {
+            
+            // PANGGIL ROUTE BARU
+            const response = await fetch('/api/cso/process-order', {
                 method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': token,
-                    'Accept': 'application/json'
-                    // JANGAN SET Content-Type manually saat pakai FormData! Browser akan otomatis set boundary.
-                },
+                headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
                 body: formData
             });
 
             if (!response.ok) {
                 const errData = await response.json();
-                throw new Error(errData.message || 'Gagal memproses pembayaran');
+                throw new Error(errData.message || 'Gagal memproses order');
             }
             
-            const transaction = await response.json(); // Hasil sukses
+            const result = await response.json(); // Berisi data booking lengkap dari backend
 
-            Utils.showToast('Pembayaran berhasil & Bukti tersimpan', 'success');
+            Utils.showToast('Order Berhasil!', 'success');
             
-            this.showReceipt(this.currentBooking);
-            this.closePayment();
-            this.renderHistory();
-            this.resetProof(); // Reset form foto untuk order berikutnya
+            // Simpan data hasil response untuk dicetak struknya
+            // Backend harus return struktur yang cocok dengan generateReceiptHTML
+            // Di controller tadi kita sudah return $booking->load(...)
+            this.lastReceiptData = result.data; 
+            
+            // Tampilkan Struk
+            this.showReceipt(this.lastReceiptData);
+            
+            // Bersihkan UI
+            this.closePayment();     // Tutup modal bayar
+            this.renderDrivers();    // Refresh list driver (driver tadi harusnya hilang)
+            this.renderHistory();    // Refresh history transaksi
 
         } catch (error) {
             console.error(error);
             Utils.showToast(error.message, 'error');
         } finally {
-            // Reset Loading State
             if (btnElement) {
                 btnElement.textContent = originalText;
                 btnElement.disabled = false;
             }
         }
     }
-
   showReceipt(txOrBookingObject) {
 
         this.lastReceiptData = txOrBookingObject; // <-- TAMBAHKAN BARIS INI

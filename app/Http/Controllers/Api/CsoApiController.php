@@ -124,6 +124,68 @@ class CsoApiController extends Controller
         return response()->json(['message' => 'Payment recorded successfully'], 201);
     }
 
+    public function processOrder(Request $request)
+    {
+        // 1. Validasi Input Lengkap
+        $validated = $request->validate([
+            'driver_id'     => 'required|exists:users,id',
+            'zone_id'       => 'required|exists:zones,id',
+            'method'        => 'required|in:QRIS,CashCSO,CashDriver',
+            // Bukti foto wajib jika QRIS
+            'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120',
+        ], [
+            'payment_proof.required_if' => 'Wajib upload foto bukti transfer untuk QRIS.',
+        ]);
+
+        $zone = Zone::findOrFail($validated['zone_id']);
+        $cso = Auth::user();
+
+        // 2. Mulai Transaksi Database (Atomic)
+        $result = DB::transaction(function () use ($validated, $zone, $cso, $request) {
+            
+            // A. Tentukan Status Awal
+            // Jika CashDriver -> Status 'CashDriver' (Belum setor ke kantor)
+            // Jika QRIS/CashCSO -> Status 'Paid' (Uang sudah masuk)
+            $status = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
+
+            // B. Simpan Data Booking
+            $booking = Booking::create([
+                'cso_id'    => $cso->id,
+                'driver_id' => $validated['driver_id'],
+                'zone_id'   => $zone->id,
+                'price'     => $zone->price,
+                'status'    => $status, 
+            ]);
+
+            // C. Simpan Transaksi (Jika ada pembayaran ke kantor/QRIS)
+            // Jika CashDriver, biasanya tidak dicatat di tabel transactions sampai supir setor, 
+            // TAPI agar struk bisa dicetak lengkap, kita catat saja sebagai record history.
+            
+            $proofPath = null;
+            if ($request->hasFile('payment_proof')) {
+                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+            }
+
+            Transaction::create([
+                'booking_id'    => $booking->id,
+                'method'        => $validated['method'],
+                'amount'        => $zone->price,
+                'payment_proof' => $proofPath,
+            ]);
+
+            // D. Hapus Driver dari Antrian (PENTING)
+            \App\Models\DriverQueue::where('user_id', $validated['driver_id'])->delete();
+
+            // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
+            return $booking->load(['driver', 'zoneTo', 'cso']);
+        });
+
+        return response()->json([
+            'message' => 'Order berhasil diproses',
+            'data'    => $result // Mengembalikan objek booking lengkap
+        ], 201);
+    }
+
     
     /**
      * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.
