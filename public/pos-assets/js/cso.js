@@ -88,6 +88,10 @@ class CsoApp {
       this.btnCashCSO = document.getElementById('payCashCSO');
       this.btnCashDriver = document.getElementById('payCashDriver');
       this.qrisBox = document.getElementById('qrisBox');
+      this.proofInput = document.getElementById('proofInput');
+      this.proofPreviewBox = document.getElementById('proofPreviewBox');
+      this.proofPreviewImg = document.getElementById('proofPreviewImg');
+      this.removeProofBtn = document.getElementById('removeProof');
       this.btnConfirmQR = document.getElementById('confirmQR');
       
       // Riwayat & Struk
@@ -99,7 +103,7 @@ class CsoApp {
       // State
       this.zones = [];
       this.selectedDriverId = null;
-      this.currentBooking = null;
+      this.selectedOrderData = null;
   }
 
 
@@ -112,6 +116,9 @@ class CsoApp {
       this.btnConfirm.addEventListener('click', () => this.processBooking());
 
       // Event listener pembayaran
+
+      this.proofInput.addEventListener('change', (e) => this.handleProofSelect(e));
+      this.removeProofBtn.addEventListener('click', () => this.resetProof());
       this.btnClosePay.addEventListener('click', () => this.closePayment());
       this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
       this.btnQRIS.addEventListener('click', () => { this.qrisBox.classList.remove('hidden'); });
@@ -322,74 +329,152 @@ class CsoApp {
   }
 
   async processBooking() {
-      if (!this.selectedDriverId || !this.toSel.value) {
-          alert('Silakan pilih tujuan dan supir terlebih dahulu.');
-          return;
-      }
+        if (!this.selectedDriverId || !this.toSel.value) {
+            alert('Silakan pilih tujuan dan supir terlebih dahulu.');
+            return;
+        }
 
-      try {
-          const bookingData = {
-              driver_id: this.selectedDriverId,
-              zone_id: this.toSel.value
-          };
-          this.currentBooking = await fetchApi('/cso/bookings', {
-              method: 'POST',
-              body: JSON.stringify(bookingData)
-          });
-          this.openPayment();
-      } catch (error) {
-          // Error sudah ditangani oleh fetchApi
-      }
-  }
+        // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
+        const zoneId = this.toSel.value;
+        const zoneObj = this.zones.find(z => z.id == zoneId); // Cari object zona dari array zones
+        
+        this.selectedOrderData = {
+            driver_id: this.selectedDriverId,
+            zone_id: zoneId,
+            price: zoneObj.price,
+            zone_name: zoneObj.name
+        };
 
-  openPayment() {
-      if (!this.currentBooking) return;
-      this.qrisBox.classList.add('hidden');
-      const booking = this.currentBooking;
-      const selectedZone = this.zones.find(z => z.id == booking.zone_id);
-
-      this.payInfo.innerHTML = `
-      <div class="space-y-1">
-          <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${selectedZone?.name || 'N/A'}</span></div>
-          <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${booking.price.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0})}</span></div>
-      </div>`;
-      this.modal.classList.add('flex');
-      this.modal.classList.remove('hidden');
-  }
-
-  closePayment() {
-      this.modal.classList.add('hidden');
-      this.modal.classList.remove('flex');
-      this.currentBooking = null;
-      this.renderDrivers(); // Refresh driver list
-  }
-
-  async finishPayment(method) {
-      if (!this.currentBooking) { 
-        Utils.showToast('Tidak ada booking aktif', 'error'); // <-- Gunakan Utils
-        return; 
+        // 2. Langsung Buka Modal Pembayaran
+        this.openPayment();
     }
 
-      try {
-          const paymentData = {
-              booking_id: this.currentBooking.id,
-              method: method
-          };
-          const transaction = await fetchApi('/cso/payment', {
-              method: 'POST',
-              body: JSON.stringify(paymentData)
-          });
-          
-          Utils.showToast('Pembayaran berhasil dicatat', 'success'); // <-- Gunakan Utils
+  openPayment() {
+        if (!this.selectedOrderData) return;
         
-        this.showReceipt(this.currentBooking);
-        this.closePayment();
-        this.renderHistory();
-      } catch (error) {
-          // error ditangani fetchApi
-      }
-  }
+        // Reset UI Modal
+        this.qrisBox.classList.add('hidden');
+        this.resetProof(); 
 
+        // Tampilkan Info di Modal
+        this.payInfo.innerHTML = `
+        <div class="space-y-1">
+            <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${this.selectedOrderData.zone_name}</span></div>
+            <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${Utils.formatCurrency(this.selectedOrderData.price)}</span></div>
+        </div>`;
+        
+        this.modal.classList.add('flex');
+        this.modal.classList.remove('hidden');
+    }
+
+  closePayment() {
+        this.modal.classList.add('hidden');
+        this.modal.classList.remove('flex');
+        // Tidak perlu cancelBooking ke API karena data belum masuk DB
+        this.selectedOrderData = null; 
+        this.resetProof();
+    }
+
+  // --- LOGIKA PREVIEW FOTO ---
+    handleProofSelect(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Tampilkan Preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                this.proofPreviewImg.src = e.target.result;
+                this.proofPreviewBox.classList.remove('hidden');
+                // Aktifkan Tombol Konfirmasi (Ubah warna jadi Hijau)
+                this.btnConfirmQR.disabled = false;
+                this.btnConfirmQR.classList.remove('bg-slate-300', 'text-slate-500', 'cursor-not-allowed', 'dark:bg-slate-700');
+                this.btnConfirmQR.classList.add('bg-success', 'text-white', 'hover:bg-emerald-600', 'shadow-lg');
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    resetProof() {
+        this.proofInput.value = ''; // Reset input file
+        this.proofPreviewBox.classList.add('hidden');
+        // Matikan Tombol Konfirmasi
+        this.btnConfirmQR.disabled = true;
+        this.btnConfirmQR.classList.add('bg-slate-300', 'text-slate-500', 'cursor-not-allowed', 'dark:bg-slate-700');
+        this.btnConfirmQR.classList.remove('bg-success', 'text-white', 'hover:bg-emerald-600', 'shadow-lg');
+    }
+
+
+
+    // --- UPDATE LOGIKA PEMBAYARAN (FormData) ---
+    // --- LOGIKA FINALISASI (Satu-satunya API Call) ---
+    async finishPayment(method) {
+        if (!this.selectedOrderData) return;
+
+        // Setup Loading UI
+        let originalBtnText = '';
+        let btnElement = null;
+
+        if (method === 'QRIS') {
+            btnElement = this.btnConfirmQR;
+            originalBtnText = btnElement.textContent;
+            btnElement.textContent = 'Memproses...';
+            btnElement.disabled = true;
+        }
+
+        try {
+            const formData = new FormData();
+            // Ambil data dari memori sementara
+            formData.append('driver_id', this.selectedOrderData.driver_id);
+            formData.append('zone_id', this.selectedOrderData.zone_id);
+            formData.append('method', method);
+
+            // Validasi Bukti QRIS
+            if (method === 'QRIS') {
+                const file = this.proofInput.files[0];
+                if (!file) throw new Error("Wajib foto bukti transfer QRIS.");
+                formData.append('payment_proof', file);
+            }
+
+            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            
+            // PANGGIL ROUTE BARU
+            const response = await fetch('/api/cso/process-order', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || 'Gagal memproses order');
+            }
+            
+            const result = await response.json(); // Berisi data booking lengkap dari backend
+
+            Utils.showToast('Order Berhasil!', 'success');
+            
+            // Simpan data hasil response untuk dicetak struknya
+            // Backend harus return struktur yang cocok dengan generateReceiptHTML
+            // Di controller tadi kita sudah return $booking->load(...)
+            this.lastReceiptData = result.data; 
+            
+            // Tampilkan Struk
+            this.showReceipt(this.lastReceiptData);
+            
+            // Bersihkan UI
+            this.closePayment();     // Tutup modal bayar
+            this.renderDrivers();    // Refresh list driver (driver tadi harusnya hilang)
+            this.renderHistory();    // Refresh history transaksi
+
+        } catch (error) {
+            console.error(error);
+            Utils.showToast(error.message, 'error');
+        } finally {
+            if (btnElement) {
+                btnElement.textContent = originalText;
+                btnElement.disabled = false;
+            }
+        }
+    }
   showReceipt(txOrBookingObject) {
 
         this.lastReceiptData = txOrBookingObject; // <-- TAMBAHKAN BARIS INI

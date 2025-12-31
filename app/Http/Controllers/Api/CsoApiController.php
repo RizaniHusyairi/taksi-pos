@@ -86,22 +86,107 @@ class CsoApiController extends Controller
         $validated = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
             'method'     => 'required|in:QRIS,CashCSO,CashDriver',
+            // Validasi: payment_proof wajib ada JIKA methodnya QRIS
+            'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB
+        ], [
+            'payment_proof.required_if' => 'Mohon upload foto bukti transfer QRIS.',
+            'payment_proof.image' => 'File bukti harus berupa gambar.',
         ]);
 
         $booking = Booking::findOrFail($validated['booking_id']);
-
-        // Fungsi ini sekarang HANYA membuat record transaksi
-        Transaction::create([
-            'booking_id' => $booking->id,
-            'method'     => $validated['method'],
-            'amount'     => $booking->price,
-        ]);
         
-        // Status booking TIDAK diubah. Biarkan tetap 'Assigned'.
+        DB::transaction(function () use ($booking, $validated, $request) {
+            
+            $proofPath = null;
 
+            // Proses Upload Gambar jika ada
+            if ($request->hasFile('payment_proof')) {
+                // Simpan di folder 'public/payment_proofs'
+                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+            }
+
+            // 1. Buat record transaksi
+            Transaction::create([
+                'booking_id'    => $booking->id,
+                'method'        => $validated['method'],
+                'amount'        => $booking->price,
+                'payment_proof' => $proofPath, // Simpan path gambar ke database
+            ]);
+
+            // 2. Update status booking (Logika lama tetap jalan)
+            // Jika CashDriver statusnya beda, jika QRIS/CashCSO jadi 'Paid' (atau logic existing kamu)
+            $newStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
+            
+            // Khusus QRIS, status 'Paid' sudah valid karena bukti sudah diupload CSO
+            $booking->update(['status' => $newStatus]);
+        });
+        
         return response()->json(['message' => 'Payment recorded successfully'], 201);
     }
 
+    public function processOrder(Request $request)
+    {
+        // 1. Validasi Input Lengkap
+        $validated = $request->validate([
+            'driver_id'     => 'required|exists:users,id',
+            'zone_id'       => 'required|exists:zones,id',
+            'method'        => 'required|in:QRIS,CashCSO,CashDriver',
+            // Bukti foto wajib jika QRIS
+            'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120',
+        ], [
+            'payment_proof.required_if' => 'Wajib upload foto bukti transfer untuk QRIS.',
+        ]);
+
+        $zone = Zone::findOrFail($validated['zone_id']);
+        $cso = Auth::user();
+
+        // 2. Mulai Transaksi Database (Atomic)
+        $result = DB::transaction(function () use ($validated, $zone, $cso, $request) {
+            
+            // A. Tentukan Status Awal
+            // Jika CashDriver -> Status 'CashDriver' (Belum setor ke kantor)
+            // Jika QRIS/CashCSO -> Status 'Paid' (Uang sudah masuk)
+            $status = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
+
+            // B. Simpan Data Booking
+            $booking = Booking::create([
+                'cso_id'    => $cso->id,
+                'driver_id' => $validated['driver_id'],
+                'zone_id'   => $zone->id,
+                'price'     => $zone->price,
+                'status'    => $status, 
+            ]);
+
+            // C. Simpan Transaksi (Jika ada pembayaran ke kantor/QRIS)
+            // Jika CashDriver, biasanya tidak dicatat di tabel transactions sampai supir setor, 
+            // TAPI agar struk bisa dicetak lengkap, kita catat saja sebagai record history.
+            
+            $proofPath = null;
+            if ($request->hasFile('payment_proof')) {
+                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
+            }
+
+            Transaction::create([
+                'booking_id'    => $booking->id,
+                'method'        => $validated['method'],
+                'amount'        => $zone->price,
+                'payment_proof' => $proofPath,
+            ]);
+
+            // D. Hapus Driver dari Antrian (PENTING)
+            \App\Models\DriverQueue::where('user_id', $validated['driver_id'])->delete();
+
+            // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
+            return $booking->load(['driver', 'zoneTo', 'cso']);
+        });
+
+        return response()->json([
+            'message' => 'Order berhasil diproses',
+            'data'    => $result // Mengembalikan objek booking lengkap
+        ], 201);
+    }
+
+    
     /**
      * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.
      */

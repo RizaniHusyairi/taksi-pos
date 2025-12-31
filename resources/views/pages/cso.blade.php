@@ -182,10 +182,35 @@
           <div class="text-xs text-slate-500 dark:text-slate-400">Penumpang bayar ke supir</div>
         </button>
       </div>
-      <div id="qrisBox" class="hidden mt-4 p-3 border border-slate-300 dark:border-slate-600 rounded-lg text-center">
-        <div class="text-sm mb-2 text-slate-700 dark:text-slate-200">Pindai QRIS Bank BTN</div>
-        <img src="../assets/img/qris-placeholder.svg" alt="QRIS" class="w-48 h-48 mx-auto bg-white rounded-md">
-        <button id="confirmQR" class="mt-3 w-full bg-success text-white rounded-lg px-3 py-2 font-semibold">Konfirmasi Pembayaran QRIS</button>
+      <div id="qrisBox" class="hidden mt-4 p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+        
+        <div class="text-center mb-4">
+            <div class="text-sm mb-2 text-slate-700 dark:text-slate-200 font-semibold">1. Scan QRIS Bank BTN</div>
+            <img src="{{ asset('assets/img/qris-placeholder.svg') }}" alt="QRIS" class="w-48 h-48 mx-auto bg-white rounded-lg shadow-sm border p-2">
+        </div>
+
+        <div class="space-y-2">
+            <div class="text-sm text-slate-700 dark:text-slate-200 font-semibold">2. Foto Bukti Transfer</div>
+            
+            <div id="proofPreviewBox" class="hidden w-full h-32 bg-slate-200 dark:bg-slate-800 rounded-lg overflow-hidden relative mb-2">
+                <img id="proofPreviewImg" class="w-full h-full object-cover">
+                <button id="removeProof" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow-md">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <label for="proofInput" class="flex items-center justify-center w-full px-4 py-3 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl cursor-pointer hover:border-primary-500 transition-colors">
+                <div class="text-center">
+                    <svg class="w-6 h-6 mx-auto text-slate-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                    <span class="text-sm text-slate-500">Ketuk untuk Memfoto</span>
+                </div>
+                <input type="file" id="proofInput" accept="image/*" capture="environment" class="hidden">
+            </label>
+        </div>
+
+        <button id="confirmQR" disabled class="mt-4 w-full bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold py-3 rounded-xl cursor-not-allowed transition-all">
+            Upload & Konfirmasi Pembayaran
+        </button>
       </div>
     </div>
   </div>
