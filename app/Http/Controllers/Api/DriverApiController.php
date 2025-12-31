@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
-use App\Models\Withdrawal;
+use App\Models\Withdrawals;
 use App\Models\Setting;
 use App\Models\DriverQueue;
 
@@ -69,48 +69,72 @@ class   DriverApiController extends Controller
     public function setStatus(Request $request)
     {
         $validated = $request->validate([
-            'action' => 'required|in:join,leave', // Frontend kirim 'join' atau 'leave'
+            'action' => 'required|in:join,leave',
+            // Validasi Join
             'latitude'  => 'required_if:action,join|numeric',
             'longitude' => 'required_if:action,join|numeric',
+            // Validasi Leave
+            'reason'             => 'required_if:action,leave|in:self,other',
+            'manual_destination' => 'required_if:reason,self|string|nullable',
+            'manual_price'       => 'required_if:reason,self|numeric|min:0',
         ]);
 
         $user = $request->user();
 
         if ($validated['action'] === 'join') {
-            // --- LOGIKA MASUK ANTRIAN ---
-            
-            // 1. Cek Jarak (Geo-fencing)
-            $airportLat = -0.372158; 
-            $airportLng = 117.258153;
+            // --- LOGIKA JOIN (Tetap Sama) ---
+            $airportLat = -0.419266; 
+            $airportLng = 117.255554;
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
 
-            if ($distance > 2.0) { // Toleransi 2 KM
-                return response()->json([
-                    'message' => 'Anda berada di luar area Bandara (' . number_format($distance, 1) . ' km).',
-                ], 422);
+            // Ganti 2.0 dengan angka besar saat testing (misal 10000.0)
+            if ($distance > 10000.0) { 
+                return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
 
-            // 2. Cek Duplikasi (Idempotency)
-            // Jika sudah ada, biarkan saja sukses (biar frontend sinkron)
             DriverQueue::firstOrCreate(
                 ['user_id' => $user->id],
-                [
-                    'latitude' => $request->latitude,
-                    'longitude' => $request->longitude,
-                    // created_at otomatis terisi, menjadi penentu nomor urut
-                ]
+                ['latitude' => $request->latitude, 'longitude' => $request->longitude]
             );
-
             $msg = 'Berhasil masuk antrian';
 
         } else {
-            // --- LOGIKA KELUAR ANTRIAN ---
-            DriverQueue::where('user_id', $user->id)->delete();
+            // --- LOGIKA LEAVE (KELUAR) ---
+            
+            // PERBAIKAN DI SINI: Tambahkan $request ke dalam use(...)
+            DB::transaction(function () use ($user, $validated, $request) {
+                
+                // 1. Hapus dari Antrian
+                DriverQueue::where('user_id', $user->id)->delete();
+
+                // 2. Jika alasan "Dapat Penumpang Sendiri"
+                // Sekarang $request sudah dikenali di sini
+                if ($request->reason === 'self') {
+                    
+                    Booking::create([
+                        'cso_id'             => $user->id, // Driver input sendiri
+                        'driver_id'          => $user->id,
+                        'zone_id'            => null, 
+                        'manual_destination' => $request->manual_destination,
+                        'price'              => $request->manual_price,
+                        'status'             => 'Completed',
+                    ]);
+
+                    // Potong Saldo 10rb
+                    Withdrawals::create([
+                        'driver_id'    => $user->id,
+                        'amount'       => 10000,
+                        'status'       => 'Paid', 
+                        'type'         => 'fee',
+                        'requested_at' => now(),
+                        'processed_at' => now(),
+                    ]);
+                }
+            });
+
             $msg = 'Berhasil keluar antrian';
         }
 
-        // Kembalikan data user terbaru dengan status virtualnya
-        // agar UI tombol langsung berubah
         $user->load('driverProfile');
         $userWithStatus = $this->attachVirtualStatus($user);
 

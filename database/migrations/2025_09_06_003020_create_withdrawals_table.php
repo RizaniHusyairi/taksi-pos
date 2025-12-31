@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('withdrawals', function (Blueprint $table) {
            $table->id();
+           $table->enum("type",['withdraw','fee'])->default('withdraw');
 
             // Foreign Key ke tabel 'users' untuk supir yang mengajukan.
             $table->foreignId('driver_id')
@@ -26,6 +27,7 @@ return new class extends Migration
             // Status pengajuan saat ini.
             $table->enum('status', ['Pending', 'Approved', 'Rejected', 'Paid'])
             ->default('Pending');
+
             
             $table->string('proof_image')->nullable();  
             // Waktu pengajuan dibuat.

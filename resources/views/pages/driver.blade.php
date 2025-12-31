@@ -282,6 +282,55 @@
       </div>
     </div>
 
+    <div id="leaveQueueModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-5">
+          <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Konfirmasi Keluar</h3>
+          
+          <form id="formLeaveQueue" class="space-y-4">
+              <div>
+                  <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Alasan Keluar Antrian:</label>
+                  
+                  <div class="space-y-2">
+                      <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
+                          <input type="radio" name="reason" value="self" class="w-4 h-4 text-primary-600">
+                          <span class="text-sm text-slate-700 dark:text-slate-200">Dapat Penumpang Sendiri</span>
+                      </label>
+                      <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
+                          <input type="radio" name="reason" value="other" class="w-4 h-4 text-primary-600" checked>
+                          <span class="text-sm text-slate-700 dark:text-slate-200">Alasan Lainnya (Istirahat/Pulang)</span>
+                      </label>
+                  </div>
+              </div>
+
+              <div id="boxSelfPassenger" class="hidden space-y-3 pt-2 border-t border-dashed">
+                  <div class="p-3 bg-yellow-50 text-yellow-800 text-xs rounded-lg">
+                      Saldo dompet akan <strong>dipotong Rp 10.000</strong> sebagai komisi koperasi.
+                  </div>
+                  <div>
+                      <label class="block text-xs mb-1 text-slate-500">Tujuan Penumpang</label>
+                      <input type="text" id="manualDest" placeholder="Contoh: Hotel Bumi Senyiur" class="w-full rounded-lg border-slate-300 text-sm">
+                  </div>
+                  <div>
+                      <label class="block text-xs mb-1 text-slate-500">Nominal Deal (Rp)</label>
+                      <input type="number" id="manualPrice" placeholder="Contoh: 150000" class="w-full rounded-lg border-slate-300 text-sm">
+                  </div>
+              </div>
+
+              <div id="boxOtherReason" class="block space-y-3">
+                  <div>
+                      <label class="block text-xs mb-1 text-slate-500">Keterangan (Opsional)</label>
+                      <textarea id="otherReasonText" rows="2" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Contoh: Mau makan siang"></textarea>
+                  </div>
+              </div>
+
+              <div class="flex gap-2 justify-end mt-4">
+                  <button type="button" id="btnCancelLeave" class="px-4 py-2 text-slate-500 text-sm">Batal</button>
+                  <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Proses Keluar</button>
+              </div>
+          </form>
+      </div>
+  </div>
+
   <!-- Bottom Navigation -->
   <nav class="bottom-nav bg-white dark:bg-slate-800 w-full fixed bottom-0 left-0 z-20 h-20 flex justify-around items-center border-t border-slate-200 dark:border-slate-700">
     <a href="#orders" class="nav-item flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 w-full h-full transition-colors active">

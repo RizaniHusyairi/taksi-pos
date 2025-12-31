@@ -28,7 +28,9 @@ return new class extends Migration
             // Foreign Key ke tabel 'zones' untuk Zona Tujuan
             $table->foreignId('zone_id')
                   ->constrained('zones')
-                  ->onDelete('cascade');
+                  ->onDelete('cascade')->nullable();
+            
+            $table->string('manual_destination')->nullable();
 
             // Harga/tarif perjalanan saat booking dibuat.
             // Disimpan di sini untuk arsip, seandainya tarif di tabel 'zones' berubah.

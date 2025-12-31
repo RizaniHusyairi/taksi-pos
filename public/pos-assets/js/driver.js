@@ -50,8 +50,8 @@ export class DriverApp {
     // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
     constructor() {
         // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
-        this.AIRPORT_LAT = -0.372158; 
-        this.AIRPORT_LNG = 117.258153;
+        this.AIRPORT_LAT = -0.371975; 
+        this.AIRPORT_LNG = 117.257919;
         this.MAX_RADIUS_KM = 2.0; // Radius toleransi
         
         this.currentLat = null;
@@ -150,6 +150,15 @@ export class DriverApp {
         this.txtBankInfo = document.getElementById('txtBankInfo');
         this.proofModal = document.getElementById('proofModal');
         this.imgProof = document.getElementById('imgProof');
+
+        // Cache Modal Baru
+        this.leaveModal = document.getElementById('leaveQueueModal');
+        this.formLeave = document.getElementById('formLeaveQueue');
+        this.boxSelf = document.getElementById('boxSelfPassenger');
+        this.boxOther = document.getElementById('boxOtherReason');
+        this.btnCancelLeave = document.getElementById('btnCancelLeave');
+        // Radio buttons
+        this.radioReasons = document.getElementsByName('reason');
     }
 
     bind() {
@@ -188,6 +197,28 @@ export class DriverApp {
         });
 
         this.formBank?.addEventListener('submit', (e) => this.handleUpdateBank(e));
+
+        // Listener Modal Keluar
+        this.btnCancelLeave?.addEventListener('click', () => {
+            this.leaveModal.classList.add('hidden');
+            this.leaveModal.classList.remove('flex');
+        });
+
+        // Listener Radio Button (Toggle Form)
+        this.radioReasons.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if(e.target.value === 'self') {
+                    this.boxSelf.classList.remove('hidden');
+                    this.boxOther.classList.add('hidden');
+                } else {
+                    this.boxSelf.classList.add('hidden');
+                    this.boxOther.classList.remove('hidden');
+                }
+            });
+        });
+
+        // Listener Submit Form Keluar
+        this.formLeave?.addEventListener('submit', (e) => this.submitLeaveQueue(e));
 
     }
 
@@ -376,46 +407,32 @@ export class DriverApp {
 
     // --- ACTION HANDLER ---
     async handleQueueAction() {
-        // Logika sederhana: 
-        // Kalau status 'available' (queue), berarti user klik tombol "Keluar".
-        // Kalau status 'offline', berarti user klik tombol "Masuk".
         const virtualStatus = this.driverData.driver_profile.status;
         const action = (virtualStatus === 'available') ? 'leave' : 'join';
 
-        // Validasi GPS hanya jika mau JOIN
-        const payload = { action: action };
-        if (action === 'join') {
-            if (this.currentLat && this.currentLng) {
-                payload.latitude = this.currentLat;
-                payload.longitude = this.currentLng;
-            } else {
-                Utils.showToast('Lokasi GPS belum siap.', 'error');
-                return;
-            }
+        // JIKA MAU KELUAR -> BUKA MODAL
+        if (action === 'leave') {
+            this.leaveModal.classList.remove('hidden');
+            this.leaveModal.classList.add('flex');
+            // Reset form
+            this.formLeave.reset();
+            this.boxSelf.classList.add('hidden');
+            this.boxOther.classList.remove('hidden');
+            return; 
         }
 
-        // Loading State
-        this.btnQueue.disabled = true;
-        this.btnQueue.textContent = "Memproses...";
-
-        try {
-            const response = await fetchApi('/driver/status', {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-
-            // Update Data Lokal
-            // Backend mengembalikan user object terbaru dengan status virtual yang sudah diupdate
-            this.driverData = response.data;
-
-            this.updateQueueUI();
-            
-            const msg = (action === 'join') ? 'Berhasil masuk antrian!' : 'Anda keluar antrian.';
-            Utils.showToast(msg, 'success');
-
-        } catch (error) {
-            // Jika gagal (misal ditolak server), kembalikan tombol
-            this.updateQueueUI(); 
+        // JIKA MAU MASUK -> PROSES SEPERTI BIASA (GPS CHECK)
+        if (action === 'join') {
+            if (this.currentLat && this.currentLng) {
+                // Langsung panggil API join (gunakan logika lama)
+                this.executeStatusChange({ 
+                    action: 'join', 
+                    latitude: this.currentLat, 
+                    longitude: this.currentLng 
+                });
+            } else {
+                Utils.showToast('Lokasi GPS belum siap.', 'error');
+            }
         }
     }
 
@@ -696,6 +713,69 @@ export class DriverApp {
             this.bankModal.classList.remove('flex');
             Utils.showToast('Rekening berhasil disimpan', 'success');
         } catch(err) { /* handled */ }
+    }
+
+    // Method Baru untuk Submit Form Modal
+    async submitLeaveQueue(e) {
+        e.preventDefault();
+        
+        // Ambil nilai radio yang terpilih
+        const reason = document.querySelector('input[name="reason"]:checked').value;
+        
+        const payload = {
+            action: 'leave',
+            reason: reason
+        };
+
+        if (reason === 'self') {
+            const dest = document.getElementById('manualDest').value;
+            const price = document.getElementById('manualPrice').value;
+            
+            if(!dest || !price) {
+                return Utils.showToast('Mohon isi tujuan dan nominal', 'error');
+            }
+            
+            payload.manual_destination = dest;
+            payload.manual_price = price;
+        } else {
+            payload.other_reason = document.getElementById('otherReasonText').value;
+        }
+
+        // Tutup modal & Panggil API
+        this.leaveModal.classList.add('hidden');
+        this.leaveModal.classList.remove('flex');
+        
+        await this.executeStatusChange(payload);
+    }
+
+    // Helper untuk eksekusi API (Refactoring dari handleQueueAction lama)
+    async executeStatusChange(payload) {
+        // UI Loading pada tombol utama
+        this.btnQueue.disabled = true;
+        this.btnQueue.textContent = "Memproses...";
+
+        try {
+            const response = await fetchApi('/driver/status', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            this.driverData = response.data;
+            this.updateQueueUI();
+            
+            // Pesan sukses berbeda tergantung aksi
+            if (payload.action === 'join') {
+                Utils.showToast('Berhasil masuk antrian!', 'success');
+            } else if (payload.reason === 'self') {
+                Utils.showToast('Data penumpang dicatat. Saldo terpotong Rp 10.000', 'success');
+                this.renderWallet(); // Refresh saldo karena terpotong
+            } else {
+                Utils.showToast('Anda keluar antrian.', 'success');
+            }
+
+        } catch (error) {
+            this.updateQueueUI(); 
+        }
     }
 
 
