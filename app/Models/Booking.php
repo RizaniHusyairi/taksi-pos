@@ -24,6 +24,7 @@ class Booking extends Model
         'zone_id',
         'price',
         'status',
+        'manual_destination'
     ];
 
     /**

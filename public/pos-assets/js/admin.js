@@ -541,55 +541,74 @@ export class AdminApp{
   }
 
   // ----- Finance: Transaction Log -----
-  async renderTxLog() { // <-- Jadikan fungsi ini async
+  // ----- Finance: Transaction Log -----
+  async renderTxLog() {
     const tbody = document.getElementById('txTable');
     if (!tbody) return;
 
     try {
-      // 1. Dapatkan nilai filter dari form
+      // 1. Ambil Filter
       const dateFrom = document.getElementById('fltDateFrom')?.value || '';
       const dateTo = document.getElementById('fltDateTo')?.value || '';
       const driverId = document.getElementById('fltDriver')?.value || '';
       const csoId = document.getElementById('fltCSO')?.value || '';
 
-      // 2. Buat query string untuk URL API
+      // 2. Buat Query URL
       const params = new URLSearchParams();
       if (dateFrom) params.append('date_from', dateFrom);
       if (dateTo) params.append('date_to', dateTo);
       if (driverId) params.append('driver_id', driverId);
       if (csoId) params.append('cso_id', csoId);
 
-      // 3. Panggil API dengan filter. Server akan melakukan sisanya.
-      // Perhatikan bahwa properti 'data' mungkin perlu disesuaikan jika Anda menggunakan paginasi
+      // 3. Panggil API
       const response = await fetchApi(`/admin/transactions?${params.toString()}`);
-      const transactions = response.data; // Jika menggunakan paginasi, data ada di properti 'data'
+      const transactions = response.data; 
 
       if (transactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Tidak ada data transaksi yang cocok.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-500">Tidak ada data transaksi yang cocok.</td></tr>';
         return;
       }
 
-      // 4. Render data yang sudah siap dari API. Tidak perlu filter/join manual.
+      // 4. Render HTML
       tbody.innerHTML = transactions.map(t => {
-        // Akses data relasi langsung dari objek transaksi
-        const csoName = t.cso?.name || '-';
+        const csoName = t.cso?.name || '<span class="text-slate-400 italic">Self/Driver</span>';
         const driverName = t.driver?.name || '-';
-        // Asumsi rute selalu dari Bandara ke tujuan
-        const route = `Bandara → ${t.booking?.zone_to?.name || 'Tujuan tidak diketahui'}`;
+        
+        // --- LOGIKA BARU PENENTUAN TUJUAN ---
+        let destName = '<span class="text-red-400">?</span>';
+        let destBadge = '';
 
-        return `<tr class="border-t">
-          <td class="py-2">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-          <td class="py-2">${csoName}</td>
-          <td class="py-2">${driverName}</td>
-          <td class="py-2">${route}</td>
-          <td class="py-2">${t.method}</td>
-          <td class="py-2">${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
+        if (t.booking?.zone_to) {
+            // Jika ada Zona (Order via CSO)
+            destName = t.booking.zone_to.name;
+        } else if (t.booking?.manual_destination) {
+            // Jika Manual (Dapat Penumpang Sendiri)
+            destName = t.booking.manual_destination;
+            destBadge = '<span class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200">Manual</span>';
+        }
+
+        const route = `Bandara → ${destName} ${destBadge}`;
+        // -------------------------------------
+
+        return `<tr class="border-t hover:bg-slate-50 transition-colors">
+          <td class="py-3 px-2 text-slate-600">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+          <td class="py-3 px-2 font-medium">${csoName}</td>
+          <td class="py-3 px-2">${driverName}</td>
+          <td class="py-3 px-2 text-slate-700">${route}</td>
+          <td class="py-3 px-2">
+            <span class="px-2 py-1 rounded text-xs font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
+                ${t.method}
+            </span>
+          </td>
+          <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700">
+            ${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}
+          </td>
         </tr>`;
       }).join('');
 
     } catch (error) {
       console.error("Gagal memuat log transaksi:", error);
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Gagal memuat data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">Gagal memuat data.</td></tr>';
     }
   }
 
