@@ -150,7 +150,6 @@ class   DriverApiController extends Controller
         ]);
     }
 
-
     /**
      * Fungsi helper menghitung jarak dua titik koordinat (Haversine Formula)
      * Return dalam Kilometer
