@@ -517,48 +517,39 @@ export class DriverApp {
         }
     }
     async renderTrips() {
-
-        // ... (logika mengambil tanggal dari filter tidak berubah) ...
         const from = document.getElementById('histFrom').value;
         const to = document.getElementById('histTo').value;
-        const df = from ? new Date(from) : null;
-        const dt = to ? new Date(to) : null;
-        if (df) { df.setHours(0, 0, 0, 0); }
-        if (dt) { dt.setHours(23, 59, 59, 999); }
-
         const params = new URLSearchParams();
-        // ... (tambahkan date_from dan date_to ke params) ...
-        if (df) params.append('date_from', df.toISOString());
-        if (dt) params.append('date_to', dt.toISOString());
+        if (from) params.append('date_from', from);
+        if (to) params.append('date_to', to);
         
         try {
             const history = await fetchApi(`/driver/history?${params.toString()}`);
-            // ... (logika render riwayat perjalanan tidak berubah, gunakan data 'history') ...
             if (history.length === 0) {
-                this.tripList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Tidak ada riwayat perjalanan pada rentang tanggal yang dipilih.</div>`;
+                this.tripList.innerHTML = `<div class="text-center text-slate-500 p-4">Tidak ada riwayat.</div>`;
                 return;
             }
-
             this.tripList.innerHTML = history.map(t => {
-                console.log(t);
+                // LOGIKA BARU: Cek Zona atau Tujuan Manual
+                const destName = t.booking.zone_to 
+                    ? t.booking.zone_to.name 
+                    : (t.booking.manual_destination || 'Tujuan Manual');
+
                 return `
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="font-bold text-slate-800 dark:text-slate-100">${t.booking.zone_to.name}</p>
-                        <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 mb-3 border-l-4 border-primary-500">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-bold text-slate-800 dark:text-slate-100">${destName}</p>
+                            <p class="text-xs text-slate-500 mt-1">${new Date(t.created_at).toLocaleString('id-ID')}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold text-success">${Utils.formatCurrency(t.amount)}</p>
+                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500">${t.method}</span>
+                        </div>
                     </div>
-                    <p class="font-bold text-lg text-success">${Utils.formatCurrency(t.amount)}</p>
-                </div>
-                <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between text-xs">
-                    <span class="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-800 dark:text-primary-300 font-medium">${t.method}</span>
-                    <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium">${t.booking.status}</span>
-                </div>
-            </div>`;
+                </div>`;
             }).join('');
-        } catch (error) {
-            console.error("Gagal memuat riwayat perjalanan:", error);
-        }
+        } catch (error) { console.error(error); }
     }
 
     // --- FUNGSI AKSI (sekarang memanggil API) ---

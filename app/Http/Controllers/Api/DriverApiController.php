@@ -68,12 +68,11 @@ class   DriverApiController extends Controller
      */
     public function setStatus(Request $request)
     {
+        // ... (Validasi tetap sama) ...
         $validated = $request->validate([
             'action' => 'required|in:join,leave',
-            // Validasi Join
             'latitude'  => 'required_if:action,join|numeric',
             'longitude' => 'required_if:action,join|numeric',
-            // Validasi Leave
             'reason'             => 'required_if:action,leave|in:self,other',
             'manual_destination' => 'required_if:reason,self|string|nullable',
             'manual_price'       => 'required_if:reason,self|numeric|min:0',
@@ -82,12 +81,12 @@ class   DriverApiController extends Controller
         $user = $request->user();
 
         if ($validated['action'] === 'join') {
-            // --- LOGIKA JOIN (Tetap Sama) ---
+            // ... (Logika Join Tetap Sama) ...
             $airportLat = -0.419266; 
             $airportLng = 117.255554;
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
 
-            // Ganti 2.0 dengan angka besar saat testing (misal 10000.0)
+            // Ganti 2.0 dengan 10000.0 untuk testing
             if ($distance > 10000.0) { 
                 return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
@@ -101,31 +100,38 @@ class   DriverApiController extends Controller
         } else {
             // --- LOGIKA LEAVE (KELUAR) ---
             
-            // PERBAIKAN DI SINI: Tambahkan $request ke dalam use(...)
             DB::transaction(function () use ($user, $validated, $request) {
                 
                 // 1. Hapus dari Antrian
                 DriverQueue::where('user_id', $user->id)->delete();
 
                 // 2. Jika alasan "Dapat Penumpang Sendiri"
-                // Sekarang $request sudah dikenali di sini
                 if ($request->reason === 'self') {
                     
-                    Booking::create([
-                        'cso_id'             => $user->id, // Driver input sendiri
+                    // A. Buat Booking (Simpan ke variabel $booking agar bisa ambil ID-nya)
+                    $booking = Booking::create([
+                        'cso_id'             => $user->id, // Driver dianggap sebagai pembuat order
                         'driver_id'          => $user->id,
-                        'zone_id'            => null, 
+                        'zone_id'            => null, // Tidak pakai zona sistem
                         'manual_destination' => $request->manual_destination,
                         'price'              => $request->manual_price,
-                        'status'             => 'Completed',
+                        'status'             => 'Completed', 
                     ]);
 
-                    // Potong Saldo 10rb
+                    // B. [BARU] Buat Transaksi (Agar masuk History)
+                    // Kita set method 'CashDriver' karena uang diterima driver
+                    Transaction::create([
+                        'booking_id' => $booking->id,
+                        'method'     => 'CashDriver', 
+                        'amount'     => $request->manual_price,
+                    ]);
+
+                    // C. Potong Saldo 10rb (Fee Aplikasi)
                     Withdrawals::create([
                         'driver_id'    => $user->id,
                         'amount'       => 10000,
                         'status'       => 'Paid', 
-                        'type'         => 'fee',
+                        'type'         => 'fee', // Tandai sebagai potongan
                         'requested_at' => now(),
                         'processed_at' => now(),
                     ]);
