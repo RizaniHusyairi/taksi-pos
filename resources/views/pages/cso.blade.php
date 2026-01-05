@@ -241,9 +241,6 @@
     import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
     
 
-    // Buat instance dan jalankan aplikasi
-    const app = new CsoApp();
-    app.init();
 
 
 

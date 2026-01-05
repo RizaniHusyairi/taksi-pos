@@ -48,18 +48,17 @@ class DriverApiController extends Controller
         $activeBooking = null;
         // Kita anggap jika sedang 'ontrip' itu didapat dari Booking yang belum selesai
         // Bukan dari status profile lagi.
+        // --- PERBAIKAN DI SINI ---
         $ongoingBooking = Booking::where('driver_id', $driver->id)
-            ->whereNotIn('status', ['Completed', 'Cancelled', 'Paid', 'CashDriver']) // Sesuaikan status akhirmu
+            // HAPUS 'Paid' dan 'CashDriver' dari daftar pengecualian (whereNotIn)
+            // Kita hanya ingin menyembunyikan order yang sudah Selesai (Completed) atau Dibatalkan (Cancelled)
+            ->whereNotIn('status', ['Completed', 'Cancelled']) 
             ->latest()
             ->with('zoneTo:id,name')
             ->first();
+        
 
-        if ($ongoingBooking) {
-            $driver->driverProfile->status = 'ontrip'; // Override status jadi ontrip jika ada order
-            $activeBooking = $ongoingBooking;
-        }
-
-        $driver->active_booking = $activeBooking;
+        $driver->active_booking = $ongoingBooking;
         
         return response()->json($driver);
     }
@@ -219,6 +218,11 @@ class DriverApiController extends Controller
         // Tidak perlu update status driver_profile (karena kolomnya sudah dihapus).
         // Driver otomatis jadi 'offline' (tidak di queue) setelah trip selesai.
         $booking->update(['status' => 'Completed']);
+
+        // 2. PERBAIKAN PENTING DI SINI
+        // Reset status profil driver menjadi 'offline'
+        // Agar UI kembali ke mode awal (tombol "Masuk Antrian" muncul)
+        $request->user()->driverProfile()->update(['status' => 'offline']);
         
         // Panggil getProfile untuk mengembalikan data terbaru ke frontend
         return $this->getProfile($request);
@@ -390,5 +394,20 @@ class DriverApiController extends Controller
         }
 
         return response()->json(['status' => $profile->status]); 
+    }
+
+    public function startBooking(Request $request, Booking $booking)
+    {
+        if ($request->user()->id !== $booking->driver_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $booking->update(['status' => 'OnTrip']);
+
+        // Update status profil jadi 'ontrip' (biar UI driver tahu dia sedang sibuk)
+        $request->user()->driverProfile()->update(['status' => 'ontrip']);
+
+        // Kembalikan profile terbaru agar UI driver terupdate
+        return $this->getProfile($request);
     }
 }

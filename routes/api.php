@@ -101,6 +101,7 @@ Route::middleware('auth:sanctum')->group(function() {
         // Aksi-aksi
         Route::post('/status', [DriverApiController::class, 'setStatus']);
         Route::post('/bookings/{booking}/complete', [DriverApiController::class, 'completeBooking']);
+        Route::post('/bookings/{booking}/start', [DriverApiController::class, 'startBooking']);
         
         // Fitur Dompet (Wallet)
         Route::get('/balance', [DriverApiController::class, 'getBalance']);

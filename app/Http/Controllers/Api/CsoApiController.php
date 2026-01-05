@@ -198,7 +198,7 @@ class CsoApiController extends Controller
             ]);
 
             // D. Hapus Driver dari Antrian (PENTING)
-            \App\Models\DriverQueue::where('user_id', $validated['driver_id'])->delete();
+            DriverQueue::where('user_id', $validated['driver_id'])->delete();
 
             // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
             return $booking->load(['driver', 'zoneTo', 'cso']);

@@ -170,24 +170,19 @@ class CsoApp {
       }
   }
 
-async renderDrivers() {
-    // 1. Tampilan Loading
+  async renderDrivers() {
     this.driversList.innerHTML = `
         <div class="p-8 text-center text-slate-400 flex flex-col items-center animate-pulse">
             <svg class="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span class="text-sm">Memuat antrian driver...</span>
         </div>`;
     
-    // Reset pilihan saat refresh list
     this.selectedDriverId = null;
     this.updateConfirmButtonState();
 
     try {
-        // 2. Ambil Data dari API
-        // Pastikan endpoint ini mengembalikan list yang sudah diurutkan (sort_order) dari Backend
         const drivers = await fetchApi('/cso/available-drivers');
 
-        // 3. Cek Jika Kosong
         if (drivers.length === 0) {
             this.driversList.innerHTML = `
             <div class="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
@@ -197,52 +192,44 @@ async renderDrivers() {
             return;
         }
 
-        // 4. Render List dengan Logika: Standby vs Offline
+        // --- RENDER HTML ---
         this.driversList.innerHTML = drivers.map((d) => {
             const profile = d.driver_profile || {};
+            const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
             
             // --- PERBAIKAN DI SINI ---
-            // 1. Ambil raw status, jika null anggap string kosong
-            const rawStatus = profile.status || ''; 
-            
-            // 2. Debugging: Cek di Console Browser (F12) apa isinya
+            // Kita terima status 'standby' ATAU 'available' agar aman
+            const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
 
-            // 3. Ubah ke huruf kecil semua sebelum membandingkan
-            const isStandby = rawStatus.toLowerCase() === 'standby';
+            // Debugging Status Driver
+            console.log(`Render Driver: ${d.name} | Status: ${rawStatus} | Clickable: ${isStandby}`);
             
-            // Variabel Tampilan
             let wrapperClass, badgeHtml, btnHtml, clickAttribute;
 
             if (isStandby) {
-                // KONDISI 1: STANDBY (Bisa Dipilih)
-                // Style: Putih, Hover Biru, Cursor Pointer
+                // STATUS OK: BISA DIKLIK
                 wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer group';
                 
                 // Badge Hijau
-                badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Berada di lokasi</span>`;
+                badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Standby</span>`;
                 
-                // Tombol Pilih
                 btnHtml = `<div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">Pilih</div>`;
                 
-                // Attribute penanda agar bisa diklik (lihat event listener di bawah)
+                // PENTING: ID dipasang di sini
                 clickAttribute = `data-driver-id="${d.id}"`;
 
             } else {
-                // KONDISI 2: OFFLINE / DI LUAR AREA (Tidak Bisa Dipilih)
-                // Style: Abu-abu, Opacity rendah, Cursor not-allowed
+                // STATUS OFFLINE: TIDAK BISA DIKLIK
                 wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed';
                 
-                // Badge Abu
-                badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">Di Luar Area</span>`;
+                badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
                 
-                // Teks Menunggu
                 btnHtml = `<div class="text-xs font-medium text-slate-400">Menunggu...</div>`;
                 
-                // Tidak ada data-driver-id, jadi tidak akan ditangkap event listener
+                // PENTING: Tidak ada ID, jadi tidak bisa diklik
                 clickAttribute = '';
             }
 
-            // Tampilkan Nomor Punggung (Line Number) misal: #L5
             const lineNumber = profile.line_number 
                 ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>` 
                 : '';
@@ -250,12 +237,10 @@ async renderDrivers() {
             return `
             <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
                 <div class="flex items-center justify-between">
-                    
                     <div class="flex items-center gap-3 overflow-hidden">
                         <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
                             ${d.name.charAt(0)}
                         </div>
-
                         <div class="min-w-0">
                             <div class="flex items-center">
                                 ${lineNumber}
@@ -268,44 +253,40 @@ async renderDrivers() {
                             </div>
                         </div>
                     </div>
-
                     <div class="flex flex-col items-end gap-2 pl-2">
                         ${badgeHtml}
                         ${btnHtml}
                     </div>
-
                 </div>
-                
                 <div class="absolute inset-0 border-2 border-blue-600 rounded-xl opacity-0 pointer-events-none transition-opacity selection-ring"></div>
             </div>`;
         }).join('');
 
-        // 5. Pasang Event Listener (Hanya untuk yang Standby)
-        // Kita hanya query elemen yang punya atribut `data-driver-id`
-        this.driversList.querySelectorAll('[data-driver-id]').forEach(card => {
+        // --- PASANG LISTENER CLICK ---
+        const clickableCards = this.driversList.querySelectorAll('[data-driver-id]');
+        console.log(`Jumlah driver yang bisa diklik: ${clickableCards.length}`); // Debugging
+
+        clickableCards.forEach(card => {
             card.addEventListener('click', () => {
                 const id = card.dataset.driverId;
                 
+                console.log(`Driver diklik! ID: ${id}`); // <--- CEK INI DI CONSOLE NANTI
+
                 // Update State
                 this.selectedDriverId = id;
 
-                // Visual Feedback: Hapus highlight lama, pasang highlight baru
+                // Visual Feedback
                 this.driversList.querySelectorAll('.selection-ring').forEach(el => el.classList.remove('opacity-100'));
                 const ring = card.querySelector('.selection-ring');
                 if (ring) ring.classList.add('opacity-100');
 
-                // Update UI Tombol Konfirmasi Utama
                 this.updateConfirmButtonState();
             });
         });
 
     } catch (error) {
         console.error("Error render drivers:", error);
-        this.driversList.innerHTML = `
-            <div class="text-center p-4 text-red-600 bg-red-50 rounded-xl border border-red-200">
-                <p class="text-sm font-bold">Gagal memuat antrian.</p>
-                <button onclick="window.location.reload()" class="underline text-xs mt-1">Muat Ulang</button>
-            </div>`;
+        this.driversList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
     }
   }
 
@@ -370,25 +351,34 @@ async renderDrivers() {
   }
 
   async processBooking() {
-        if (!this.selectedDriverId || !this.toSel.value) {
-            alert('Silakan pilih tujuan dan supir terlebih dahulu.');
-            return;
-        }
 
-        // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
-        const zoneId = this.toSel.value;
-        const zoneObj = this.zones.find(z => z.id == zoneId); // Cari object zona dari array zones
+    // Cek Logika
+    if (!this.selectedDriverId || !this.toSel.value) {
         
-        this.selectedOrderData = {
-            driver_id: this.selectedDriverId,
-            zone_id: zoneId,
-            price: zoneObj.price,
-            zone_name: zoneObj.name
-        };
-
-        // 2. Langsung Buka Modal Pembayaran
-        this.openPayment();
+        // Pesan error lebih spesifik
+        let msg = 'Data belum lengkap:\n';
+        if (!this.toSel.value) msg += '- Tujuan belum dipilih\n';
+        if (!this.selectedDriverId) msg += '- Supir belum dipilih';
+        
+        alert(msg);
+        return;
     }
+
+    // ... (lanjutkan kode proses booking seperti biasa) ...
+    
+    // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
+    const zoneId = this.toSel.value;
+    const zoneObj = this.zones.find(z => z.id == zoneId); 
+    
+    this.selectedOrderData = {
+        driver_id: this.selectedDriverId,
+        zone_id: zoneId,
+        price: zoneObj.price,
+        zone_name: zoneObj.name
+    };
+
+    this.openPayment();
+}
 
   openPayment() {
         if (!this.selectedOrderData) return;

@@ -160,7 +160,7 @@ export class DriverApp {
     bind() {
 
         this.btnQueue?.addEventListener('click', () => this.handleQueueAction());
-        this.btnComplete.addEventListener('click', () => this.handleCompleteBooking());
+        this.btnComplete.addEventListener('click', () => this.handleOrderAction());
         this.wdForm.addEventListener('submit', (e) => this.handleWithdrawalRequest(e));
         document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
 
@@ -489,12 +489,35 @@ export class DriverApp {
         if (this.activeBooking) {
             this.activeBox.classList.remove('hidden');
             this.textBook.textContent = 'Pesanan Aktif';
+            
+            // Format Rupiah
+            const price = Utils.formatCurrency(this.activeBooking.price);
+            
             this.activeInfo.innerHTML = `
-            <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>Bandara → ${this.activeBooking.zone_to.name}</span></div>
-            <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(this.activeBooking.price)}</span></div>
-            <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${this.activeBooking.status}</span></div>
-        `;d
+            <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Rute:</span> <span class="font-medium">Bandara → ${this.activeBooking.zone_to.name}</span></div>
+            <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Tarif:</span> <span class="font-medium text-success">${price}</span></div>
+            <div class="flex items-center gap-2"><span class="font-semibold w-20">Status:</span> <span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">${this.activeBooking.status}</span></div>
+            `;
+            
             console.log('Order aktif ditemukan:', this.activeBooking);
+
+            // --- LOGIKA TAMPILAN TOMBOL ---
+            const status = this.activeBooking.status;
+            
+            // Daftar status "Belum Jalan"
+            const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending'];
+
+            if (notStartedStatuses.includes(status)) {
+                // Tampilan Tombol: MULAI PERJALANAN
+                this.btnComplete.textContent = "Mulai Perjalanan";
+                this.btnComplete.classList.remove('bg-success', 'hover:bg-emerald-600'); // Hapus warna hijau
+                this.btnComplete.classList.add('bg-blue-600', 'hover:bg-blue-700'); // Ganti warna biru
+            } else if (status === 'OnTrip') {
+                // Tampilan Tombol: SELESAIKAN PERJALANAN
+                this.btnComplete.textContent = "Selesaikan Perjalanan";
+                this.btnComplete.classList.remove('bg-blue-600', 'hover:bg-blue-700'); // Hapus warna biru
+                this.btnComplete.classList.add('bg-success', 'hover:bg-emerald-600'); // Ganti warna hijau
+            }
 
         } else {
             this.activeBox.classList.add('hidden');
@@ -814,6 +837,57 @@ export class DriverApp {
 
         } catch (error) {
             this.updateQueueUI(); 
+        }
+    }
+
+    async handleOrderAction() {
+        if (!this.activeBooking) return;
+        
+        const status = this.activeBooking.status;
+        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending'];
+
+        if (notStartedStatuses.includes(status)) {
+            // AKSI 1: MULAI PERJALANAN (Update status ke OnTrip)
+            if (!confirm('Mulai perjalanan mengantar penumpang?')) return;
+            await this.updateOrderStatus('OnTrip');
+        } 
+        else if (status === 'OnTrip') {
+            // AKSI 2: SELESAI (Panggil fungsi complete yang lama)
+            await this.handleCompleteBooking();
+        }
+    }
+
+    // Helper untuk update status ke API (misal: start trip)
+    async updateOrderStatus(newStatus) {
+        try {
+            // Kita butuh endpoint baru di backend, atau gunakan endpoint update status yg generik.
+            // Untuk solusi cepat, kita gunakan route '/driver/bookings/{id}/update-status'
+            // Pastikan Anda membuat route & controller ini jika belum ada.
+            
+            // ATAU: Jika Anda belum punya endpoint khusus update status selain complete,
+            // Anda bisa memodifikasi backend completeBooking agar menerima parameter status,
+            // TAPI saran saya buat endpoint khusus agar rapi.
+            
+            /* SEMENTARA: Saya asumsikan Anda akan membuat endpoint update-status.
+               Jika tidak ingin ubah backend lagi, Anda bisa lewati langkah "Mulai Perjalanan" 
+               dan langsung Selesaikan, tapi flow-nya jadi aneh.
+            */
+
+             const res = await fetchApi(`/driver/bookings/${this.activeBooking.id}/start`, { 
+                method: 'POST' 
+            });
+
+            this.driverData = res; // Backend harus return profile terbaru
+            
+            // Refresh UI
+            this.activeBooking = this.driverData.active_booking;
+            this.renderActiveOrder();
+            this.updateQueueUI();
+            
+            Utils.showToast('Perjalanan dimulai!', 'success');
+
+        } catch (error) {
+            console.error(error);
         }
     }
 
