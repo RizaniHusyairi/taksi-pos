@@ -67,14 +67,10 @@ export class DriverApp {
         await this.loadInitialData();
 
         // Mulai pantau lokasi GPS segera setelah init
-        this.startLocationWatcher();
+        this.startAutoLocationSender();
         
         window.addEventListener('hashchange', () => this.route());
         this.route();
-        window.addEventListener('storage', (e) => {
-        // Abaikan update storage dari tema agar tidak re-render
-        
-        });
     }
 
     initTheme() {
@@ -222,31 +218,64 @@ export class DriverApp {
 
     }
 
-    // --- METODE BARU: PEMANTAUAN LOKASI ---
-    startLocationWatcher() {
+    startAutoLocationSender() {
         if (!navigator.geolocation) {
-            this.distanceText.textContent = "GPS Error";
-            Utils.showToast('Browser tidak mendukung GPS', 'error');
+            if(this.distanceText) this.distanceText.textContent = "GPS Error";
             return;
         }
 
-        // Pantau lokasi secara real-time
+        // Gunakan watchPosition agar realtime
         this.watchId = navigator.geolocation.watchPosition(
             (position) => {
-                this.currentLat = position.coords.latitude;
-                this.currentLng = position.coords.longitude;
-                // Setiap lokasi berubah, cek apakah tombol boleh aktif
-                this.updateQueueUI(); 
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                this.currentLat = lat;
+                this.currentLng = lng;
+
+                // Hitung jarak lokal untuk UI Driver (Visual saja)
+                const dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, lat, lng);
+                if(this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
+
+                // KIRIM KE SERVER (Throttling: Agar tidak spam server tiap milidetik)
+                // Kita kirim setiap kali lokasi berubah signifikan atau interval waktu
+                // Untuk simpelnya, kita pakai throttle manual sederhana:
+                const now = Date.now();
+                if (!this.lastSent || now - this.lastSent > 5000) { // Kirim tiap 5 detik
+                    this.sendLocationUpdate(lat, lng);
+                    this.lastSent = now;
+                }
             },
-            (error) => {
-                console.error("GPS Error:", error);
-                this.distanceText.textContent = "Hilang Sinyal";
-                this.updateQueueUI(true); // true = ada error
-            },
-            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            (error) => { console.error("GPS Error:", error); },
+            { enableHighAccuracy: true, maximumAge: 0 }
         );
     }
 
+    async sendLocationUpdate(lat, lng) {
+        try {
+            const res = await fetchApi('/driver/location', {
+                method: 'POST',
+                body: JSON.stringify({ latitude: lat, longitude: lng })
+            });
+
+            // Update status text saja, tombol diurus oleh updateQueueUI
+            if (res.status === 'standby') {
+                // Jangan hide tombol di sini!
+                // Update data lokal agar UI reaktif
+                if(this.driverData && this.driverData.driver_profile) {
+                    this.driverData.driver_profile.status = 'standby';
+                    this.updateQueueUI(); 
+                }
+            } else if (res.status === 'offline') {
+                if(this.driverData && this.driverData.driver_profile) {
+                    this.driverData.driver_profile.status = 'offline';
+                    this.updateQueueUI();
+                }
+            }
+        } catch (e) {
+            console.error("Gagal update lokasi", e);
+        }
+    }
     // Hitung jarak (Haversine Formula) di Javascript
     calculateDistance(lat1, lon1, lat2, lon2) {
         const R = 6371; // Radius bumi KM
@@ -260,43 +289,45 @@ export class DriverApp {
     }
 
     // --- LOGIKA UTAMA UI (YANG KAMU MINTA) ---
+    // --- UPDATE UI STATUS ANTRIAN ---
     updateQueueUI(gpsError = false) {
         if (!this.driverData) return;
 
-        // 1. Ambil "Status Virtual" dari Backend
-        // Backend mengirim 'available' jika ada di tabel Queue.
-        // Backend mengirim 'ontrip' jika ada active_booking.
-        // Backend mengirim 'offline' jika tidak keduanya.
-        const virtualStatus = this.driverData.driver_profile.status;
+        const profile = this.driverData.driver_profile;
+        const virtualStatus = profile.status; // 'standby', 'offline', 'ontrip'
         
-        // 2. Terjemahkan ke Bahasa Manusia (Boolean)
-        const isInQueue = (virtualStatus === 'available'); 
+        // Cek apakah sedang ada booking aktif?
         const isOnTrip  = (virtualStatus === 'ontrip' || this.driverData.active_booking != null);
+        
+        // Cek apakah standby (Di antrian & di lokasi)
+        const isStandby = (virtualStatus === 'standby');
 
-        // 3. Hitung Jarak
+        // Hitung Jarak
         let dist = 9999;
         if (this.currentLat && this.currentLng) {
             dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, this.currentLat, this.currentLng);
-            this.distanceText.textContent = dist.toFixed(2) + " km";
+            if(this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
         }
 
-        // 4. Update Teks Status (Label Atas)
+        // Update Teks Status Header
         if (isOnTrip) {
             this.statusText.textContent = 'Sedang Mengantar';
             this.statusText.className = 'font-bold text-lg text-pending';
-        } else if (isInQueue) {
-            this.statusText.textContent = 'Dalam Antrian (Online)';
+        } else if (isStandby) {
+            this.statusText.textContent = 'Standby (Siap Dipilih)';
             this.statusText.className = 'font-bold text-lg text-success';
         } else {
-            this.statusText.textContent = 'Belum Antri (Offline)';
+            this.statusText.textContent = 'Di Luar Area / Offline';
             this.statusText.className = 'font-bold text-lg text-slate-500 dark:text-slate-400';
         }
 
-        // 5. Update Tombol Aksi
+        // --- LOGIKA TOMBOL UTAMA ---
         const btn = this.btnQueue;
-        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all"; // Reset class
+        btn.classList.remove('hidden'); // Pastikan tombol selalu muncul dulu
+        btn.disabled = false;
+        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all"; 
 
-        // KONDISI 1: SEDANG JALAN (Orderan)
+        // KONDISI 1: SEDANG NARIK
         if (isOnTrip) {
             btn.disabled = true;
             btn.textContent = "Selesaikan Order Dulu";
@@ -304,31 +335,32 @@ export class DriverApp {
             return;
         }
 
-        // KONDISI 2: SUDAH DALAM ANTRIAN
-        // Driver bisa keluar antrian kapan saja, tidak peduli jarak.
-        if (isInQueue) {
-            btn.disabled = false;
+        // KONDISI 2: STANDBY (Bisa Keluar)
+        // INI YANG DIMINTA: Tetap bisa klik keluar
+        if (isStandby) {
             btn.textContent = "Keluar Antrian";
             btn.classList.add('bg-danger', 'hover:bg-red-600', 'active:scale-95');
+            // Saat diklik, ini akan memicu handleQueueAction -> 'leave' -> Buka Modal
             return;
         }
 
-        // KONDISI 3: BELUM ANTRI (Mau Masuk)
-        // Cek GPS dulu
+        // KONDISI 3: OFFLINE (Bisa Masuk / Menunggu GPS)
+        // Jika offline, berarti dia keluar manual atau belum sampai.
+        // Kita izinkan masuk manual (Re-join) atau tunggu GPS.
+        
         if (gpsError || !this.currentLat) {
             btn.disabled = true;
             btn.textContent = "Menunggu Sinyal GPS...";
             btn.classList.add('bg-slate-400', 'cursor-not-allowed');
         } 
         else if (dist > this.MAX_RADIUS_KM) {
-            // Diluar Jangkauan
             btn.disabled = true;
             btn.textContent = `Terlalu Jauh (${dist.toFixed(1)} km)`;
             btn.classList.add('bg-slate-400', 'cursor-not-allowed', 'opacity-70');
         } 
         else {
-            // Aman: Dalam Jangkauan & GPS Oke
-            btn.disabled = false;
+            // Jarak dekat tapi status offline (berarti habis keluar manual)
+            // Tampilkan tombol "Masuk Antrian" (Manual Re-join)
             btn.textContent = "Masuk Antrian";
             btn.classList.add('bg-primary-600', 'hover:bg-primary-700', 'active:scale-95');
         }
@@ -405,26 +437,42 @@ export class DriverApp {
         // ... (logika untuk mengubah teks status tidak berubah) ...
     }
 
-    // --- ACTION HANDLER ---
+    // --- HANDLE TOMBOL UTAMA (Action Handler) ---
     async handleQueueAction() {
-        const virtualStatus = this.driverData.driver_profile.status;
-        const action = (virtualStatus === 'available') ? 'leave' : 'join';
+        // Ambil status terbaru dari data lokal
+        const profile = this.driverData.driver_profile;
+        const currentStatus = profile.status; // Bisa 'standby', 'offline', atau 'ontrip'
 
-        // JIKA MAU KELUAR -> BUKA MODAL
+        // Tentukan Aksi Berdasarkan Status
+        let action = '';
+
+        if (currentStatus === 'standby') {
+            // Jika sedang Standby, berarti tombol berfungsi untuk "Keluar Antrian"
+            action = 'leave';
+        } else {
+            // Jika Offline/Lainnya, berarti tombol berfungsi untuk "Masuk Antrian"
+            action = 'join';
+        }
+
+        console.log(`Status: ${currentStatus}, Action: ${action}`); // Debugging
+
+        // --- EKSEKUSI AKSI ---
+
+        // 1. JIKA AKSI LEAVE -> BUKA MODAL
         if (action === 'leave') {
             this.leaveModal.classList.remove('hidden');
             this.leaveModal.classList.add('flex');
-            // Reset form
+            
+            // Reset form modal
             this.formLeave.reset();
             this.boxSelf.classList.add('hidden');
             this.boxOther.classList.remove('hidden');
             return; 
         }
 
-        // JIKA MAU MASUK -> PROSES SEPERTI BIASA (GPS CHECK)
+        // 2. JIKA AKSI JOIN -> LANGSUNG EKSEKUSI API
         if (action === 'join') {
             if (this.currentLat && this.currentLng) {
-                // Langsung panggil API join (gunakan logika lama)
                 this.executeStatusChange({ 
                     action: 'join', 
                     latitude: this.currentLat, 
@@ -445,7 +493,7 @@ export class DriverApp {
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>Bandara → ${this.activeBooking.zone_to.name}</span></div>
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(this.activeBooking.price)}</span></div>
             <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${this.activeBooking.status}</span></div>
-        `;
+        `;d
             console.log('Order aktif ditemukan:', this.activeBooking);
 
         } else {

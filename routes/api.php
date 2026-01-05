@@ -109,6 +109,7 @@ Route::middleware('auth:sanctum')->group(function() {
 
         // Riwayat Perjalanan
         Route::get('/history', [DriverApiController::class, 'getTripHistory']);
+        Route::post('/location', [DriverApiController::class, 'updateLocation']);
 
         Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
     });

@@ -13,7 +13,7 @@ use App\Models\Withdrawals;
 use App\Models\Setting;
 use App\Models\DriverQueue;
 
-class   DriverApiController extends Controller
+class DriverApiController extends Controller
 {
 
     /**
@@ -80,6 +80,8 @@ class   DriverApiController extends Controller
 
         $user = $request->user();
 
+        $profile = $user->driverProfile;
+
         if ($validated['action'] === 'join') {
             // ... (Logika Join Tetap Sama) ...
             $airportLat = -0.419266; 
@@ -91,10 +93,45 @@ class   DriverApiController extends Controller
                 return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
 
+            $sortOrder = 1000; // Default untuk Re-join (Antrian Belakang)
+            $today = now()->toDateString();
+            
+            // Cek apakah ini pertama kali masuk hari ini?
+            // Syarat: Tanggal terakhir masuk BUKAN hari ini
+            $isFirstJoinToday = ($profile->last_queue_date !== $today);
+
+            if ($isFirstJoinToday && $profile->line_number) {
+                // INI ADALAH FIRST JOIN -> HITUNG PRIORITAS BERDASARKAN ROTASI
+                
+                // Ambil Angka Giliran Hari Ini (Default 1 jika error)
+                $dailyStart = (int) Setting::where('key', 'daily_start_line')->value('value') ?: 1;
+                $myLine = $profile->line_number;
+                $totalDrivers = 30; // Atau hitung dinamis: DriverProfile::max('line_number');
+
+                // Rumus Matematika Rotasi
+                if ($myLine >= $dailyStart) {
+                    // Kasus Normal: Giliran 5, Saya 6. Posisi = 6 - 5 = 1 (Urutan ke-2 karena index 0)
+                    $sortOrder = $myLine - $dailyStart;
+                } else {
+                    // Kasus Wrapping: Giliran 28, Saya 2. Saya harus di bawah 30.
+                    // Posisi = (30 - 28) + 2 = 4.
+                    $sortOrder = ($totalDrivers - $dailyStart) + $myLine;
+                }
+            }
+
             DriverQueue::firstOrCreate(
                 ['user_id' => $user->id],
-                ['latitude' => $request->latitude, 'longitude' => $request->longitude]
+                [
+                    'latitude' => $request->latitude, 
+                'longitude' => $request->longitude, 
+                'sort_order' => $sortOrder]
             );
+
+            $profile->update([
+                'last_queue_date' => $today,
+                'status' => 'standby' // Update status jadi standby
+            ]);
+
             $msg = 'Berhasil masuk antrian';
 
         } else {
@@ -292,5 +329,66 @@ class   DriverApiController extends Controller
             'message' => 'Informasi rekening berhasil disimpan.',
             'data' => $user->load('driverProfile')
         ]);
+    }
+
+    public function updateLocation(Request $request)
+    {
+        $request->validate([
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+        ]);
+
+        $user = $request->user();
+        $profile = $user->driverProfile;
+
+        // 1. Cek Apakah Driver Ada di Antrian?
+        // Jika tidak ada di antrian (karena sudah keluar manual), abaikan GPS update status
+        $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
+        
+        if (!$isInQueue) {
+            // Kembalikan status apa adanya (Offline), jangan diubah jadi Standby
+            return response()->json(['status' => $profile->status]);
+        }
+
+        // 2. Cek Jarak (Logika Lama)
+        $airportLat = -0.419266; 
+        $airportLng = 117.255554;
+        $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
+        
+        // Gunakan radius yang sama dengan saat join
+        $radius = 10000.0; // 10000.0 untuk testing
+
+        $inArea = ($distance <= $radius);
+        
+        // 3. Logika Update Status (Hanya jika ada di Queue)
+        if ($inArea && $profile->status === 'offline') {
+            
+            $profile->update(['status' => 'standby']);
+            
+            // Update koordinat
+            DriverQueue::where('user_id', $user->id)->update([
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude
+            ]);
+            
+            return response()->json(['status' => 'standby', 'message' => 'Anda memasuki area bandara.']);
+
+        } elseif (!$inArea && $profile->status === 'standby') {
+            
+            // Kalau keluar radius fisik, set offline tapi TETAP di queue (hanya hidden dari CSO)
+            $profile->update(['status' => 'offline']);
+            
+            return response()->json(['status' => 'offline', 'message' => 'Anda keluar dari area bandara.']);
+        }
+
+        // Update koordinat rutin
+        if ($profile->status === 'standby') {
+             DriverQueue::where('user_id', $user->id)->update([
+                'latitude' => $request->latitude,
+                'longitude' => $request->longitude
+            ]);
+        }
+
+        return response()->json(['status' => $profile->status]); 
     }
 }

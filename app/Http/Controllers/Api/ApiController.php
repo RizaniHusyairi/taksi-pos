@@ -89,13 +89,24 @@ class ApiController extends Controller
 
     public function getAvailableDrivers()
     {
-        $drivers = User::where('role', 'driver')
-            ->where('active', true)
-            ->whereHas('driverProfile', function ($query) {
-                $query->where('status', 'available');
-            })
-            ->with('driverProfile') // Memuat data profil driver
-            ->get();
+        // Ambil data dari tabel queue, join ke users & profiles
+        // Urutkan berdasarkan sort_order ASC (0, 1, 2 ... 1000)
+        // Jika sort_order sama (sesama 1000), urutkan berdasarkan created_at (siapa cepat dia dapat)
+
+
+       $drivers = DriverQueue::with(['driver.driverProfile'])
+            ->orderBy('sort_order', 'asc') 
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($queue) {
+                // Kita kembalikan format User object agar frontend tidak perlu berubah banyak
+                $user = $queue->driver;
+                // Pastikan status di profile sinkron (opsional visual)
+                if($user->driverProfile) {
+                    $user->driverProfile->status = 'available'; 
+                }
+                return $user;
+            });
 
         return response()->json($drivers);
     }

@@ -2,83 +2,71 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-
+use Faker\Factory as Faker;
 
 class UserSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
+        $faker = Faker::create('id_ID');
 
+        // 1. AKUN ADMIN
         User::updateOrCreate(
-            ['username' => 'admin'], // \<-- Kondisi untuk mencari user
+            ['username' => 'admin'],
             [
-            'name' => 'Admin Utama',
-            'email' => 'admin@taksipos.test', // Email harus unik
-            'role' => 'admin',
-            'password' => Hash::make('123456'), // \<-- Password di-enkripsi
-            'active' => true,
-            ]
-        );
-
-        // 2. Membuat Akun CSO
-        User::updateOrCreate(
-            ['username' => 'cso1'],
-            [
-                'name' => 'CSO Pagi',
-                'email' => 'cso1@taksipos.test',
-                'role' => 'cso',
+                'name' => 'Admin Utama',
+                'email' => 'admin@taksipos.test',
+                'role' => 'admin',
                 'password' => Hash::make('123456'),
                 'active' => true,
             ]
         );
 
-        // Membuat Akun Driver 1
-        $driver1 = User::updateOrCreate(
-            ['username' => 'driver1'],
-            [
-                'name' => 'Budi Santoso',
-                'email' => 'driver1@taksipos.test',
-                'role' => 'driver',
-                'password' => Hash::make('123456'),
-                'active' => true,
-            ]
-        );
-        // Buat profil driver yang terhubung dengannya
-        $driver1->driverProfile()->updateOrCreate(
-            ['user_id' => $driver1->id],
-            [
-                'car_model' => 'Toyota Avanza',
-                'plate_number' => 'KT 1234 AB',
-            ]
-        );
+        // 2. GENERATE 5 AKUN CSO
+        for ($i = 1; $i <= 5; $i++) {
+            User::updateOrCreate(
+                ['username' => 'cso' . $i], 
+                [
+                    'name' => $faker->name,
+                    'email' => 'cso' . $i . '@taksipos.test',
+                    'role' => 'cso',
+                    'password' => Hash::make('123456'),
+                    'active' => true,
+                ]
+            );
+        }
 
-        // Membuat Akun Driver 2
-        $driver2 = User::updateOrCreate(
-            ['username' => 'driver2'],
-            [
-                'name' => 'Andi Wijaya',
-                'email' => 'driver2@taksipos.test',
-                'role' => 'driver',
-                'password' => Hash::make('123456'),
-                'active' => true,
-                        
+        // 3. GENERATE 30 AKUN DRIVER (DENGAN NOMOR URUT)
+        $carModels = ['Toyota Avanza', 'Daihatsu Xenia', 'Toyota Calya', 'Daihatsu Sigra', 'Honda Brio', 'Suzuki Ertiga', 'Toyota Innova'];
 
-            ]
-            // ... data user driver 2
-        );
-        $driver2->driverProfile()->updateOrCreate(
-            ['user_id' => $driver2->id],
-            [
-                'car_model' => 'Daihatsu Xenia',
-                'plate_number' => 'KT 5678 CD',
-            ]
-        );
+        for ($i = 1; $i <= 30; $i++) {
+            
+            $driver = User::updateOrCreate(
+                ['username' => 'driver' . $i], 
+                [
+                    'name' => $faker->name('male'),
+                    'email' => 'driver' . $i . '@taksipos.test',
+                    'role' => 'driver',
+                    'password' => Hash::make('123456'),
+                    'active' => true,
+                ]
+            );
+
+            $randomPlate = 'KT ' . $faker->numberBetween(1000, 9999) . ' ' . strtoupper($faker->lexify('??'));
+            $randomCar = $carModels[array_rand($carModels)];
+
+            $driver->driverProfile()->updateOrCreate(
+                ['user_id' => $driver->id],
+                [
+                    'car_model' => $randomCar,
+                    'plate_number' => $randomPlate,
+                    'status' => 'offline', // Default offline
+                    'line_number' => $i,   // NOMOR URUT TETAP (1 s/d 30)
+                ]
+            );
+        }
     }
 }

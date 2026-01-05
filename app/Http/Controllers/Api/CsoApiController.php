@@ -30,17 +30,41 @@ class CsoApiController extends Controller
      */
     public function getAvailableDrivers()
     {
-        // Ambil data dari tabel antrian, urutkan berdasarkan created_at (Siapa cepat dia dapat posisi atas)
-        $queues = DriverQueue::with(['driver.driverProfile']) // Load data user & profil mobil
-        ->orderBy('created_at', 'asc') 
-        ->get();
+        // Ambil data dari tabel queue, join ke users & profiles
+        // Urutkan berdasarkan sort_order ASC (0, 1, 2 ... 1000)
+        // Jika sort_order sama (sesama 1000), urutkan berdasarkan created_at (siapa cepat dia dapat)
 
-        // Mapping agar format JSON tetap sama dengan yang diharapkan Frontend
-        $formatted = $queues->map(function ($q) {
-            return $q->driver; // Mengembalikan object User (driver)
-        });
 
-        return response()->json($formatted);
+       $drivers = DriverQueue::with(['driver.driverProfile'])
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($queue) {
+                $user = $queue->driver;
+                
+                // --- PERBAIKAN DI SINI ---
+                // JANGAN menimpa status secara manual lagi!
+                // Biarkan status asli dari database (standby/offline) yang lewat.
+                
+                /* KODE LAMA YANG HARUS DIHAPUS/KOMENTAR:
+                if ($user && $user->driverProfile) {
+                    $user->driverProfile->status = 'available'; 
+                }
+                */
+
+                // Kita bisa tambahkan info sort_order untuk debugging jika mau
+                if ($user && $user->driverProfile) {
+                    $user->driverProfile->queue_score = $queue->sort_order;
+                }
+                
+                return $user;
+            })
+            ->filter(function ($user) {
+                return $user != null;
+            })
+            ->values();
+
+        return response()->json($drivers);
     }
 
     /**

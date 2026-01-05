@@ -170,100 +170,141 @@ class CsoApp {
       }
   }
 
-  async renderDrivers() {
+async renderDrivers() {
+    // 1. Tampilan Loading
     this.driversList.innerHTML = `
         <div class="p-8 text-center text-slate-400 flex flex-col items-center animate-pulse">
             <svg class="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span class="text-sm">Memuat antrian...</span>
+            <span class="text-sm">Memuat antrian driver...</span>
         </div>`;
     
+    // Reset pilihan saat refresh list
     this.selectedDriverId = null;
     this.updateConfirmButtonState();
 
     try {
+        // 2. Ambil Data dari API
+        // Pastikan endpoint ini mengembalikan list yang sudah diurutkan (sort_order) dari Backend
         const drivers = await fetchApi('/cso/available-drivers');
 
+        // 3. Cek Jika Kosong
         if (drivers.length === 0) {
             this.driversList.innerHTML = `
             <div class="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
                 <p class="text-slate-500 font-medium">Antrian Kosong</p>
-                <p class="text-xs text-slate-400 mt-1">Belum ada supir yang masuk antrian.</p>
+                <p class="text-xs text-slate-400 mt-1">Belum ada supir yang terdaftar dalam antrian hari ini.</p>
             </div>`;
             return;
         }
 
-        // Render List
-        this.driversList.innerHTML = drivers.map((d, index) => {
+        // 4. Render List dengan Logika: Standby vs Offline
+        this.driversList.innerHTML = drivers.map((d) => {
             const profile = d.driver_profile || {};
-            const queueNumber = index + 1; // Urutan 1, 2, 3...
-            const isFirst = index === 0; // Cek apakah ini antrian pertama
-
-            // Style khusus untuk urutan #1 (Rekomendasi)
-            const wrapperClass = isFirst 
-                ? 'bg-white dark:bg-slate-800 border-primary-500 ring-1 ring-primary-500 shadow-md transform scale-[1.01]' 
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary-300';
             
-            const numBadgeClass = isFirst
-                ? 'bg-primary-600 text-white shadow-lg shadow-primary-500/30'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400';
+            // --- PERBAIKAN DI SINI ---
+            // 1. Ambil raw status, jika null anggap string kosong
+            const rawStatus = profile.status || ''; 
+            
+            // 2. Debugging: Cek di Console Browser (F12) apa isinya
+
+            // 3. Ubah ke huruf kecil semua sebelum membandingkan
+            const isStandby = rawStatus.toLowerCase() === 'standby';
+            
+            // Variabel Tampilan
+            let wrapperClass, badgeHtml, btnHtml, clickAttribute;
+
+            if (isStandby) {
+                // KONDISI 1: STANDBY (Bisa Dipilih)
+                // Style: Putih, Hover Biru, Cursor Pointer
+                wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer group';
+                
+                // Badge Hijau
+                badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Berada di lokasi</span>`;
+                
+                // Tombol Pilih
+                btnHtml = `<div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">Pilih</div>`;
+                
+                // Attribute penanda agar bisa diklik (lihat event listener di bawah)
+                clickAttribute = `data-driver-id="${d.id}"`;
+
+            } else {
+                // KONDISI 2: OFFLINE / DI LUAR AREA (Tidak Bisa Dipilih)
+                // Style: Abu-abu, Opacity rendah, Cursor not-allowed
+                wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed';
+                
+                // Badge Abu
+                badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">Di Luar Area</span>`;
+                
+                // Teks Menunggu
+                btnHtml = `<div class="text-xs font-medium text-slate-400">Menunggu...</div>`;
+                
+                // Tidak ada data-driver-id, jadi tidak akan ditangkap event listener
+                clickAttribute = '';
+            }
+
+            // Tampilkan Nomor Punggung (Line Number) misal: #L5
+            const lineNumber = profile.line_number 
+                ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>` 
+                : '';
 
             return `
-            <button type="button" data-driver-id="${d.id}" class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 group ${wrapperClass}">
-                <div class="flex items-center gap-4">
+            <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
+                <div class="flex items-center justify-between">
                     
-                    <div class="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${numBadgeClass}">
-                        ${queueNumber}
-                    </div>
+                    <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
+                            ${d.name.charAt(0)}
+                        </div>
 
-                    <div class="flex-grow min-w-0">
-                        <div class="flex justify-between items-start">
-                            <div class="truncate pr-2">
-                                <div class="font-bold text-slate-800 dark:text-slate-100 text-base group-hover:text-primary-600 transition-colors">
-                                    ${d.name}
-                                </div>
-                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
-                                    <span class="bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono tracking-wide text-slate-600 dark:text-slate-300">
-                                        ${profile.plate_number || '---'}
-                                    </span>
-                                    <span class="truncate">${profile.car_model || 'Kendaraan ?'}</span>
-                                </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center">
+                                ${lineNumber}
+                                <div class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${d.name}</div>
+                            </div>
+                            <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2 truncate">
+                                <span>${profile.car_model || '-'}</span>
+                                <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                                <span class="font-mono">${profile.plate_number || '-'}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex-shrink-0">
-                    <div class="w-6 h-6 rounded-full border-2 border-slate-300 dark:border-slate-600 group-hover:border-primary-400 flex items-center justify-center">
-                                    <div class="w-3 h-3 rounded-full bg-primary-600 opacity-0 group-[.selected]:opacity-100 transition-opacity"></div>
-                               </div>
-                         
+                    <div class="flex flex-col items-end gap-2 pl-2">
+                        ${badgeHtml}
+                        ${btnHtml}
                     </div>
+
                 </div>
                 
-                <div class="absolute inset-0 border-2 border-primary-600 rounded-xl opacity-0 group-[.selected]:opacity-100 pointer-events-none transition-opacity"></div>
-            </button>`;
+                <div class="absolute inset-0 border-2 border-blue-600 rounded-xl opacity-0 pointer-events-none transition-opacity selection-ring"></div>
+            </div>`;
         }).join('');
 
-        // Re-bind Event Listeners
-        this.driversList.querySelectorAll('[data-driver-id]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.selectedDriverId = btn.dataset.driverId;
+        // 5. Pasang Event Listener (Hanya untuk yang Standby)
+        // Kita hanya query elemen yang punya atribut `data-driver-id`
+        this.driversList.querySelectorAll('[data-driver-id]').forEach(card => {
+            card.addEventListener('click', () => {
+                const id = card.dataset.driverId;
                 
-                // Hapus class selected dari semua
-                this.driversList.querySelectorAll('.driver-card').forEach(b => b.classList.remove('selected'));
-                
-                // Tambah class selected ke yang diklik
-                btn.classList.add('selected');
-                
+                // Update State
+                this.selectedDriverId = id;
+
+                // Visual Feedback: Hapus highlight lama, pasang highlight baru
+                this.driversList.querySelectorAll('.selection-ring').forEach(el => el.classList.remove('opacity-100'));
+                const ring = card.querySelector('.selection-ring');
+                if (ring) ring.classList.add('opacity-100');
+
+                // Update UI Tombol Konfirmasi Utama
                 this.updateConfirmButtonState();
             });
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("Error render drivers:", error);
         this.driversList.innerHTML = `
-            <div class="text-center p-4 text-danger bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-200">
-                Gagal memuat antrian supir. <br>
-                <button onclick="window.location.reload()" class="underline text-sm mt-1">Muat Ulang</button>
+            <div class="text-center p-4 text-red-600 bg-red-50 rounded-xl border border-red-200">
+                <p class="text-sm font-bold">Gagal memuat antrian.</p>
+                <button onclick="window.location.reload()" class="underline text-xs mt-1">Muat Ulang</button>
             </div>`;
     }
   }
@@ -733,4 +774,9 @@ class CsoApp {
     }
   
 }
+
+const app = new CsoApp(); // 1. Buat instance aplikasi
+app.init();               // 2. Jalankan aplikasi
+window.csoApp = app;      // 3. Simpan ke Global Window agar bisa dipanggil onclick HTML
+
 export { CsoApp };
