@@ -337,6 +337,7 @@ class DriverApiController extends Controller
 
     public function updateLocation(Request $request)
     {
+        // ... (Validasi & Cek Queue tetap sama) ...
         $request->validate([
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
@@ -345,29 +346,29 @@ class DriverApiController extends Controller
         $user = $request->user();
         $profile = $user->driverProfile;
 
-        // 1. Cek Apakah Driver Ada di Antrian?
-        // Jika tidak ada di antrian (karena sudah keluar manual), abaikan GPS update status
+        // 1. Cek Antrian
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
-        
         if (!$isInQueue) {
-            // Kembalikan status apa adanya (Offline), jangan diubah jadi Standby
             return response()->json(['status' => $profile->status]);
         }
 
-        // 2. Cek Jarak (Logika Lama)
-        $airportLat = -0.419266; 
-        $airportLng = 117.255554;
+        // 2. Cek Jarak
+        $airportLat = -0.371975; // Koordinat Bandara (Sesuaikan dengan data Anda)
+        $airportLng = 117.257919;
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-        
-        // Gunakan radius yang sama dengan saat join
-        $radius = 10000.0; // 10000.0 untuk testing
-
+        $radius = 2.0; // Radius 2 KM
         $inArea = ($distance <= $radius);
         
-        // 3. Logika Update Status (Hanya jika ada di Queue)
+        // 3. Logika Update Status
         if ($inArea && $profile->status === 'offline') {
             
-            $profile->update(['status' => 'standby']);
+            // --- PERBAIKAN DI SINI ---
+            // Saat driver terdeteksi masuk area (dari offline -> standby),
+            // Kita catat bahwa dia SUDAH absen hari ini.
+            $profile->update([
+                'status' => 'standby',
+                'last_queue_date' => now()->toDateString() // <--- PENTING: KUNCI PERBAIKANNYA
+            ]);
             
             // Update koordinat
             DriverQueue::where('user_id', $user->id)->update([
@@ -378,24 +379,22 @@ class DriverApiController extends Controller
             return response()->json(['status' => 'standby', 'message' => 'Anda memasuki area bandara.']);
 
         } elseif (!$inArea && $profile->status === 'standby') {
-            
-            // Kalau keluar radius fisik, set offline tapi TETAP di queue (hanya hidden dari CSO)
+            // ... (Logika keluar area tetap sama) ...
             $profile->update(['status' => 'offline']);
-            
             return response()->json(['status' => 'offline', 'message' => 'Anda keluar dari area bandara.']);
         }
 
-        // Update koordinat rutin
+        // ... (Sisa kode tetap sama) ...
         if ($profile->status === 'standby') {
              DriverQueue::where('user_id', $user->id)->update([
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude
             ]);
         }
-
         return response()->json(['status' => $profile->status]); 
     }
 
+    
     public function startBooking(Request $request, Booking $booking)
     {
         if ($request->user()->id !== $booking->driver_id) {

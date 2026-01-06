@@ -678,8 +678,8 @@ class CsoApp {
         // Kita menggunakan font Courier New agar lebar huruf sama (Monospace)
         const style = `
             font-family: 'Courier New', Courier, monospace;
-            font-size: 12px;
-            width: 100%;
+            font-size: 9px;
+            width: 90%;
             max-width: 58mm; /* Lebar kertas thermal standar */
             color: #000;
             line-height: 1.2;
@@ -697,7 +697,7 @@ class CsoApp {
         const logoHtml = `
             <div style="${center} margin-bottom: 8px;">
                 <div style="font-size: 24px; line-height: 1;">✈️</div> 
-                <div style="${bold} font-size: 14px; margin-top: 4px;">KOPERASI ANGKASA JAYA</div>
+                <div style="${bold} font-size: 12px; margin-top: 4px;">KOPERASI ANGKASA JAYA</div>
             </div>
         `;
 
@@ -709,11 +709,11 @@ class CsoApp {
 
             <div style="${flexBetween} ${mb1}">
                 <div>
-                    <div style="font-size: 10px;">Waktu Penjualan</div>
+                    <div style="font-size: 9px;">Waktu Penjualan</div>
                     <div>${tanggal} ${waktu}</div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 10px;">Kasir</div>
+                    <div style="font-size: 9px;">Kasir</div>
                     <div>${kasirName}</div>
                 </div>
             </div>
@@ -744,7 +744,7 @@ class CsoApp {
                 <div>${amountStr}</div>
             </div>
             
-            <div style="${flexBetween} ${bold} ${mb1} font-size: 14px;">
+            <div style="${flexBetween} ${bold} ${mb1} font-size: 10px;">
                 <div>Grand Total</div>
                 <div>Rp ${amountStr}</div>
             </div>
@@ -754,7 +754,7 @@ class CsoApp {
                 <div>Rp ${amountStr}</div>
             </div>
 
-            <div style="${center} ${mt2} font-size: 10px; color: #555;">
+            <div style="${center} ${mt2} font-size: 9px; color: #555;">
                 <div style="${dashedLine}"></div>
                 <div style="margin-top: 5px;">Powered by IT Bandara</div>
                 <div>Simpan struk ini sebagai bukti.</div>
