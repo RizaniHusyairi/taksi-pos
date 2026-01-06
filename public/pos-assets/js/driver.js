@@ -724,18 +724,24 @@ export class DriverApp {
         if (!confirm('Selesaikan perjalanan ini?')) return;
     
         try {
-            // Backend akan return profile terbaru (status akan kembali ke 'offline' otomatis)
-            const updatedProfile = await fetchApi(`/driver/bookings/${this.driverData.active_booking.id}/complete`, { method: 'POST' });
+            // Tampilkan loading
+            this.btnComplete.disabled = true;
+            this.btnComplete.textContent = "Memproses...";
+
+            // Panggil API Complete
+            await fetchApi(`/driver/bookings/${this.driverData.active_booking.id}/complete`, { method: 'POST' });
             
-            this.driverData = updatedProfile;
+            // --- PERBAIKAN UTAMA DI SINI ---
+            // Jangan update manual parsial. Reload data utuh dari server agar 100% sinkron.
+            await this.loadInitialData(); 
             
-            // UI Update
-            this.renderActiveOrder(); // Kotak order hilang
-            this.updateQueueUI(); // Tombol antrian aktif kembali (bisa klik Masuk)
-            this.renderProfile();
-    
             Utils.showToast('Perjalanan selesai', 'success');
-        } catch (error) { /* handled */ }
+        } catch (error) { 
+            /* handled */
+            console.error(error);
+            // Kembalikan tombol jika error
+            this.renderActiveOrder(); 
+        }
     }
     
     async handleWithdrawalRequest(e) {
@@ -810,32 +816,54 @@ export class DriverApp {
         await this.executeStatusChange(payload);
     }
 
-    // Helper untuk eksekusi API (Refactoring dari handleQueueAction lama)
+    // Helper untuk eksekusi API (Masuk/Keluar Antrian)
     async executeStatusChange(payload) {
-        // UI Loading pada tombol utama
-        this.btnQueue.disabled = true;
-        this.btnQueue.textContent = "Memproses...";
+        // 1. Kunci Tombol & Tampilkan Loading
+        if (this.btnQueue) {
+            this.btnQueue.disabled = true;
+            this.btnQueue.textContent = "Memproses...";
+        }
 
         try {
+            // 2. Panggil API
             const response = await fetchApi('/driver/status', {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
 
-            this.driverData = response.data;
-            this.updateQueueUI();
+            // 3. PERBAIKAN UTAMA: Update Data Lokal LANGSUNG dari Response
+            // Backend DriverApiController->setStatus mengembalikan data user terbaru di response.data
+            // Kita pakai data ini langsung agar UI berubah instan (tanpa menunggu loadInitialData)
+            if (response.data) {
+                this.driverData = response.data;
+                
+                // Jika di response backend belum ada active_booking, kita pertahankan yang lama biar aman
+                if (this.activeBooking && !this.driverData.active_booking) {
+                    this.driverData.active_booking = this.activeBooking;
+                }
+            }
+
+            // 4. Update UI Secara Paksa SEKARANG JUGA
+            // Karena this.driverData sudah baru (status: standby), tombol akan langsung berubah merah
+            this.updateQueueUI(); 
             
-            // Pesan sukses berbeda tergantung aksi
+            // 5. Pesan Sukses
             if (payload.action === 'join') {
                 Utils.showToast('Berhasil masuk antrian!', 'success');
             } else if (payload.reason === 'self') {
                 Utils.showToast('Data penumpang dicatat. Saldo terpotong Rp 10.000', 'success');
-                this.renderWallet(); // Refresh saldo karena terpotong
+                this.renderWallet(); 
             } else {
                 Utils.showToast('Anda keluar antrian.', 'success');
             }
 
+            // 6. Sinkronisasi Penuh di Background (Opsional, biar data benar-benar valid)
+            // Tidak perlu 'await' agar UI tidak nge-freeze
+            this.loadInitialData();
+
         } catch (error) {
+            console.error("Gagal update status:", error);
+            // Jika gagal, kembalikan UI ke kondisi semula (berdasarkan data terakhir yang valid)
             this.updateQueueUI(); 
         }
     }
@@ -860,34 +888,23 @@ export class DriverApp {
     // Helper untuk update status ke API (misal: start trip)
     async updateOrderStatus(newStatus) {
         try {
-            // Kita butuh endpoint baru di backend, atau gunakan endpoint update status yg generik.
-            // Untuk solusi cepat, kita gunakan route '/driver/bookings/{id}/update-status'
-            // Pastikan Anda membuat route & controller ini jika belum ada.
-            
-            // ATAU: Jika Anda belum punya endpoint khusus update status selain complete,
-            // Anda bisa memodifikasi backend completeBooking agar menerima parameter status,
-            // TAPI saran saya buat endpoint khusus agar rapi.
-            
-            /* SEMENTARA: Saya asumsikan Anda akan membuat endpoint update-status.
-               Jika tidak ingin ubah backend lagi, Anda bisa lewati langkah "Mulai Perjalanan" 
-               dan langsung Selesaikan, tapi flow-nya jadi aneh.
-            */
+             // Tampilkan loading di tombol
+             const btn = document.getElementById('btnMainAction'); // ID Tombol dinamis yg kita buat
+             if(btn) btn.textContent = "Memproses...";
 
-             const res = await fetchApi(`/driver/bookings/${this.activeBooking.id}/start`, { 
+             await fetchApi(`/driver/bookings/${this.activeBooking.id}/start`, { 
                 method: 'POST' 
             });
 
-            this.driverData = res; // Backend harus return profile terbaru
-            
-            // Refresh UI
-            this.activeBooking = this.driverData.active_booking;
-            this.renderActiveOrder();
-            this.updateQueueUI();
+            // --- PERBAIKAN: RELOAD DATA ---
+            await this.loadInitialData();
             
             Utils.showToast('Perjalanan dimulai!', 'success');
 
         } catch (error) {
             console.error(error);
+            Utils.showToast('Gagal update status', 'error');
+            this.renderActiveOrder(); // Reset tombol
         }
     }
 

@@ -20,15 +20,28 @@ class DriverApiController extends Controller
      * Helper untuk menyuntikkan "Status Virtual" ke objek user
      * agar Frontend JS tidak error.
      */
+    /**
+     * Helper untuk memastikan status sinkron dengan antrian real.
+     */
     private function attachVirtualStatus($user)
     {
-        // Cek apakah user ada di tabel antrian
+        // 1. Cek apakah user benar-benar ada di tabel antrian?
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
+
+        // 2. LOGIKA PERBAIKAN (Sanity Check):
+        // Jika Driver TIDAK ADA di antrian, TAPI status di profil masih 'standby'...
+        // Itu berarti error / data nyangkut. Kita harus koreksi jadi 'offline'.
+        if (!$isInQueue && $user->driverProfile->status === 'standby') {
+            
+            // Ubah objek user yang akan dikirim ke frontend
+            $user->driverProfile->status = 'offline';
+            
+            // PERBAIKAN PERMANEN: Update database sekalian agar tidak nyangkut lagi
+            $user->driverProfile->update(['status' => 'offline']);
+        }
         
-        // Buat properti dinamis 'status' di driverProfile
-        // Frontend tahunya: 'available' (Online) atau 'offline'
-        $user->driverProfile->status = $isInQueue ? 'available' : 'offline';
-        
+        // Catatan: Jika status 'ontrip', biarkan saja (karena memang tidak ada di queue)
+
         return $user;
     }
 

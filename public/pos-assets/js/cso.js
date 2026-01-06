@@ -193,11 +193,14 @@ class CsoApp {
         }
 
         // --- RENDER HTML ---
-        this.driversList.innerHTML = drivers.map((d) => {
+        this.driversList.innerHTML = drivers.map((d,index) => {
             const profile = d.driver_profile || {};
             const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
+
+            // Hitung Nomor Urut Antrian (Index + 1)
+            const queueNumber = index + 1;
             
-            // --- PERBAIKAN DI SINI ---
+            
             // Kita terima status 'standby' ATAU 'available' agar aman
             const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
 
@@ -238,9 +241,9 @@ class CsoApp {
             <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
-                            ${d.name.charAt(0)}
-                        </div>
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-lg font-bold text-slate-700 dark:text-slate-200">
+                        ${queueNumber}
+                    </div>
                         <div class="min-w-0">
                             <div class="flex items-center">
                                 ${lineNumber}
