@@ -1,4 +1,3 @@
-
 import { Utils } from './utils.js';
 
 
@@ -61,16 +60,7 @@ class CsoApp {
         updateTheme(); // Jalankan saat pertama kali dimuat
     }
 
-//   initTheme() {
-//     const updateTheme = () => {
-//         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-//             document.documentElement.classList.add('dark');
-//         } else {
-//             document.documentElement.classList.remove('dark');
-//         }
-//     };
-//     updateTheme();
-//   }
+
 
   cacheEls() {
       this.views = ['new', 'history'];
@@ -205,7 +195,6 @@ class CsoApp {
             const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
 
             // Debugging Status Driver
-            console.log(`Render Driver: ${d.name} | Status: ${rawStatus} | Clickable: ${isStandby}`);
             
             let wrapperClass, badgeHtml, btnHtml, clickAttribute;
 
@@ -267,13 +256,11 @@ class CsoApp {
 
         // --- PASANG LISTENER CLICK ---
         const clickableCards = this.driversList.querySelectorAll('[data-driver-id]');
-        console.log(`Jumlah driver yang bisa diklik: ${clickableCards.length}`); // Debugging
 
         clickableCards.forEach(card => {
             card.addEventListener('click', () => {
                 const id = card.dataset.driverId;
                 
-                console.log(`Driver diklik! ID: ${id}`); // <--- CEK INI DI CONSOLE NANTI
 
                 // Update State
                 this.selectedDriverId = id;
@@ -383,7 +370,7 @@ class CsoApp {
     this.openPayment();
 }
 
-  openPayment() {
+    openPayment() {
         if (!this.selectedOrderData) return;
         
         // Reset UI Modal
@@ -401,7 +388,7 @@ class CsoApp {
         this.modal.classList.remove('hidden');
     }
 
-  closePayment() {
+    closePayment() {
         this.modal.classList.add('hidden');
         this.modal.classList.remove('flex');
         // Tidak perlu cancelBooking ke API karena data belum masuk DB
@@ -509,7 +496,7 @@ class CsoApp {
             }
         }
     }
-  showReceipt(txOrBookingObject) {
+    showReceipt(txOrBookingObject) {
 
         this.lastReceiptData = txOrBookingObject; // <-- TAMBAHKAN BARIS INI
         // Fungsi ini sekarang bisa menerima objek transaksi dari riwayat
@@ -653,16 +640,25 @@ class CsoApp {
     }
 
     generateReceiptHTML(tx) {
-        // Logika penentuan variabel (Booking vs Transaction)
+        // --- 1. LOGIKA DATA ---
         const isBooking = tx.zone_id !== undefined;
         const booking = isBooking ? tx : tx.booking;
 
-        // Data-data Struk
+        // Ambil Data Driver & Profile
+        const driverObj = isBooking ? tx.driver : booking?.driver;
+        const profile = driverObj?.driver_profile || {};
+
+        
+        // LOGIKA BARU: Ambil Line Number
+        const lineNo = profile.line_number ? `#L${profile.line_number}` : ''; 
+        // Gabungkan Nama Driver + Line Number (Contoh: "Budi (#L5)")
+        const driverDisplayName = driverObj ? `${driverObj.name} ${lineNo}` : 'N/A';
+
+        // ... (Logika Tanggal, Waktu, Zone, Price tetap sama) ...
         const dateTime = new Date(tx.created_at || Date.now());
         const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
         const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         
-        // Data Transaksi
         const zoneName = isBooking 
             ? this.zones.find(z => z.id == tx.zone_id)?.name 
             : tx.booking?.zone_to?.name;
@@ -670,22 +666,19 @@ class CsoApp {
         const price = tx.price || tx.amount;
         const amountStr = new Intl.NumberFormat('id-ID').format(price);
         const code = String(tx.id || booking?.id || 'N/A').toUpperCase();
-        
-        // Nama Kasir (CSO)
-        const kasirName = tx.cso?.name?.split(' ')[0] || 'Admin'; // Ambil nama depan saja biar muat
-
-        // Metode Pembayaran
+        const kasirName = tx.cso?.name?.split(' ')[0] || 'Admin';
         const methodDisplay = tx.method?.includes('Cash') ? "CASH" : "QRIS";
 
-        // --- STYLE CSS INLINE (Agar tercetak rapi di printer thermal) ---
-        // Kita menggunakan font Courier New agar lebar huruf sama (Monospace)
+        // --- 2. STYLE CSS (Tetap Sama) ---
         const style = `
             font-family: 'Courier New', Courier, monospace;
             font-size: 9px;
             width: 90%;
-            max-width: 58mm; /* Lebar kertas thermal standar */
+            max-width: 58mm; 
             color: #000;
+            font-weight: bold;
             line-height: 1.2;
+            padding: 5px 0;
         `;
         
         const center = `text-align: center;`;
@@ -695,16 +688,18 @@ class CsoApp {
         const mb1 = `margin-bottom: 4px;`;
         const mt2 = `margin-top: 8px;`;
 
-        // Logo Placeholder (Ganti src dengan URL logo koperasimu)
-        // Gunakan filter grayscale agar logo tercetak jelas di printer hitam putih
+        // Logo URL (Pastikan file sudah ada)
+        const logoUrl = '/pos-assets/img/logo-apt.svg'; 
+
         const logoHtml = `
             <div style="${center} margin-bottom: 8px;">
-                <div style="font-size: 24px; line-height: 1;">✈️</div> 
-                <div style="${bold} font-size: 12px; margin-top: 4px;">KOPERASI ANGKASA JAYA</div>
+                <img src="${logoUrl}" alt="Logo" style="width: 80px; height: auto; filter: grayscale(100%) contrast(120%); display: block; margin: 0 auto;">
+                <div style="${bold} font-size: 12px; margin-top: 6px;">KOPERASI ANGKASA JAYA</div>
+                 <div style="font-size: 8px;">Bandara Udara APT. Pranoto Samarinda</div>
             </div>
         `;
 
-        // --- HTML STRUK ---
+        // --- 3. HTML STRUK (Ditambahkan Baris Supir) ---
         return `
         <div style="${style}">
             
@@ -712,16 +707,21 @@ class CsoApp {
 
             <div style="${flexBetween} ${mb1}">
                 <div>
-                    <div style="font-size: 9px;">Waktu Penjualan</div>
+                    <div style="font-size: 8px; color: #333;">Waktu</div>
                     <div>${tanggal} ${waktu}</div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="font-size: 9px;">Kasir</div>
+                    <div style="font-size: 8px; color: #333;">Kasir</div>
                     <div>${kasirName}</div>
                 </div>
             </div>
 
-            <div style="${mb1}">#${code}</div>
+            <div style="${flexBetween} ${mb1}">
+                <div>Supir:</div>
+                <div style="text-align: right;">${driverDisplayName}</div>
+            </div>
+
+            <div style="${mb1}">No. ${code}</div>
 
             <div style="${dashedLine}"></div>
 
@@ -753,13 +753,14 @@ class CsoApp {
             </div>
 
             <div style="${flexBetween} ${mb1}">
-                <div>${methodDisplay}</div>
+                <div>Bayar (${methodDisplay})</div>
                 <div>Rp ${amountStr}</div>
             </div>
 
-            <div style="${center} ${mt2} font-size: 9px; color: #555;">
-                <div style="${dashedLine}"></div>
-                <div style="margin-top: 5px;">Powered by IT Bandara</div>
+            <div style="${dashedLine}"></div>
+            
+            <div style="${center} ${mt2} font-size: 8px; color: #333;">
+                <div style="margin-top: 5px;">Terima Kasih atas Kunjungan Anda</div>
                 <div>Simpan struk ini sebagai bukti.</div>
             </div>
 

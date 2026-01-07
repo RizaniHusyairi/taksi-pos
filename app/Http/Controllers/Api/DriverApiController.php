@@ -248,21 +248,41 @@ class DriverApiController extends Controller
     public function getBalance(Request $request)
     {
         $driver = $request->user();
-        $commissionRate = (float) Setting::where('key', 'commission_rate')->value('value');
+        
+        // Ambil Rate Komisi (misal 0.2 untuk 20%)
+        // Pastikan di database settings value-nya desimal (0.2) atau sesuaikan pembagiannya
+        $rate = (float) Setting::where('key', 'commission_rate')->value('value') ?: 0.2;
 
-        $totalCredits = Transaction::whereHas('booking', function ($query) use ($driver) {
-                $query->where('driver_id', $driver->id);
+        // 1. Hitung Pemasukan (Uang di Sistem) - QRIS & CashCSO yang statusnya 'Unpaid'
+        $pendingIncome = Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id);
             })
             ->whereIn('method', ['QRIS', 'CashCSO'])
+            ->where('payout_status', 'Unpaid')
             ->sum('amount');
-        
-        $driverShare = $totalCredits * (1 - $commissionRate); // asumsi komisi disimpan sbg 20 bukan 0.2
 
-        $totalDebits = $driver->withdrawals()
-            ->whereIn('status', ['Approved', 'Paid'])
+        // Hak Driver = Total - Komisi
+        $driverShare = $pendingIncome * (1 - $rate);
+
+        // 2. Hitung Hutang (Uang di Driver) - CashDriver yang statusnya 'Unpaid'
+        // Driver harus bayar komisi ke sistem
+        $pendingDebtData = Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id);
+            })
+            ->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
             ->sum('amount');
-            
-        return response()->json(['balance' => round($driverShare - $totalDebits)]);
+
+        $driverDebt = $pendingDebtData * $rate;
+
+        // 3. Saldo Bersih
+        $netBalance = $driverShare - $driverDebt;
+
+        return response()->json([
+            'balance' => round($netBalance),
+            'income_pending' => $driverShare, // Info tambahan buat UI (opsional)
+            'debt_pending' => $driverDebt // Info tambahan buat UI (opsional)
+        ]);
     }
     
     /**
@@ -270,24 +290,46 @@ class DriverApiController extends Controller
      */
     public function requestWithdrawal(Request $request)
     {
-        $validated = $request->validate([
-            'amount' => 'required|numeric|min:10000',
-        ]);
-        
-        // Hitung saldo lagi untuk validasi
-        $balance = $this->getBalance($request)->getData()->balance;
+        $driver = $request->user();
 
-        if ($validated['amount'] > $balance) {
-            return response()->json(['message' => 'Jumlah penarikan melebihi saldo yang tersedia.'], 422);
+        // 1. Cek Saldo lagi untuk memastikan
+        $balanceData = $this->getBalance($request)->getData();
+        $amountToWithdraw = $balanceData->balance;
+
+        if ($amountToWithdraw < 10000) {
+            return response()->json(['message' => 'Saldo bersih belum mencapai batas minimal pencairan (Rp 10.000).'], 422);
         }
 
-        $request->user()->withdrawals()->create([
-            'amount' => $validated['amount'],
-            'status' => 'Pending',
-            'requested_at' => now(),
-        ]);
+        // 2. Mulai Transaksi Database
+        DB::transaction(function () use ($driver, $amountToWithdraw) {
+            
+            // A. Buat Record Penarikan
+            $withdrawal = $driver->withdrawals()->create([
+                'amount' => $amountToWithdraw,
+                'status' => 'Pending',
+                'requested_at' => now(),
+            ]);
 
-        return response()->json(['message' => 'Withdrawal request submitted.'], 201);
+            // B. KUNCI TRANSAKSI (Ubah status 'Unpaid' -> 'Processing')
+            
+            // Update transaksi Pemasukan (QRIS/CashCSO)
+            Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id);
+            })
+            ->whereIn('method', ['QRIS', 'CashCSO'])
+            ->where('payout_status', 'Unpaid')
+            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $withdrawal->id]); // Tandai sedang diproses
+
+            // Update transaksi Hutang (CashDriver) - Dianggap lunas/dipotong saat pencairan ini sukses
+            Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id);
+            })
+            ->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
+            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $withdrawal->id]); // Tandai sedang diproses
+        });
+
+        return response()->json(['message' => 'Permintaan pencairan berhasil dikirim.'], 201);
     }
     
     /**

@@ -130,6 +130,7 @@ export class AdminApp{
         console.error("Gagal menyimpan pengaturan:", error);
         alert('Gagal menyimpan pengaturan. Silakan coba lagi.');
       }
+
     });
     
 
@@ -277,6 +278,21 @@ export class AdminApp{
     document.getElementById('driverRankBy')?.addEventListener('change', ()=> this.renderDriverReport());
 
     this.renderAll();
+
+    // Di dalam initCommon()
+    document.getElementById('btnCloseWdDetails')?.addEventListener('click', () => {
+      document.getElementById('modalWdDetails').classList.add('hidden');
+      document.getElementById('modalWdDetails').classList.remove('flex');
+  });
+  document.getElementById('btnExitWdDetails')?.addEventListener('click', () => {
+      document.getElementById('modalWdDetails').classList.add('hidden');
+      document.getElementById('modalWdDetails').classList.remove('flex');
+  });
+  
+  // Agar fungsi openWdDetails bisa dipanggil dari onclick string HTML
+
+  window.app = this;
+  window.openWdDetails = (id) => this.openWdDetails(id);
   }
 
   renderAll(){
@@ -590,17 +606,42 @@ export class AdminApp{
         const route = `Bandara → ${destName} ${destBadge}`;
         // -------------------------------------
 
+        // --- LOGIKA BARU STATUS PENCAIRAN ---
+        let payoutBadge = '';
+        const pStatus = t.payout_status || 'Unpaid'; // Default Unpaid
+
+        if (t.method === 'CashDriver') {
+            // Logika Hutang Driver
+            if (pStatus === 'Paid') {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">Lunas (Komisi Dibayar)</span>`;
+            } else if (pStatus === 'Processing') {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Proses Potong</span>`;
+            } else {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">Belum Lunas</span>`;
+            }
+        } else {
+            // Logika Pemasukan (QRIS/CashCSO)
+            if (pStatus === 'Paid') {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">Sudah Cair</span>`;
+            } else if (pStatus === 'Processing') {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Sedang Diproses</span>`;
+            } else {
+                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Belum Dicairkan</span>`;
+            }
+        }
+        // ------------------------------------
+
         return `<tr class="border-t hover:bg-slate-50 transition-colors">
-          <td class="py-3 px-2 text-slate-600">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-          <td class="py-3 px-2 font-medium">${csoName}</td>
-          <td class="py-3 px-2">${driverName}</td>
-          <td class="py-3 px-2 text-slate-700">${route}</td>
+          <td class="py-3 px-2 text-slate-600 text-xs">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+          <td class="py-3 px-2 font-medium text-xs">${t.cso?.name || '-'}</td>
+          <td class="py-3 px-2 text-xs">${t.driver?.name || '-'}</td>
+          <td class="py-3 px-2 text-slate-700 text-xs">${t.booking?.zone_to?.name || 'Manual'}</td>
           <td class="py-3 px-2">
-            <span class="px-2 py-1 rounded text-xs font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">
+            <span class="px-2 py-1 rounded text-[10px] font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}">
                 ${t.method}
             </span>
           </td>
-          <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700">
+          <td class="py-3 px-2">${payoutBadge}</td> <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700 text-xs">
             ${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}
           </td>
         </tr>`;
@@ -639,42 +680,37 @@ export class AdminApp{
         console.log("driver:",w);
         // Tampilkan Info Bank
         const currentStatus = w.status.toLowerCase(); 
-            let actionButtons = '';
-
-            // LOGIKA BARU:
-            // Pending -> Tampil tombol "Setujui" (Buka Modal) & "Tolak" (API Reject)
-            // Approved -> Tampil tombol "Lihat Bukti" (Hanya info)
-            // Rejected -> Tampil teks "Ditolak"
-
-            if (currentStatus === 'pending') {
-                actionButtons = `
-                    <div class="flex gap-1">
-                        <button class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow" onclick="window.openPayModal(${w.id})">Setujui</button>
-                        <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-wd-act="reject" data-id="${w.id}">Tolak</button>
-                    </div>
-                `;
-            } else if (currentStatus === 'approved') {
-                // Jika sudah Approved, tampilkan tombol lihat bukti jika ada
-                if (w.proof_image) {
-                    actionButtons = `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open( '/storage/${w.proof_image}', '_blank')">Lihat Bukti</button>`;
-                } else {
-                    actionButtons = `<span class="text-xs text-emerald-600 font-bold">Disetujui</span>`;
-                }
-            } else if (currentStatus === 'rejected') {
-                actionButtons = `<span class="text-xs text-red-500 italic">Ditolak</span>`;
-            }
-
-            return `<tr class="border-t hover:bg-slate-50">
-                <td class="py-2 align-top">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
-                <td class="py-2 align-top">
-                    <div class="font-medium">${w.driver?.name || 'Supir Dihapus'}</div>
-                    ${bankInfo}
-                </td>
-                <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', {style:'currency', currency:'IDR'})}</td>
-                <td class="py-2 align-top">${this.wdBadge(w.status)}</td>
-                <td class="py-2 align-top">${actionButtons}</td>
-            </tr>`;
-      }).join('');
+        let actionButtons = '';
+        // Tambahkan tombol DETAIL di semua status
+        const btnDetail = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded mr-1" onclick="window.openWdDetails(${w.id})">Detail</button>`;
+ 
+         if (w.status === 'Pending') {
+             actionButtons = `
+                 <div class="flex items-center gap-1">
+                     ${btnDetail}
+                     <button class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow" onclick="window.openPayModal(${w.id})">Bayar</button>
+                     <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-wd-act="reject" data-id="${w.id}">Tolak</button>
+                 </div>
+             `;
+         } else if (w.status === 'Approved') {
+              let proofBtn = w.proof_image 
+                 ? `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
+                 : '';
+              actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn}</div>`;
+         } else {
+              actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-red-500 italic ml-1">Ditolak</span></div>`;
+         }
+          return `<tr class="border-t hover:bg-slate-50">
+              <td class="py-2 align-top">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
+              <td class="py-2 align-top">
+                  <div class="font-medium">${w.driver?.name || 'Supir Dihapus'}</div>
+                  ${bankInfo}
+              </td>
+              <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', {style:'currency', currency:'IDR'})}</td>
+              <td class="py-2 align-top">${this.wdBadge(w.status)}</td>
+              <td class="py-2 align-top">${actionButtons}</td>
+          </tr>`;
+        }).join('');
 
       tbody.querySelectorAll('[data-wd-act="reject"]').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -802,6 +838,99 @@ async renderSettings() { // <-- Jadikan async
     }
   } catch (error) {
     console.error("Gagal memuat pengaturan:", error);
+  }
+}
+
+// --- FUNGSI BARU: Buka Modal Detail ---
+// --- FUNGSI BARU: Buka Modal Detail dengan Hitungan Komisi ---
+async openWdDetails(id) {
+  const modal = document.getElementById('modalWdDetails');
+  const list = document.getElementById('wdDetailsList');
+  const totalEl = document.getElementById('wdDetailsTotal');
+  
+  list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Memuat data dan menghitung komisi...</td></tr>';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+
+  try {
+      // 1. Ambil Data Transaksi DAN Data Setting (Untuk tahu Rate Komisi) secara paralel
+      const [transactions, settings] = await Promise.all([
+          fetchApi(`/admin/withdrawals/${id}/details`),
+          fetchApi('/admin/settings')
+      ]);
+      
+      if (transactions.length === 0) {
+          list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Data tidak ditemukan.</td></tr>';
+          totalEl.textContent = 'Rp0';
+          return;
+      }
+
+      // Ambil rate komisi (default 0.2 atau 20% jika error)
+      const rate = parseFloat(settings.commission_rate) || 0.2; 
+      
+      let totalNet = 0;
+
+      list.innerHTML = transactions.map(t => {
+          const amount = t.amount;
+          let netAmount = 0;
+          let rowClass = '';
+          let netClass = '';
+          let calculationInfo = '';
+
+          // --- LOGIKA HITUNG NET ---
+          if (t.method === 'CashDriver') {
+              // Jika CashDriver: Driver BERHUTANG komisi ke admin
+              // Rumus: -(Amount * Rate)
+              // Contoh: 100.000 * 20% = -20.000
+              const debt = amount * rate;
+              netAmount = -debt;
+              
+              rowClass = 'bg-red-50/50';
+              netClass = 'text-red-600 font-bold';
+              calculationInfo = `<div class="text-[10px] text-red-400">Potongan Komisi ${(rate*100)}%</div>`;
+          } else {
+              // Jika QRIS/CashCSO: Driver MENERIMA sisa setelah komisi
+              // Rumus: Amount * (1 - Rate)
+              // Contoh: 100.000 * (1 - 0.2) = 80.000
+              netAmount = amount * (1 - rate);
+              
+              rowClass = '';
+              netClass = 'text-emerald-600 font-bold';
+              calculationInfo = `<div class="text-[10px] text-slate-400">Pendapatan Bersih</div>`;
+          }
+
+          // Akumulasi Total Akhir
+          totalNet += netAmount;
+
+          return `
+          <tr class="border-b border-slate-50 ${rowClass}">
+              <td class="px-4 py-3 text-xs text-slate-500">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-xs font-medium text-slate-700">
+                  ${t.booking?.zone_to?.name || 'Manual'}
+              </td>
+              <td class="px-4 py-3 text-xs">
+                  <span class="px-2 py-1 rounded-full border ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'} text-[10px] font-bold">
+                    ${t.method}
+                  </span>
+              </td>
+              <td class="px-4 py-3 text-xs font-mono text-right text-slate-500">
+                  ${Utils.formatCurrency(amount)}
+              </td>
+              <td class="px-4 py-3 text-right">
+                  <div class="${netClass} font-mono text-sm">
+                    ${netAmount < 0 ? '-' : ''} ${Utils.formatCurrency(Math.abs(netAmount))}
+                  </div>
+                  ${calculationInfo}
+              </td>
+          </tr>`;
+      }).join('');
+
+      // Tampilkan Total Bersih (Harus sama dengan jumlah yang diajukan di Withdrawal)
+      totalEl.textContent = Utils.formatCurrency(totalNet);
+
+  } catch (error) {
+      console.error(error);
+      list.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Gagal memuat detail.</td></tr>';
   }
 }
 

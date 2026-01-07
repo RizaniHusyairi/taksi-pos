@@ -110,36 +110,35 @@
 
     <!-- View: Dompet -->
     <section id="view-wallet" class="view-section hidden space-y-5">
-      <!-- Wallet Balance Card -->
       <div>
           <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Dompet Saya</h2>
           <div class="bg-gradient-to-br from-primary-600 to-primary-800 rounded-xl shadow-xl p-5 text-white">
               <div class="flex justify-between items-start">
                   <div>
-                      <p class="text-sm opacity-80">Total Saldo</p>
+                      <p class="text-sm opacity-80">Saldo Bersih Siap Cair</p>
                       <p id="walletBalance" class="text-4xl font-bold tracking-tight">Rp0</p>
                   </div>
                   <div class="w-8 h-8 rounded-full bg-white/20 text-white grid place-items-center font-bold">KT</div>
-              </div>`
-              <p class="text-xs opacity-70 mt-4">*Saldo setelah dipotong komisi koperasi.</p>
+              </div>
+              <div class="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs opacity-90">
+                  <span>Pemasukan: <span id="infoIncome" class="font-bold">Rp0</span></span>
+                  <span>Potongan Hutang: <span id="infoDebt" class="font-bold text-red-200">Rp0</span></span>
+              </div>
           </div>
       </div>
 
-      <!-- Withdrawal Form Card -->
       <div>
-        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Tarik Dana</h2>
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
-          <form id="formWd" class="space-y-3">
-            <div>
-              <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Jumlah Penarikan (Rp)</label>
-              <input id="wdAmount" type="number" min="10000" placeholder="Contoh: 50000" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:border-primary-500 focus:ring-primary-500" required>
-            </div>
-            <button class="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95">Ajukan Penarikan</button>
-          </form>
+        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Aksi</h2>
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 text-center">
+          <p class="text-xs text-slate-500 mb-4">
+            Klik tombol di bawah untuk mencairkan seluruh saldo bersih yang tersedia dari riwayat pesanan.
+          </p>
+          <button id="btnRequestWithdrawal" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95 disabled:bg-slate-400 disabled:cursor-not-allowed">
+             Cairkan Dana Sekarang
+          </button>
         </div>
       </div>
 
-      <!-- Withdrawal History Card -->
       <div>
         <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Riwayat Penarikan</h2>
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">

@@ -372,36 +372,63 @@ class ApiController extends Controller
     // [UBAH INI] Setujui Permintaan + Upload Bukti (Satu Langkah)
     public function adminApproveWithdrawal(Request $request, Withdrawals $withdrawal)
     {
-        // Validasi: Wajib ada gambar bukti transfer
         $request->validate([
-            'proof_image' => 'required|image|mimes:jpeg,png,jpg|max:2048', // Max 2MB
+            'proof_image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
-        // 1. Simpan file gambar
         if ($request->hasFile('proof_image')) {
             $path = $request->file('proof_image')->store('proofs', 'public');
             
-            // 2. Update database: Status langsung 'Approved' & simpan bukti
-            $withdrawal->update([
-                'status' => 'Approved', 
-                'processed_at' => now(),
-                'proof_image' => $path
-            ]);
+            DB::transaction(function () use ($withdrawal, $path) {
+                // 1. Update status Withdrawal
+                $withdrawal->update([
+                    'status' => 'Approved', 
+                    'processed_at' => now(),
+                    'proof_image' => $path
+                ]);
+
+                // 2. [BARU] Update Status Transaksi Terkait menjadi 'Paid' (Lunas/Cair)
+                Transaction::where('withdrawal_id', $withdrawal->id)
+                    ->update(['payout_status' => 'Paid']);
+            });
             
             return response()->json([
-                'message' => 'Permintaan disetujui & bukti transfer berhasil diupload.',
+                'message' => 'Permintaan disetujui, bukti terupload, dan status transaksi diperbarui.',
                 'path' => $path
             ]);
         }
 
-        return response()->json(['message' => 'Gagal mengupload bukti transfer.'], 400);
+        return response()->json(['message' => 'Gagal mengupload bukti.'], 400);
     }
 
     // Tolak permintaan
+    // === Update pada adminRejectWithdrawal ===
     public function adminRejectWithdrawal(Withdrawals $withdrawal)
     {
-        $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
-        return response()->json(['message' => 'Permintaan ditolak (Rejected).']);
+        DB::transaction(function () use ($withdrawal) {
+            // 1. Update Withdrawal
+            $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
+
+            // 2. [BARU] Kembalikan Status Transaksi ke 'Unpaid' dan lepas kaitannya
+            Transaction::where('withdrawal_id', $withdrawal->id)
+                ->update([
+                    'payout_status' => 'Unpaid',
+                    'withdrawal_id' => null // Lepas ikatan agar bisa diajukan lagi nanti
+                ]);
+        });
+
+        return response()->json(['message' => 'Permintaan ditolak dan saldo dikembalikan ke Unpaid.']);
+    }
+
+    // === [METHOD BARU] Ambil Detail Transaksi dalam sebuah Withdrawal ===
+    public function adminGetWithdrawalDetails(Withdrawals $withdrawal)
+    {
+        // Ambil transaksi yang withdrawal_id nya sesuai dengan id penarikan ini
+        $transactions = Transaction::with(['booking.zoneTo'])
+            ->where('withdrawal_id', $withdrawal->id)
+            ->get();
+
+        return response()->json($transactions);
     }
 
     // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda

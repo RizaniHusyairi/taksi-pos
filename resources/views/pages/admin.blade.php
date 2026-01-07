@@ -246,7 +246,7 @@
                   <th class="py-2">Supir</th>
                   <th class="py-2">Rute</th>
                   <th class="py-2">Metode</th>
-                  <th class="py-2">Jumlah</th>
+                  <th class="py-2">Status Cair/Lunas</th> <th class="py-2">Jumlah</th>
                 </tr>
               </thead>
               <tbody id="txTable"></tbody>
@@ -290,6 +290,46 @@
                     <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">Setujui & Kirim</button>
                 </div>
             </form>
+        </div>
+      </div>
+
+      <div id="modalWdDetails" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800">Rincian Transaksi</h3>
+                    <p class="text-xs text-slate-500">Daftar transaksi yang termasuk dalam pengajuan ini.</p>
+                </div>
+                <button id="btnCloseWdDetails" class="text-slate-400 hover:text-slate-600 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-0 overflow-y-auto flex-1">
+                <table class="w-full text-sm text-left">
+                  <thead class="bg-slate-50 text-slate-500 sticky top-0">
+                    <tr>
+                        <th class="px-4 py-3">Tanggal</th>
+                        <th class="px-4 py-3">Rute</th>
+                        <th class="px-4 py-3">Metode</th>
+                        <th class="px-4 py-3 text-right">Nominal Awal</th>
+                        <th class="px-4 py-3 text-right">Bersih (Ke Driver)</th>
+                    </tr>
+                </thead>
+                
+                <tbody id="wdDetailsList" class="divide-y divide-slate-100">
+                    </tbody>
+                
+                <tfoot class="bg-slate-50 font-bold text-slate-700">
+                    <tr>
+                        <td colspan="4" class="px-4 py-3 text-right">Total Pencairan (Net):</td>
+                        <td class="px-4 py-3 text-right text-lg text-emerald-600" id="wdDetailsTotal">Rp0</td>
+                    </tr>
+                </tfoot>
+                </table>
+            </div>
+            
+            <div class="p-4 border-t flex justify-end">
+                <button id="btnExitWdDetails" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium">Tutup</button>
+            </div>
         </div>
       </div>
 

@@ -57,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/withdrawals/{withdrawal}/approve', [ApiController::class, 'adminApproveWithdrawal']);
         Route::post('/withdrawals/{withdrawal}/reject', [ApiController::class, 'adminRejectWithdrawal']);
         Route::post('/withdrawals/{withdrawal}/paid', [ApiController::class, 'adminMarkAsPaid']);
+        Route::get('/withdrawals/{withdrawal}/details', [ApiController::class, 'adminGetWithdrawalDetails']);
         
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);

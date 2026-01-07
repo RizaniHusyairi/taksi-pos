@@ -19,7 +19,8 @@ return new class extends Migration
             $table->foreignId('booking_id')
                   ->constrained('bookings')
                   ->onDelete('cascade'); // Opsi: jika booking dihapus, transaksi ini juga ikut terhapus.
-
+            
+                  
             // Kolom untuk metode pembayaran dengan nilai yang sudah ditentukan.
             $table->enum('method', ['QRIS', 'CashCSO', 'CashDriver']);
 
@@ -27,6 +28,7 @@ return new class extends Migration
             // Sangat direkomendasikan untuk nilai moneter.
             $table->decimal('amount', 10, 2);
             $table->string('payment_proof')->nullable();
+            $table->enum('payout_status',['Unpaid','Processing','Paid'])->default('Unpaid');
 
             // Kolom created_at dan updated_at (TIMESTAMP)
             $table->timestamps();

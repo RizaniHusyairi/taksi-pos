@@ -21,6 +21,9 @@ class Transaction extends Model
     protected $fillable = [
         'booking_id',
         'method',
+        'payment_proof',
+        'withdrawal_id',
+        'payout_status',
         'amount',
     ];
 
