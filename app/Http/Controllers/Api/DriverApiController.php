@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Models\Withdrawals;
 use App\Models\Setting;
 use App\Models\DriverQueue;
+use Illuminate\Support\Facades\Hash;
 
 class DriverApiController extends Controller
 {
@@ -291,6 +292,14 @@ class DriverApiController extends Controller
     public function requestWithdrawal(Request $request)
     {
         $driver = $request->user();
+        
+        // --- VALIDASI : Cek Rekening ---
+        if (!$driver->driverProfile || empty($driver->driverProfile->account_number)) {
+            return response()->json([
+                'message' => 'Anda belum mengatur rekening pencairan. Silakan isi nomor rekening Bank BTN di menu Profil.'
+            ], 422); // 422 Unprocessable Entity
+        }
+        
 
         // 1. Cek Saldo lagi untuk memastikan
         $balanceData = $this->getBalance($request)->getData();
@@ -369,7 +378,6 @@ class DriverApiController extends Controller
     public function updateBankDetails(Request $request)
     {
         $validated = $request->validate([
-            'bank_name' => 'required|string|max:50',
             'account_number' => 'required|string|max:50',
         ]);
 
@@ -379,13 +387,13 @@ class DriverApiController extends Controller
         $user->driverProfile()->updateOrCreate(
             ['user_id' => $user->id],
             [
-                'bank_name' => $validated['bank_name'],
+                'bank_name' => 'Bank BTN',
                 'account_number' => $validated['account_number']
             ]
         );
 
         return response()->json([
-            'message' => 'Informasi rekening berhasil disimpan.',
+            'message' => 'Informasi rekening BTN berhasil disimpan.',
             'data' => $user->load('driverProfile')
         ]);
     }
@@ -463,5 +471,30 @@ class DriverApiController extends Controller
 
         // Kembalikan profile terbaru agar UI driver terupdate
         return $this->getProfile($request);
+    }
+
+    /**
+     * Fitur Ganti Password Driver
+     */
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required',
+            'new_password' => 'required|string|min:6|confirmed', // Butuh field new_password_confirmation
+        ]);
+
+        $user = $request->user();
+
+        // 1. Cek Password Lama
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'Password saat ini salah.'], 422);
+        }
+
+        // 2. Update Password Baru
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json(['message' => 'Password berhasil diubah.']);
     }
 }

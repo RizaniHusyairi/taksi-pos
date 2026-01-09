@@ -141,6 +141,57 @@
             </div>
         </div>
     </section>
+    <section id="view-profile" class="view-section hidden space-y-5">
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 text-center">
+            <div class="w-20 h-20 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-3">
+                <span id="profileInitial">U</span>
+            </div>
+            <h2 id="profileNameDisplay" class="text-xl font-bold text-slate-800 dark:text-slate-100">Nama User</h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Customer Service Officer</p>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
+            <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">Edit Biodata</h3>
+            <form id="formEditProfile" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Nama Lengkap</label>
+                    <input type="text" id="editName" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Username</label>
+                    <input type="text" id="editUsername" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm" required>
+                </div>
+                <div class="text-right">
+                    <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white text-sm font-bold py-2 px-4 rounded-lg shadow transition-transform active:scale-95">
+                        Simpan Perubahan
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
+            <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">Ganti Password</h3>
+            <form id="formChangePassword" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Password Saat Ini</label>
+                    <input type="password" id="currentPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Password Baru</label>
+                    <input type="password" id="newPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm" required minlength="6">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Konfirmasi Password Baru</label>
+                    <input type="password" id="confirmPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm" required minlength="6">
+                </div>
+                <div class="text-right">
+                    <button type="submit" class="bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 text-white text-sm font-bold py-2 px-4 rounded-lg shadow transition-transform active:scale-95">
+                        Update Password
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
 
   </main>
 
@@ -157,6 +208,12 @@
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
       <span class="nav-text text-xs mt-1">Riwayat</span>
+    </a>
+    <a href="#profile" class="nav-item flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 w-full h-full transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+      <span class="nav-text text-xs mt-1">Profil</span>
     </a>
   </nav>
 

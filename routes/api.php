@@ -89,6 +89,11 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/history', [CsoApiController::class, 'getHistory']);
 
         Route::post('/process-order', [CsoApiController::class, 'processOrder']);
+
+        // Route Profile CSO
+        Route::get('/profile', [CsoApiController::class, 'getProfile']);
+        Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
+        Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
     });
 
 
@@ -114,5 +119,6 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/location', [DriverApiController::class, 'updateLocation']);
 
         Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
+        Route::post('/change-password', [DriverApiController::class, 'changePassword']);
     });
 });

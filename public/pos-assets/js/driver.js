@@ -158,6 +158,12 @@ export class DriverApp {
         this.btnCancelLeave = document.getElementById('btnCancelLeave');
         // Radio buttons
         this.radioReasons = document.getElementsByName('reason');
+
+        // --- TAMBAHAN ELEMEN PASSWORD ---
+        this.formChangePassword = document.getElementById('formChangePassword');
+        this.inpCurrentPass = document.getElementById('currentPass');
+        this.inpNewPass = document.getElementById('newPass');
+        this.inpConfirmPass = document.getElementById('confirmPass');
     }
 
     bind() {
@@ -187,7 +193,6 @@ export class DriverApp {
             // Isi form dengan data lama jika ada
             const p = this.driverData?.driver_profile;
             if(p) {
-                document.getElementById('inBankName').value = p.bank_name || '';
                 document.getElementById('inAccNumber').value = p.account_number || '';
             }
         });
@@ -220,6 +225,11 @@ export class DriverApp {
 
         // Listener Submit Form Keluar
         this.formLeave?.addEventListener('submit', (e) => this.submitLeaveQueue(e));
+
+        // --- TAMBAHAN LISTENER PASSWORD ---
+        if (this.formChangePassword) {
+            this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+        }
 
     }
 
@@ -546,6 +556,32 @@ export class DriverApp {
             if(this.infoIncome) this.infoIncome.textContent = Utils.formatCurrency(balanceData.income_pending || 0);
             if(this.infoDebt) this.infoDebt.textContent = Utils.formatCurrency(balanceData.debt_pending || 0);
 
+            // --- LOGIKA TOMBOL BARU ---
+            const profile = this.driverData?.driver_profile;
+            const hasAccount = profile && profile.account_number;
+
+            // Reset class dasar tombol
+            this.btnRequestWithdrawal.className = "w-full font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95 text-white";
+
+            if (!hasAccount) {
+                // KASUS 1: Belum ada rekening
+                this.btnRequestWithdrawal.disabled = true;
+                this.btnRequestWithdrawal.textContent = "Lengkapi Rekening BTN Dulu";
+                this.btnRequestWithdrawal.classList.add('bg-slate-400', 'cursor-not-allowed');
+                
+            } else if (balanceData.balance < 10000) {
+                // KASUS 2: Saldo kurang
+                this.btnRequestWithdrawal.disabled = true;
+                this.btnRequestWithdrawal.textContent = "Saldo Belum Cukup (< 10rb)";
+                this.btnRequestWithdrawal.classList.add('bg-slate-400', 'cursor-not-allowed');
+                
+            } else {
+                // KASUS 3: Siap Cair
+                this.btnRequestWithdrawal.disabled = false;
+                this.btnRequestWithdrawal.textContent = "Cairkan Dana Sekarang";
+                this.btnRequestWithdrawal.classList.add('bg-primary-600', 'hover:bg-primary-700');
+            }
+
             // 3. Atur Status Tombol
             if (balanceData.balance < 10000) {
                 this.btnRequestWithdrawal.disabled = true;
@@ -607,26 +643,56 @@ export class DriverApp {
         
         try {
             const history = await fetchApi(`/driver/history?${params.toString()}`);
+            
             if (history.length === 0) {
                 this.tripList.innerHTML = `<div class="text-center text-slate-500 p-4">Tidak ada riwayat.</div>`;
                 return;
             }
+
             this.tripList.innerHTML = history.map(t => {
-                // LOGIKA BARU: Cek Zona atau Tujuan Manual
+                // 1. Tentukan Nama Tujuan
                 const destName = t.booking.zone_to 
                     ? t.booking.zone_to.name 
                     : (t.booking.manual_destination || 'Tujuan Manual');
 
+                // 2. LOGIKA STATUS CAIR/LUNAS
+                const pStatus = t.payout_status || 'Unpaid';
+                let statusBadge = '';
+
+                if (t.method === 'CashDriver') {
+                    // --- KASUS HUTANG (Driver bawa uang tunai) ---
+                    if (pStatus === 'Paid') {
+                        statusBadge = `<span class="text-[10px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">Lunas</span>`;
+                    } else if (pStatus === 'Processing') {
+                        statusBadge = `<span class="text-[10px] font-bold text-yellow-600 bg-yellow-100 border border-yellow-200 px-1.5 py-0.5 rounded">Proses Potong</span>`;
+                    } else {
+                        statusBadge = `<span class="text-[10px] font-bold text-red-600 bg-red-100 border border-red-200 px-1.5 py-0.5 rounded">Belum Lunas</span>`;
+                    }
+                } else {
+                    // --- KASUS PEMASUKAN (QRIS/CashCSO) ---
+                    if (pStatus === 'Paid') {
+                        statusBadge = `<span class="text-[10px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">Sudah Cair</span>`;
+                    } else if (pStatus === 'Processing') {
+                        statusBadge = `<span class="text-[10px] font-bold text-blue-600 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded">Sedang Diproses</span>`;
+                    } else {
+                        statusBadge = `<span class="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Belum Dicairkan</span>`;
+                    }
+                }
+
+                // 3. Render Kartu
                 return `
                 <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 mb-3 border-l-4 border-primary-500">
                     <div class="flex justify-between items-start">
                         <div>
-                            <p class="font-bold text-slate-800 dark:text-slate-100">${destName}</p>
+                            <p class="font-bold text-slate-800 dark:text-slate-100 text-sm">${destName}</p>
                             <p class="text-xs text-slate-500 mt-1">${new Date(t.created_at).toLocaleString('id-ID')}</p>
+                            <div class="mt-2">
+                                ${statusBadge}
+                            </div>
                         </div>
                         <div class="text-right">
                             <p class="font-bold text-success">${Utils.formatCurrency(t.amount)}</p>
-                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500">${t.method}</span>
+                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 inline-block mt-1">${t.method}</span>
                         </div>
                     </div>
                 </div>`;
@@ -782,7 +848,7 @@ export class DriverApp {
     async handleUpdateBank(e) {
         e.preventDefault();
         const payload = {
-            bank_name: document.getElementById('inBankName').value,
+            bank_name: 'Bank BTN',
             account_number: document.getElementById('inAccNumber').value
         };
         
@@ -921,6 +987,56 @@ export class DriverApp {
             console.error(error);
             Utils.showToast('Gagal update status', 'error');
             this.renderActiveOrder(); // Reset tombol
+        }
+    }
+
+    async handleChangePassword(e) {
+        e.preventDefault();
+
+        const current = this.inpCurrentPass.value;
+        const newVal = this.inpNewPass.value;
+        const confirmVal = this.inpConfirmPass.value;
+
+        // Validasi Frontend Sederhana
+        if (newVal !== confirmVal) {
+            Utils.showToast('Konfirmasi password baru tidak cocok.', 'error');
+            return;
+        }
+
+        if (newVal.length < 6) {
+            Utils.showToast('Password minimal 6 karakter.', 'error');
+            return;
+        }
+
+        // Payload
+        const payload = {
+            current_password: current,
+            new_password: newVal,
+            new_password_confirmation: confirmVal
+        };
+
+        // UI Loading state
+        const btn = this.formChangePassword.querySelector('button');
+        const originalText = btn.textContent;
+        btn.textContent = 'Memproses...';
+        btn.disabled = true;
+
+        try {
+            await fetchApi('/driver/change-password', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            
+            Utils.showToast('Password berhasil diubah!', 'success');
+            this.formChangePassword.reset(); // Reset form jika sukses
+
+        } catch (error) {
+            // Error sudah dihandle oleh fetchApi (toast), tapi kita biarkan form tidak ter-reset
+            console.error(error);
+        } finally {
+            // Kembalikan tombol
+            btn.textContent = originalText;
+            btn.disabled = false;
         }
     }
 

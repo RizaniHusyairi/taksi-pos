@@ -12,9 +12,68 @@ use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\DriverProfile;
 use App\Models\DriverQueue; 
+use Illuminate\Support\Facades\Hash;
 
 class CsoApiController extends Controller
 {
+
+    /**
+     * Mengambil data profil CSO yang sedang login
+     */
+    public function getProfile(Request $request)
+    {
+        return response()->json($request->user());
+    }
+
+    /**
+     * Update Biodata (Nama & Username)
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users,username,' . $user->id,
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'username' => $validated['username'],
+        ]);
+
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui',
+            'data' => $user
+        ]);
+    }
+
+    /**
+     * Ganti Password
+     */
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required',
+            'new_password' => 'required|string|min:6|confirmed', // butuh field new_password_confirmation di frontend
+        ]);
+
+        $user = $request->user();
+
+        // Cek password lama
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'Password saat ini salah.'], 422);
+        }
+
+        // Update password baru
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json(['message' => 'Password berhasil diubah.']);
+    }
+
+
     /**
      * Mengambil daftar semua zona tujuan.
      */
@@ -201,7 +260,7 @@ class CsoApiController extends Controller
             DriverQueue::where('user_id', $validated['driver_id'])->delete();
 
             // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
-            return $booking->load(['driver', 'zoneTo', 'cso']);
+            return $booking->load(['driver.driverProfile', 'zoneTo', 'cso']);
         });
 
         return response()->json([
@@ -224,7 +283,9 @@ class CsoApiController extends Controller
             ->whereDate('created_at', today())
             ->with([
                 'booking.zoneTo:id,name', // Ambil nama zona tujuan
-                'booking.driver:id,name' // Ambil nama supir
+                'booking.driver.driverProfile', // PENTING: Untuk Line Number (#L..)
+                'booking.cso',                 // PENTING: Untuk Nama CSO
+                'cso'                          // Jaga-jaga jika relasi ada di transaksi langsung
             ])
             ->orderBy('created_at', 'desc')
             ->get();

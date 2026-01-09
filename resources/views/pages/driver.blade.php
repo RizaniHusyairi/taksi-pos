@@ -213,6 +213,29 @@
                   <p id="txtBankInfo" class="font-semibold text-slate-800 dark:text-slate-100 text-lg">-</p>
               </div>
           </div>
+          <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
+              <h3 class="font-semibold text-slate-700 dark:text-slate-200 border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Keamanan Akun</h3>
+              
+              <form id="formChangePassword" class="space-y-4">
+                  <div>
+                      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Password Saat Ini</label>
+                      <input type="password" id="currentPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:border-primary-500 focus:ring-primary-500" required>
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Password Baru</label>
+                      <input type="password" id="newPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:border-primary-500 focus:ring-primary-500" required minlength="6">
+                  </div>
+                  <div>
+                      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Konfirmasi Password Baru</label>
+                      <input type="password" id="confirmPass" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 text-sm focus:border-primary-500 focus:ring-primary-500" required minlength="6">
+                  </div>
+                  <div class="pt-2">
+                      <button type="submit" class="w-full bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 text-white text-sm font-bold py-3 rounded-lg shadow transition-transform active:scale-95">
+                          Ganti Password
+                      </button>
+                  </div>
+              </form>
+          </div>
         </div>
          <!-- Theme Settings Card -->
          <div>
@@ -250,84 +273,97 @@
   </main>
 
   <div id="bankModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-4">
-            <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Atur Rekening Bank</h3>
-            <form id="formBank" class="space-y-3">
-                <div>
-                    <label class="block text-sm mb-1 text-slate-600 dark:text-slate-300">Nama Bank / E-Wallet</label>
-                    <input id="inBankName" type="text" placeholder="Contoh: BCA, DANA" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white" required>
-                </div>
-                <div>
-                    <label class="block text-sm mb-1 text-slate-600 dark:text-slate-300">Nomor Rekening</label>
-                    <input id="inAccNumber" type="number" placeholder="Contoh: 1234567890" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white" required>
-                </div>
-                <div class="flex gap-2 justify-end mt-4">
-                    <button type="button" id="closeBankModal" class="px-4 py-2 text-slate-500">Batal</button>
-                    <button type="submit" class="bg-primary-600 text-white px-4 py-2 rounded-lg">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="proofModal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-50 backdrop-blur-sm" onclick="this.classList.add('hidden')">
-      <div class="relative max-w-sm w-full animate-in fade-in zoom-in duration-200">
-          <img id="imgProof" src="" class="w-full rounded-xl shadow-2xl border-2 border-white/20 object-contain max-h-[80vh] bg-black">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-4">
+          <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Atur Rekening Bank</h3>
           
-          <div class="text-center mt-4">
-              <span class="text-xs text-white/80 bg-white/10 px-3 py-1.5 rounded-full">
-                  Ketuk layar untuk menutup
-              </span>
-          </div>
-      </div>
-    </div>
+          <form id="formBank" class="space-y-4">
+              
+              <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start gap-3">
+                  <div class="text-blue-600 dark:text-blue-400 mt-0.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                      </svg>
+                  </div>
+                  <div>
+                      <p class="text-sm font-bold text-blue-800 dark:text-blue-200">Wajib Bank BTN</p>
+                      <p class="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          Pencairan dana hanya dapat dilakukan ke rekening Bank BTN.
+                      </p>
+                  </div>
+              </div>
 
-    <div id="leaveQueueModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
-      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-5">
-          <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Konfirmasi Keluar</h3>
-          
-          <form id="formLeaveQueue" class="space-y-4">
               <div>
-                  <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Alasan Keluar Antrian:</label>
-                  
-                  <div class="space-y-2">
-                      <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
-                          <input type="radio" name="reason" value="self" class="w-4 h-4 text-primary-600">
-                          <span class="text-sm text-slate-700 dark:text-slate-200">Dapat Penumpang Sendiri</span>
-                      </label>
-                      <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
-                          <input type="radio" name="reason" value="other" class="w-4 h-4 text-primary-600" checked>
-                          <span class="text-sm text-slate-700 dark:text-slate-200">Alasan Lainnya (Istirahat/Pulang)</span>
-                      </label>
-                  </div>
-              </div>
-
-              <div id="boxSelfPassenger" class="hidden space-y-3 pt-2 border-t border-dashed">
-                  <div class="p-3 bg-yellow-50 text-yellow-800 text-xs rounded-lg">
-                      Saldo dompet akan <strong>dipotong Rp 10.000</strong> sebagai komisi koperasi.
-                  </div>
-                  <div>
-                      <label class="block text-xs mb-1 text-slate-500">Tujuan Penumpang</label>
-                      <input type="text" id="manualDest" placeholder="Contoh: Hotel Bumi Senyiur" class="w-full rounded-lg border-slate-300 text-sm">
-                  </div>
-                  <div>
-                      <label class="block text-xs mb-1 text-slate-500">Nominal Deal (Rp)</label>
-                      <input type="number" id="manualPrice" placeholder="Contoh: 150000" class="w-full rounded-lg border-slate-300 text-sm">
-                  </div>
-              </div>
-
-              <div id="boxOtherReason" class="block space-y-3">
-                  <div>
-                      <label class="block text-xs mb-1 text-slate-500">Keterangan (Opsional)</label>
-                      <textarea id="otherReasonText" rows="2" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Contoh: Mau makan siang"></textarea>
-                  </div>
+                  <label class="block text-sm mb-1 text-slate-600 dark:text-slate-300 font-medium">Nomor Rekening BTN</label>
+                  <input id="inAccNumber" type="number" placeholder="Contoh: 000123xxxx" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:border-blue-500 focus:ring-blue-500 p-2.5" required>
               </div>
 
               <div class="flex gap-2 justify-end mt-4">
-                  <button type="button" id="btnCancelLeave" class="px-4 py-2 text-slate-500 text-sm">Batal</button>
-                  <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Proses Keluar</button>
+                  <button type="button" id="closeBankModal" class="px-4 py-2 text-slate-500 hover:text-slate-700 dark:text-slate-400">Batal</button>
+                  <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg font-bold shadow transition-transform active:scale-95">Simpan</button>
               </div>
           </form>
       </div>
+  </div>
+
+  <div id="proofModal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-50 backdrop-blur-sm" onclick="this.classList.add('hidden')">
+    <div class="relative max-w-sm w-full animate-in fade-in zoom-in duration-200">
+        <img id="imgProof" src="" class="w-full rounded-xl shadow-2xl border-2 border-white/20 object-contain max-h-[80vh] bg-black">
+        
+        <div class="text-center mt-4">
+            <span class="text-xs text-white/80 bg-white/10 px-3 py-1.5 rounded-full">
+                Ketuk layar untuk menutup
+            </span>
+        </div>
+    </div>
+  </div>
+
+  <div id="leaveQueueModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-5">
+        <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Konfirmasi Keluar</h3>
+        
+        <form id="formLeaveQueue" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Alasan Keluar Antrian:</label>
+                
+                <div class="space-y-2">
+                    <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
+                        <input type="radio" name="reason" value="self" class="w-4 h-4 text-primary-600">
+                        <span class="text-sm text-slate-700 dark:text-slate-200">Dapat Penumpang Sendiri</span>
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700">
+                        <input type="radio" name="reason" value="other" class="w-4 h-4 text-primary-600" checked>
+                        <span class="text-sm text-slate-700 dark:text-slate-200">Alasan Lainnya (Istirahat/Pulang)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="boxSelfPassenger" class="hidden space-y-3 pt-2 border-t border-dashed">
+                <div class="p-3 bg-yellow-50 text-yellow-800 text-xs rounded-lg">
+                    Saldo dompet akan <strong>dipotong Rp 10.000</strong> sebagai komisi koperasi.
+                </div>
+                <div>
+                    <label class="block text-xs mb-1 text-slate-500">Tujuan Penumpang</label>
+                    <input type="text" id="manualDest" placeholder="Contoh: Hotel Bumi Senyiur" class="w-full rounded-lg border-slate-300 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs mb-1 text-slate-500">Nominal Deal (Rp)</label>
+                    <input type="number" id="manualPrice" placeholder="Contoh: 150000" class="w-full rounded-lg border-slate-300 text-sm">
+                </div>
+            </div>
+
+            <div id="boxOtherReason" class="block space-y-3">
+                <div>
+                    <label class="block text-xs mb-1 text-slate-500">Keterangan (Opsional)</label>
+                    <textarea id="otherReasonText" rows="2" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Contoh: Mau makan siang"></textarea>
+                </div>
+            </div>
+
+            <div class="flex gap-2 justify-end mt-4">
+                <button type="button" id="btnCancelLeave" class="px-4 py-2 text-slate-500 text-sm">Batal</button>
+                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold">Proses Keluar</button>
+            </div>
+        </form>
+    </div>
   </div>
 
   <!-- Bottom Navigation -->

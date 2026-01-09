@@ -63,7 +63,7 @@ class CsoApp {
 
 
   cacheEls() {
-      this.views = ['new', 'history'];
+      this.views = ['new', 'history','profile'];
       this.pageTitle = document.getElementById('pageTitle');
       this.toSel = document.getElementById('toZone');
       this.priceBox = document.getElementById('priceBox');
@@ -89,6 +89,19 @@ class CsoApp {
       this.refreshHistoryBtn = document.getElementById('refreshHistory');
       this.receiptModal = document.getElementById('receiptModal');
       this.receiptArea = document.getElementById('receiptArea');
+
+      // --- ELEMEN PROFILE BARU ---
+      this.profileInitial = document.getElementById('profileInitial');
+      this.profileNameDisplay = document.getElementById('profileNameDisplay');
+      
+      this.formEditProfile = document.getElementById('formEditProfile');
+      this.inpEditName = document.getElementById('editName');
+      this.inpEditUsername = document.getElementById('editUsername');
+      
+      this.formChangePassword = document.getElementById('formChangePassword');
+      this.inpCurrentPass = document.getElementById('currentPass');
+      this.inpNewPass = document.getElementById('newPass');
+      this.inpConfirmPass = document.getElementById('confirmPass');
       
       // State
       this.zones = [];
@@ -122,8 +135,14 @@ class CsoApp {
       // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
 
       document.getElementById('printReceipt')?.addEventListener('click', () => this.printReceiptHandler());
-      // TAMBAHKAN LISTENER INI:
       document.getElementById('shareReceipt')?.addEventListener('click', () => this.shareReceiptHandler());
+      // --- LISTENER PROFILE BARU ---
+      if (this.formEditProfile) {
+          this.formEditProfile.addEventListener('submit', (e) => this.handleUpdateProfile(e));
+      }
+      if (this.formChangePassword) {
+          this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+      }
   }
   route() {
       // Fungsi routing tidak berubah, sudah bagus
@@ -134,8 +153,17 @@ class CsoApp {
       document.querySelectorAll('.nav-item').forEach(item => {
           item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
       });
-      const titles = { new: 'Pemesanan Baru', history: 'Riwayat Transaksi' };
-      this.pageTitle.textContent = titles[hash] || 'Pemesanan Baru';
+
+      const titles = { 
+        new: 'Pemesanan Baru', 
+        history: 'Riwayat Transaksi' 
+      , profile: 'Profil Saya'
+    };
+      this.pageTitle.textContent = titles[hash] || 'CSO Panel';
+
+      if (hash === 'profile') {
+          this.renderProfile();
+      }
   }
 
   
@@ -652,7 +680,7 @@ class CsoApp {
         // LOGIKA BARU: Ambil Line Number
         const lineNo = profile.line_number ? `#L${profile.line_number}` : ''; 
         // Gabungkan Nama Driver + Line Number (Contoh: "Budi (#L5)")
-        const driverDisplayName = driverObj ? `${driverObj.name} ${lineNo}` : 'N/A';
+        const driverDisplayName = driverObj ? `${lineNo}` : 'N/A';
 
         // ... (Logika Tanggal, Waktu, Zone, Price tetap sama) ...
         const dateTime = new Date(tx.created_at || Date.now());
@@ -666,7 +694,11 @@ class CsoApp {
         const price = tx.price || tx.amount;
         const amountStr = new Intl.NumberFormat('id-ID').format(price);
         const code = String(tx.id || booking?.id || 'N/A').toUpperCase();
-        const kasirName = tx.cso?.name?.split(' ')[0] || 'Admin';
+
+
+        const csoObj = tx.cso || booking?.cso;
+        const kasirName = csoObj?.name?.split(' ')[0] || 'Admin';
+
         const methodDisplay = tx.method?.includes('Cash') ? "CASH" : "QRIS";
 
         // --- 2. STYLE CSS (Tetap Sama) ---
@@ -718,7 +750,7 @@ class CsoApp {
 
             <div style="${flexBetween} ${mb1}">
                 <div>Supir:</div>
-                <div style="text-align: right;">${driverDisplayName}</div>
+                <div>${driverDisplayName}</div>
             </div>
 
             <div style="${mb1}">No. ${code}</div>
@@ -760,12 +792,102 @@ class CsoApp {
             <div style="${dashedLine}"></div>
             
             <div style="${center} ${mt2} font-size: 8px; color: #333;">
-                <div style="margin-top: 5px;">Terima Kasih atas Kunjungan Anda</div>
+                <div style="margin-top: 5px;">Powered by Koperasi Angkasa Jaya</div>
                 <div>Simpan struk ini sebagai bukti.</div>
             </div>
 
         </div>`;
     }
+
+    async renderProfile() {
+      try {
+          const user = await fetchApi('/cso/profile'); // Endpoint baru di backend
+          
+          // Update Display
+          this.profileNameDisplay.textContent = user.name;
+          this.profileInitial.textContent = user.name.charAt(0).toUpperCase();
+          
+          // Isi Form Edit
+          this.inpEditName.value = user.name;
+          this.inpEditUsername.value = user.username;
+          
+      } catch (error) {
+          console.error('Gagal memuat profil:', error);
+          Utils.showToast('Gagal memuat data profil', 'error');
+      }
+  }
+
+  async handleUpdateProfile(e) {
+      e.preventDefault();
+      
+      const payload = {
+          name: this.inpEditName.value,
+          username: this.inpEditUsername.value
+      };
+
+      const btn = this.formEditProfile.querySelector('button');
+      const originalText = btn.textContent;
+      btn.textContent = 'Menyimpan...';
+      btn.disabled = true;
+
+      try {
+          await fetchApi('/cso/profile/update', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+          });
+          
+          Utils.showToast('Profil berhasil diperbarui', 'success');
+          this.renderProfile(); // Refresh tampilan
+
+      } catch (error) {
+          Utils.showToast(error.message, 'error');
+      } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+      }
+  }
+
+  async handleChangePassword(e) {
+      e.preventDefault();
+
+      const current = this.inpCurrentPass.value;
+      const newVal = this.inpNewPass.value;
+      const confirmVal = this.inpConfirmPass.value;
+
+      if (newVal !== confirmVal) {
+          Utils.showToast('Konfirmasi password baru tidak cocok.', 'error');
+          return;
+      }
+
+      const payload = {
+          current_password: current,
+          new_password: newVal,
+          new_password_confirmation: confirmVal
+      };
+
+      const btn = this.formChangePassword.querySelector('button');
+      const originalText = btn.textContent;
+      btn.textContent = 'Memproses...';
+      btn.disabled = true;
+
+      try {
+          await fetchApi('/cso/profile/password', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+          });
+          
+          Utils.showToast('Password berhasil diubah!', 'success');
+          this.formChangePassword.reset();
+
+      } catch (error) {
+          Utils.showToast(error.message, 'error');
+      } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+      }
+  }
+
+
   
 }
 
