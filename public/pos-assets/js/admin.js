@@ -111,8 +111,17 @@ export class AdminApp{
       // Buat payload untuk dikirim ke API
       const payload = {
         commission_rate: parseFloat(rateValue),
-        admin_email: emailValue
+        admin_email: emailValue,
         // tambahkan pengaturan lain di sini jika ada
+
+        // SMTP Payload
+        mail_host: document.getElementById('mailHost').value.trim(),
+        mail_port: document.getElementById('mailPort').value.trim(),
+        mail_username: document.getElementById('mailUsername').value.trim(),
+        mail_password: document.getElementById('mailPassword').value.trim(),
+        mail_encryption: document.getElementById('mailEncryption').value,
+        mail_from_address: document.getElementById('mailUsername').value.trim(), // Biasanya sama dengan username
+        mail_from_name: document.getElementById('mailFromName').value.trim(),
       };
 
       // Validasi sederhana di frontend
@@ -855,12 +864,19 @@ async renderSettings() {
         emailInput.value = ''; // Kosongkan jika belum diset
     }
 
+    // 2. SMTP (BARU)
+    if(document.getElementById('mailHost')) document.getElementById('mailHost').value = settings.mail_host || '';
+    if(document.getElementById('mailPort')) document.getElementById('mailPort').value = settings.mail_port || '';
+    if(document.getElementById('mailUsername')) document.getElementById('mailUsername').value = settings.mail_username || '';
+    if(document.getElementById('mailPassword')) document.getElementById('mailPassword').value = settings.mail_password || ''; // Hati-hati menampilkan password
+    if(document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
+    if(document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
+
   } catch (error) {
     console.error("Gagal memuat pengaturan:", error);
   }
 }
 
-// --- FUNGSI BARU: Buka Modal Detail ---
 // --- FUNGSI BARU: Buka Modal Detail dengan Hitungan Komisi ---
 async openWdDetails(id) {
   const modal = document.getElementById('modalWdDetails');

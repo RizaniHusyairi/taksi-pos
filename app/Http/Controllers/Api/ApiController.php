@@ -383,6 +383,15 @@ class ApiController extends Controller
             'commission_rate' => 'required|numeric|min:0|max:100',
             'admin_email'     => 'required|email|max:255',
             // Tambahkan validasi untuk setting lain jika ada
+
+            // --- Validasi SMTP Baru ---
+            'mail_host'         => 'nullable|string',
+            'mail_port'         => 'nullable|numeric',
+            'mail_username'     => 'nullable|string',
+            'mail_password'     => 'nullable|string',
+            'mail_encryption'   => 'nullable|string|in:tls,ssl,null',
+            'mail_from_address' => 'nullable|email',
+            'mail_from_name'    => 'nullable|string',
         ]);
     
         // Loop melalui data yang dikirim dan update ke database

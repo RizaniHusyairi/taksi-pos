@@ -403,21 +403,61 @@
         <div class="bg-white rounded-xl shadow-sm p-4 max-w-lg mx-auto">
           <h3 class="font-semibold mb-3">Pengaturan Umum</h3>
           
-          <form id="formSettings" class="space-y-4">
-            <div>
-              <label for="adminEmail" class="block text-sm font-medium text-slate-700">Email Notifikasi Admin</label>
-              <input type="email" id="adminEmail" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500" placeholder="admin@contoh.com">
-              <p class="text-xs text-slate-500 mt-1">
-                Email ini akan menerima notifikasi sistem (misal: pengajuan pencairan dana).
-              </p>
+          <form id="formSettings" class="space-y-6"> 
+            <div class="space-y-3 border-b pb-4">
+              <h4 class="font-bold text-slate-700">Umum</h4>
+              <div>
+                  <label class="block text-sm font-medium text-slate-700">Email Notifikasi Admin</label>
+                  <input type="email" id="adminEmail" class="w-full rounded-lg border-slate-300">
+              </div>
+              <div>
+                  <label class="block text-sm font-medium text-slate-700">Komisi Koperasi (%)</label>
+                  <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-lg border-slate-300">
+              </div>
             </div>
 
-            <div>
-              <label for="commissionRate" class="block text-sm font-medium text-slate-700">Komisi Koperasi (%)</label>
-              <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500" required>
-              <p class="text-xs text-slate-500 mt-1">
-                Bagian (dalam persen) yang diambil koperasi dari setiap transaksi.
-              </p>
+            <div class="space-y-3">
+                <h4 class="font-bold text-slate-700 flex items-center gap-2">
+                    Konfigurasi SMTP
+                    <span class="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Untuk Notifikasi</span>
+                </h4>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-500">Mail Host</label>
+                        <input type="text" id="mailHost" placeholder="smtp.gmail.com" class="w-full rounded-lg border-slate-300 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500">Mail Port</label>
+                        <input type="number" id="mailPort" placeholder="587" class="w-full rounded-lg border-slate-300 text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-500">Username (Email Pengirim)</label>
+                        <input type="text" id="mailUsername" class="w-full rounded-lg border-slate-300 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500">Password / App Password</label>
+                        <input type="password" id="mailPassword" class="w-full rounded-lg border-slate-300 text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-500">Encryption</label>
+                        <select id="mailEncryption" class="w-full rounded-lg border-slate-300 text-sm">
+                            <option value="tls">TLS (Port 587)</option>
+                            <option value="ssl">SSL (Port 465)</option>
+                            <option value="null">None</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500">Nama Pengirim</label>
+                        <input type="text" id="mailFromName" placeholder="Admin Koperasi" class="w-full rounded-lg border-slate-300 text-sm">
+                    </div>
+                </div>
             </div>
 
             <div class="flex pt-2">
