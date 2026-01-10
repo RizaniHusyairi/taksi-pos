@@ -20,6 +20,12 @@ class SettingSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'key' => 'admin_email',
+                'value' => 'leo.rizan68@gmail.com', 
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
     
         ]);
     }

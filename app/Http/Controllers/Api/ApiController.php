@@ -80,147 +80,6 @@ class ApiController extends Controller
         ]);
     }
 
-    public function getZones()
-    {
-        // Mengambil semua zona kecuali 'Bandara' (jika ada logika seperti itu)
-        $zones = Zone::get();
-        return response()->json($zones);
-    }
-
-    public function getAvailableDrivers()
-    {
-        // Ambil data dari tabel queue, join ke users & profiles
-        // Urutkan berdasarkan sort_order ASC (0, 1, 2 ... 1000)
-        // Jika sort_order sama (sesama 1000), urutkan berdasarkan created_at (siapa cepat dia dapat)
-
-
-       $drivers = DriverQueue::with(['driver.driverProfile'])
-            ->orderBy('sort_order', 'asc') 
-            ->orderBy('created_at', 'asc')
-            ->get()
-            ->map(function ($queue) {
-                // Kita kembalikan format User object agar frontend tidak perlu berubah banyak
-                $user = $queue->driver;
-                // Pastikan status di profile sinkron (opsional visual)
-                if($user->driverProfile) {
-                    $user->driverProfile->status = 'available'; 
-                }
-                return $user;
-            });
-
-        return response()->json($drivers);
-    }
-
-    public function setDriverStatus(Request $request)
-    {
-        $request->validate(['status' => 'required|in:available,offline']);
-        $user = Auth::user();
-
-        if ($user->role !== 'driver') {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-        
-        $user->driverProfile()->update(['status' => $request->status]);
-
-        return response()->json(['message' => 'Status updated successfully']);
-    }
-
-    // === Terjemahan Logika Booking & Transaksi ===
-    public function storeBooking(Request $request)
-    {
-        $validated = $request->validate([
-            'driver_id' => 'required|exists:users,id',
-            'zone_id'   => 'required|exists:zones,id',
-        ]);
-        
-        $zone = Zone::findOrFail($validated['zone_id']);
-        $cso = Auth::user();
-
-        $booking = Booking::create([
-            'cso_id'    => $cso->id,
-            'driver_id' => $validated['driver_id'],
-            'zone_id'   => $zone->id,
-            'price'     => $zone->price,
-            'status'    => 'Assigned',
-        ]);
-
-        // Update status driver menjadi 'ontrip'
-        DriverProfile::where('user_id', $validated['driver_id'])->update(['status' => 'ontrip']);
-
-        return response()->json($booking, 201);
-    }
-
-    public function completeBooking(Booking $booking)
-    {
-        // Validasi: hanya driver dari booking ini yang bisa menyelesaikan
-        $user = Auth::user();
-        if ($user->id !== $booking->driver_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        DB::transaction(function () use ($booking) {
-            $booking->update(['status' => 'Completed']);
-            $booking->driver->driverProfile()->update(['status' => 'available']);
-        });
-
-        return response()->json(['message' => 'Booking completed']);
-    }
-
-    public function recordPayment(Request $request)
-    {
-        $validated = $request->validate([
-            'booking_id' => 'required|exists:bookings,id',
-            'method'     => 'required|in:QRIS,CashCSO,CashDriver',
-        ]);
-
-        $booking = Booking::findOrFail($validated['booking_id']);
-        
-        // Mulai transaksi database untuk memastikan konsistensi data
-        DB::transaction(function () use ($booking, $validated) {
-            // 1. Buat record transaksi
-            Transaction::create([
-                'booking_id' => $booking->id,
-                'method'     => $validated['method'],
-                'amount'     => $booking->price,
-            ]);
-
-            // 2. Update status booking
-            $newStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
-            $booking->update(['status' => $newStatus]);
-        });
-        
-        return response()->json(['message' => 'Payment recorded successfully'], 201);
-    }
-
-    // === Terjemahan Logika Saldo Driver ===
-    public function getDriverBalance()
-    {
-        $driver = Auth::user();
-        if ($driver->role !== 'driver') {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        // Ambil nilai komisi dari settings
-        $commissionRate = (float) Setting::where('key', 'commission_rate')->value('value');
-
-        // Hitung total kredit (pemasukan)
-        $totalCredits = Transaction::whereHas('booking', function ($query) use ($driver) {
-                $query->where('driver_id', $driver->id);
-            })
-            ->whereIn('method', ['QRIS', 'CashCSO'])
-            ->sum('amount');
-        
-        $driverShare = $totalCredits * (1 - $commissionRate);
-
-        // Hitung total debet (penarikan)
-        $totalDebits = $driver->withdrawals()
-            ->whereIn('status', ['Approved', 'Paid'])
-            ->sum('amount');
-            
-        $balance = $driverShare - $totalDebits;
-
-        return response()->json(['balance' => round($balance)]);
-    }
 
     // =========================================================
     // === METODE BARU: Untuk Panel Admin ===
@@ -522,13 +381,19 @@ class ApiController extends Controller
         // Validasi input jika perlu
         $validated = $request->validate([
             'commission_rate' => 'required|numeric|min:0|max:100',
+            'admin_email'     => 'required|email|max:255',
             // Tambahkan validasi untuk setting lain jika ada
         ]);
     
         // Loop melalui data yang dikirim dan update ke database
         foreach ($validated as $key => $value) {
-            // Konversi dari persen kembali ke desimal sebelum disimpan
-            $dbValue = $key === 'commission_rate' ? $value / 100 : $value;
+            // Konversi khusus untuk rate (persen ke desimal)
+            if ($key === 'commission_rate') {
+                $dbValue = $value / 100;
+            } else {
+                // Untuk email dan setting lain, simpan apa adanya
+                $dbValue = $value;
+            }
             
             Setting::updateOrCreate(
                 ['key' => $key],
@@ -553,6 +418,106 @@ class ApiController extends Controller
                     ->get();
                     
         return response()->json($users);
+    }
+
+    // =========================================================
+    // === MANAJEMEN ANTRIAN (QUEUE) ===
+    // =========================================================
+
+    /**
+     * Ambil data antrian saat ini
+     */
+    public function adminGetQueue()
+    {
+        $queue = DriverQueue::with('driver.driverProfile')
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($q, $index) {
+                return [
+                    'user_id' => $q->user_id,
+                    'name' => $q->driver->name ?? 'Unknown',
+                    'line_number' => $q->driver->driverProfile->line_number ?? '-',
+                    'sort_order' => $q->sort_order,
+                    'joined_at' => $q->created_at,
+                    'real_position' => $index + 1 // Urutan asli (1, 2, 3...)
+                ];
+            });
+
+        return response()->json($queue);
+    }
+
+    /**
+     * Keluarkan driver dari antrian (Kick)
+     */
+    public function adminRemoveFromQueue($userId)
+    {
+        DB::transaction(function () use ($userId) {
+            // 1. Hapus dari tabel queue
+            DriverQueue::where('user_id', $userId)->delete();
+
+            // 2. Update status profil jadi offline
+            DriverProfile::where('user_id', $userId)->update(['status' => 'offline']);
+        });
+
+        return response()->json(['message' => 'Driver berhasil dikeluarkan dari antrian.']);
+    }
+
+    /**
+     * Ubah urutan antrian (Naik/Turun)
+     * Logic: Menukar nilai sort_order dengan driver di sebelahnya
+     */
+    public function adminMoveQueue(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required',
+            'direction' => 'required|in:up,down'
+        ]);
+
+        $current = DriverQueue::where('user_id', $request->user_id)->firstOrFail();
+
+        if ($request->direction === 'up') {
+            // Cari driver di atasnya (sort_order lebih kecil)
+            $neighbor = DriverQueue::where('sort_order', '<', $current->sort_order)
+                ->orderBy('sort_order', 'desc')
+                ->first();
+        } else {
+            // Cari driver di bawahnya (sort_order lebih besar)
+            $neighbor = DriverQueue::where('sort_order', '>', $current->sort_order)
+                ->orderBy('sort_order', 'asc')
+                ->first();
+        }
+
+        if ($neighbor) {
+            // Lakukan Swap (Tukar Nilai)
+            $tempOrder = $current->sort_order;
+            
+            // Jika nilai sort_order kebetulan sama (konflik), kita buat selisih manual
+            if ($tempOrder == $neighbor->sort_order) {
+                $tempOrder = $request->direction === 'up' ? $neighbor->sort_order + 1 : $neighbor->sort_order - 1;
+            }
+
+            $current->update(['sort_order' => $neighbor->sort_order]);
+            $neighbor->update(['sort_order' => $tempOrder]);
+        }
+
+        return response()->json(['message' => 'Urutan diperbarui.']);
+    }
+
+    /**
+     * Update Line Number Driver
+     */
+    public function adminUpdateLineNumber(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required',
+            'line_number' => 'required|string|max:10'
+        ]);
+
+        DriverProfile::where('user_id', $request->user_id)
+            ->update(['line_number' => $request->line_number]);
+
+        return response()->json(['message' => 'Line Number diperbarui.']);
     }
 }
 

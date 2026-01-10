@@ -13,6 +13,8 @@ use App\Models\Withdrawals;
 use App\Models\Setting;
 use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\WithdrawalRequestNotification;
 
 class DriverApiController extends Controller
 {
@@ -309,11 +311,14 @@ class DriverApiController extends Controller
             return response()->json(['message' => 'Saldo bersih belum mencapai batas minimal pencairan (Rp 10.000).'], 422);
         }
 
+        // Variabel untuk menampung objek withdrawal agar bisa dikirim ke email
+        $newWithdrawal = null;
+
         // 2. Mulai Transaksi Database
-        DB::transaction(function () use ($driver, $amountToWithdraw) {
+        DB::transaction(function () use ($driver, $amountToWithdraw, &$newWithdrawal) {
             
             // A. Buat Record Penarikan
-            $withdrawal = $driver->withdrawals()->create([
+            $newWithdrawal = $driver->withdrawals()->create([
                 'amount' => $amountToWithdraw,
                 'status' => 'Pending',
                 'requested_at' => now(),
@@ -327,7 +332,7 @@ class DriverApiController extends Controller
             })
             ->whereIn('method', ['QRIS', 'CashCSO'])
             ->where('payout_status', 'Unpaid')
-            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $withdrawal->id]); // Tandai sedang diproses
+            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $newWithdrawal->id]); // Tandai sedang diproses
 
             // Update transaksi Hutang (CashDriver) - Dianggap lunas/dipotong saat pencairan ini sukses
             Transaction::whereHas('booking', function ($q) use ($driver) {
@@ -335,8 +340,28 @@ class DriverApiController extends Controller
             })
             ->where('method', 'CashDriver')
             ->where('payout_status', 'Unpaid')
-            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $withdrawal->id]); // Tandai sedang diproses
+            ->update(['payout_status' => 'Processing', 'withdrawal_id' => $newWithdrawal->id]); // Tandai sedang diproses
         });
+        
+        // --- KIRIM EMAIL SETELAH TRANSAKSI SUKSES ---
+        if ($newWithdrawal) {
+            try {
+                // Ambil email admin dari Setting (atau hardcode jika belum ada settingnya)
+                // Pastikan Anda sudah punya setting key 'admin_email' di database
+                $adminEmail = Setting::where('key', 'admin_email')->value('value'); 
+                
+                // Jika tidak ada di setting, bisa fallback ke email manual (opsional)
+                $adminEmail = $adminEmail ?: 'admin@koperasiangkasa.com'; 
+
+                if ($adminEmail) {
+                    Mail::to($adminEmail)->send(new WithdrawalRequestNotification($newWithdrawal, $driver));
+                }
+            } catch (\Exception $e) {
+                // Jangan gagalkan request driver hanya karena email gagal terkirim
+                // Cukup catat di log
+                \Illuminate\Support\Facades\Log::error('Gagal kirim email notifikasi withdrawal: ' . $e->getMessage());
+            }
+        }
 
         return response()->json(['message' => 'Permintaan pencairan berhasil dikirim.'], 201);
     }

@@ -88,7 +88,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp{
   constructor(){
-    this.views = ['dashboard','zones','users','finance-log','withdrawals','report-revenue','report-driver','settings'];
+    this.views = ['dashboard','queue','zones','users','finance-log','withdrawals','report-revenue','report-driver','settings'];
     this.charts = {};
   }
   init(){
@@ -106,10 +106,12 @@ export class AdminApp{
       e.preventDefault();
       
       const rateValue = document.getElementById('commissionRate').value;
+      const emailValue = document.getElementById('adminEmail').value.trim(); // Ambil value email
       
       // Buat payload untuk dikirim ke API
       const payload = {
-        commission_rate: parseFloat(rateValue)
+        commission_rate: parseFloat(rateValue),
+        admin_email: emailValue
         // tambahkan pengaturan lain di sini jika ada
       };
 
@@ -118,6 +120,11 @@ export class AdminApp{
         alert('Masukkan nilai persentase antara 0 dan 100');
         return;
       }
+
+      if (!payload.admin_email) {
+        alert('Email admin tidak boleh kosong.');
+        return;
+    }
 
       try {
         // 2. Kirim data ke API untuk disimpan menggunakan POST
@@ -132,6 +139,7 @@ export class AdminApp{
       }
 
     });
+
     
 
     
@@ -210,6 +218,8 @@ export class AdminApp{
     userModalClose?.addEventListener('click', closeModal);
     userModalCancel?.addEventListener('click', closeModal);
     userModal?.addEventListener('click', (e)=>{ if(e.target===userModal) closeModal(); });
+    // Listener Refresh Queue
+    document.getElementById('refreshQueue')?.addEventListener('click', () => this.renderQueue());
 
     // Ganti event listener yang lama dengan yang ini
     document.getElementById('formUser')?.addEventListener('submit', async (e) => { // <-- Jadikan async
@@ -323,6 +333,7 @@ export class AdminApp{
   titleOf(v){
     return {
       'dashboard':'Dashboard',
+      'queue': 'Manajemen Antrian',
       'zones':'Manajemen Zona & Tarif',
       'users':'Manajemen Pengguna',
       'finance-log':'Transaction Log',
@@ -824,18 +835,26 @@ async renderDriverReport() { // <-- Jadikan async
 }
 
   // ----- Settings -----
-async renderSettings() { // <-- Jadikan async
+// ----- Settings -----
+async renderSettings() { 
   try {
-    // 1. Panggil API untuk mendapatkan semua pengaturan
     const settings = await fetchApi('/admin/settings');
+    
+    // 1. Render Komisi
     const rateInput = document.getElementById('commissionRate');
-
     if (rateInput && settings.commission_rate !== undefined) {
-      // Ambil nilai komisi dari hasil API
       const rate = parseFloat(settings.commission_rate);
-      // Tampilkan sebagai persen, misal 0.2 menjadi 20
       rateInput.value = (rate * 100);
     }
+
+    // 2. Render Email (BARU)
+    const emailInput = document.getElementById('adminEmail');
+    if (emailInput && settings.admin_email) {
+        emailInput.value = settings.admin_email;
+    } else if (emailInput) {
+        emailInput.value = ''; // Kosongkan jika belum diset
+    }
+
   } catch (error) {
     console.error("Gagal memuat pengaturan:", error);
   }
@@ -934,6 +953,106 @@ async openWdDetails(id) {
   }
 }
 
+// ----- Queue Management -----
+  
+async renderQueue() {
+  const tbody = document.getElementById('queueTableList');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>';
+
+  try {
+      const queue = await fetchApi('/admin/queue');
+
+      if (queue.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">Antrian Kosong.</td></tr>';
+          return;
+      }
+
+      tbody.innerHTML = queue.map((q, index) => {
+          const isFirst = index === 0;
+          const isLast = index === queue.length - 1;
+
+          return `
+          <tr class="hover:bg-slate-50 transition-colors group">
+              <td class="py-3 px-4 font-bold text-slate-700">#${q.real_position}</td>
+              <td class="py-3 px-4 font-medium text-slate-800">${q.name}</td>
+              <td class="py-3 px-4">
+                  <div class="flex items-center gap-2">
+                      <span class="font-mono bg-slate-100 px-2 py-1 rounded text-xs">L${q.line_number}</span>
+                      <button onclick="app.editLineNumber(${q.user_id}, '${q.line_number}')" class="text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
+                      </button>
+                  </div>
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-500">${new Date(q.joined_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</td>
+              <td class="py-3 px-4 text-center">
+                  <div class="flex justify-center gap-1">
+                      <button onclick="app.moveQueue(${q.user_id}, 'up')" class="p-1 rounded hover:bg-blue-100 text-blue-600 disabled:opacity-30" ${isFirst ? 'disabled' : ''}>
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
+                      </button>
+                      <button onclick="app.moveQueue(${q.user_id}, 'down')" class="p-1 rounded hover:bg-blue-100 text-blue-600 disabled:opacity-30" ${isLast ? 'disabled' : ''}>
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                      </button>
+                  </div>
+              </td>
+              <td class="py-3 px-4 text-center">
+                  <button onclick="app.kickQueue(${q.user_id}, '${q.name}')" class="text-red-600 hover:bg-red-50 px-3 py-1 rounded text-xs font-bold border border-red-200">
+                      Kick
+                  </button>
+              </td>
+          </tr>
+          `;
+      }).join('');
+
+  } catch (error) {
+      console.error(error);
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">Gagal memuat antrian.</td></tr>';
+  }
+}
+
+// Aksi: Naik/Turun Antrian
+async moveQueue(userId, direction) {
+  try {
+      await fetchApi('/admin/queue/move', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: userId, direction: direction })
+      });
+      this.renderQueue(); // Refresh tabel
+  } catch (error) {
+      alert('Gagal mengubah urutan.');
+  }
+}
+
+// Aksi: Kick Driver
+async kickQueue(userId, name) {
+  if (!confirm(`Keluarkan ${name} dari antrian? Status driver akan menjadi Offline.`)) return;
+  
+  try {
+      await fetchApi(`/admin/queue/${userId}`, { method: 'DELETE' });
+      this.renderQueue(); // Refresh tabel
+      // Update juga dashboard stats jika sedang tampil (opsional)
+  } catch (error) {
+      alert('Gagal mengeluarkan driver.');
+  }
+}
+
+// Aksi: Edit Line Number
+async editLineNumber(userId, currentVal) {
+  const newVal = prompt("Masukkan Line Number Baru:", currentVal);
+  if (newVal === null || newVal === currentVal) return;
+
+  try {
+      await fetchApi('/admin/queue/line-number', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: userId, line_number: newVal })
+      });
+      this.renderQueue(); // Refresh
+  } catch (error) {
+      alert('Gagal update line number.');
+  }
+}
+
 // Helper function openUserModal perlu disesuaikan sedikit untuk field car/plate
   openUserModal(data) {
   const isEditing = data !== null;
@@ -955,5 +1074,6 @@ async openWdDetails(id) {
   const role = document.getElementById('userRole').value;
   document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
 }
+
 
 }

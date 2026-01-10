@@ -38,6 +38,7 @@
       <nav class="p-3">
         <a href="#dashboard" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Dashboard</a>
         <div class="mt-3 text-xs uppercase text-slate-400 px-3">Operasional</div>
+        <a href="#queue" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Manajemen Antrian</a>
         <a href="#zones" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Manajemen Zona & Tarif</a>
         <a href="#users" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Manajemen Pengguna</a>
         <a href="#settings" class="nav-link block px-3 py-2 rounded-lg hover:bg-primary-50 text-slate-700">Pengaturan</a>
@@ -104,6 +105,36 @@
             </div>
             <canvas id="monthlyChart" height="120"></canvas>
           </div>
+        </div>
+      </section>
+      <section id="view-queue" class="p-4 hidden">
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="font-semibold text-lg">Antrian Driver (Live)</h3>
+                    <p class="text-xs text-slate-500">Mengatur urutan dan status driver yang sedang standby.</p>
+                </div>
+                <button id="refreshQueue" class="p-2 rounded-full hover:bg-slate-100 text-slate-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-slate-500">
+                        <tr>
+                            <th class="py-3 px-4 text-left w-16">Posisi</th>
+                            <th class="py-3 px-4 text-left">Nama Driver</th>
+                            <th class="py-3 px-4 text-left">Nomor lambung</th>
+                            <th class="py-3 px-4 text-left">Waktu Masuk</th>
+                            <th class="py-3 px-4 text-center w-48">Atur Posisi</th>
+                            <th class="py-3 px-4 text-center w-24">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueTableList" class="divide-y divide-slate-100">
+                        </tbody>
+                </table>
+            </div>
         </div>
       </section>
 
@@ -371,16 +402,26 @@
       <section id="view-settings" class="p-4 hidden">
         <div class="bg-white rounded-xl shadow-sm p-4 max-w-lg mx-auto">
           <h3 class="font-semibold mb-3">Pengaturan Umum</h3>
-          <form id="formSettings" class="space-y-3">
+          
+          <form id="formSettings" class="space-y-4">
             <div>
-              <label for="commissionRate" class="block text-sm font-medium">Komisi Koperasi (%)</label>
-              <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-lg border-slate-300" required>
+              <label for="adminEmail" class="block text-sm font-medium text-slate-700">Email Notifikasi Admin</label>
+              <input type="email" id="adminEmail" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500" placeholder="admin@contoh.com">
               <p class="text-xs text-slate-500 mt-1">
-                Bagian (dalam persen) yang diambil koperasi dari setiap transaksi (QRIS/Tunai ke CSO). Sisanya menjadi hak supir.
+                Email ini akan menerima notifikasi sistem (misal: pengajuan pencairan dana).
               </p>
             </div>
-            <div class="flex">
-              <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-3 py-2">Simpan Pengaturan</button>
+
+            <div>
+              <label for="commissionRate" class="block text-sm font-medium text-slate-700">Komisi Koperasi (%)</label>
+              <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500" required>
+              <p class="text-xs text-slate-500 mt-1">
+                Bagian (dalam persen) yang diambil koperasi dari setiap transaksi.
+              </p>
+            </div>
+
+            <div class="flex pt-2">
+              <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 w-full font-bold shadow transition-transform active:scale-95">Simpan Pengaturan</button>
             </div>
           </form>
         </div>

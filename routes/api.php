@@ -12,20 +12,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // === Rute API untuk Aplikasi POS Taksi ===
 Route::middleware('auth:sanctum')->group(function() {
 
-    // --- Rute untuk CSO & Admin ---
-    Route::get('/zones', [ApiController::class, 'getZones']);
-    Route::get('/drivers/available', [ApiController::class, 'getAvailableDrivers']);
-    Route::post('/bookings', [ApiController::class, 'storeBooking']);
-    Route::post('/payment', [ApiController::class, 'recordPayment']);
-
-    // --- Rute Khusus untuk Driver ---
-    Route::get('/driver/balance', [ApiController::class, 'getDriverBalance']);
-    Route::post('/driver/status', [ApiController::class, 'setDriverStatus']);
     
-    // Rute untuk menyelesaikan booking. {booking} adalah parameter dinamis (ID booking)
-    // Ini menggunakan fitur canggih Laravel bernama "Route Model Binding"
-    Route::post('/bookings/{booking}/complete', [ApiController::class, 'completeBooking']);
-
     // Tambahkan rute untuk withdrawal, dll. di sini nanti
 
 
@@ -66,6 +53,12 @@ Route::middleware('auth:sanctum')->group(function() {
         // Pengaturan
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
+
+        Route::get('/queue', [ApiController::class, 'adminGetQueue']);
+        Route::post('/queue/remove', [ApiController::class, 'adminRemoveFromQueue']); // Post userId via body or url param logic
+        Route::delete('/queue/{userId}', [ApiController::class, 'adminRemoveFromQueue']); // Restful style
+        Route::post('/queue/move', [ApiController::class, 'adminMoveQueue']);
+        Route::post('/queue/line-number', [ApiController::class, 'adminUpdateLineNumber']);
 
 
 
