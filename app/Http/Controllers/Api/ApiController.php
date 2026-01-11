@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
+use App\Services\WhatsAppService;
 use App\Models\Setting; 
 use App\Models\User;
 use App\Models\Zone;
@@ -16,7 +16,8 @@ use App\Models\Withdrawals;
 use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-
+use Illuminate\Support\Facades\Mail;
+use App\Mail\WithdrawalApprovedNotification;
 
 class ApiController extends Controller
 {
@@ -250,12 +251,52 @@ class ApiController extends Controller
                 Transaction::where('withdrawal_id', $withdrawal->id)
                     ->update(['payout_status' => 'Paid']);
             });
+
+            // 2. KIRIM NOTIFIKASI (Di luar Transaction DB agar tidak rollback jika email gagal)
+            $driver = $withdrawal->driver;
+            
+            // --- KIRIM EMAIL ---
+            try {
+                // Pastikan driver punya email valid
+                if ($driver->email) {
+                    Mail::to($driver->email)->send(new WithdrawalApprovedNotification($withdrawal));
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Gagal kirim email ke driver: ' . $e->getMessage());
+            }
+
+            // --- KIRIM WHATSAPP ---
+            try {
+                $waToken = Setting::where('key', 'wa_token')->value('value');
+                
+                // Pastikan driver punya nomor HP (sesuaikan nama kolom di DB Anda, misal: phone_number)
+                // Jika Anda menyimpan no HP di tabel driver_profiles, sesuaikan kodenya.
+                // Asumsi: No HP ada di tabel users kolom 'username' (jika username pakai no HP) atau kolom baru 'phone_number'
+                $driverPhone = $driver->phone_number ?? $driver->username; 
+
+                if ($waToken && $driverPhone) {
+                    $amountRp = number_format($withdrawal->amount, 0, ',', '.');
+                    $date = now()->format('d M Y H:i');
+                    
+                    $message = "*PENCAIRAN DANA BERHASIL*\n\n"
+                        . "Halo $driver->name,\n\n"
+                        . "Pengajuan pencairan dana Anda sebesar *Rp $amountRp* telah DISETUJUI dan DITRANSFER oleh admin.\n\n"
+                        . "📅 Waktu: $date\n"
+                        . "🏦 Bank: Bank BTN\n\n"
+                        . "Silakan cek rekening Anda. Terima kasih!";
+
+                    WhatsAppService::send($driverPhone, $message, $waToken);
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Gagal kirim WA ke driver: ' . $e->getMessage());
+            }
             
             return response()->json([
                 'message' => 'Permintaan disetujui, bukti terupload, dan status transaksi diperbarui.',
                 'path' => $path
             ]);
         }
+
 
         return response()->json(['message' => 'Gagal mengupload bukti.'], 400);
     }
@@ -392,6 +433,10 @@ class ApiController extends Controller
             'mail_encryption'   => 'nullable|string|in:tls,ssl,null',
             'mail_from_address' => 'nullable|email',
             'mail_from_name'    => 'nullable|string',
+
+            // Validasi WA Baru
+            'wa_token'          => 'nullable|string',
+            'admin_wa_number'   => 'nullable|string',
         ]);
     
         // Loop melalui data yang dikirim dan update ke database

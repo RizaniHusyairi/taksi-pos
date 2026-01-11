@@ -164,6 +164,24 @@ export class DriverApp {
         this.inpCurrentPass = document.getElementById('currentPass');
         this.inpNewPass = document.getElementById('newPass');
         this.inpConfirmPass = document.getElementById('confirmPass');
+
+        // --- ELEMEN BARU ---
+        this.profilePhone = document.getElementById('profilePhone');
+        this.profileEmail = document.getElementById('profileEmail');
+        
+        // Modal Edit Profil
+        this.editProfileModal = document.getElementById('editProfileModal');
+        this.btnOpenEditProfile = document.getElementById('btnOpenEditProfile');
+        this.closeEditProfile = document.getElementById('closeEditProfile');
+        this.formEditProfile = document.getElementById('formEditProfile');
+        
+        // Input Form Edit
+        this.inpEditName = document.getElementById('editName');
+        this.inpEditUsername = document.getElementById('editUsername');
+        this.inpEditPhone = document.getElementById('editPhone');
+        this.inpEditEmail = document.getElementById('editEmail');
+        this.inpEditCar = document.getElementById('editCarModel');
+        this.inpEditPlate = document.getElementById('editPlate');
     }
 
     bind() {
@@ -203,6 +221,16 @@ export class DriverApp {
         });
 
         this.formBank?.addEventListener('submit', (e) => this.handleUpdateBank(e));
+
+        // Listener Modal Edit Profil
+        this.btnOpenEditProfile?.addEventListener('click', () => this.openEditProfile());
+        this.closeEditProfile?.addEventListener('click', () => {
+            this.editProfileModal.classList.add('hidden');
+            this.editProfileModal.classList.remove('flex');
+        });
+        
+        // Listener Submit Form
+        this.formEditProfile?.addEventListener('submit', (e) => this.submitEditProfile(e));
 
         // Listener Modal Keluar
         this.btnCancelLeave?.addEventListener('click', () => {
@@ -431,6 +459,9 @@ export class DriverApp {
         if (!this.driverData) return;
         this.profileInitial.textContent = this.driverData.name.charAt(0).toUpperCase();
         this.profileName.textContent = this.driverData.name;
+        // Data Tambahan (Email & HP)
+        if(this.profilePhone) this.profilePhone.textContent = this.driverData.phone_number || '-';
+        if(this.profileEmail) this.profileEmail.textContent = this.driverData.email || '-';
         const profile = this.driverData.driver_profile;
         this.profileCar.textContent = `${profile.car_model || '-'} • ${profile.plate_number || '-'}`;
 
@@ -1039,6 +1070,67 @@ export class DriverApp {
             btn.disabled = false;
         }
     }
+    // Buka Modal dan Isi Nilai Awal
+    openEditProfile() {
+        const u = this.driverData;
+        const p = u.driver_profile || {};
 
+        this.inpEditName.value = u.name;
+        this.inpEditUsername.value = u.username;
+        this.inpEditPhone.value = u.phone_number || '';
+        this.inpEditEmail.value = u.email || '';
+        this.inpEditCar.value = p.car_model || '';
+        this.inpEditPlate.value = p.plate_number || '';
+
+        this.editProfileModal.classList.remove('hidden');
+        this.editProfileModal.classList.add('flex');
+    }
+
+    // Kirim Data ke API
+    async submitEditProfile(e) {
+        e.preventDefault();
+
+        // Siapkan Payload
+        const payload = {
+            name: this.inpEditName.value,
+            username: this.inpEditUsername.value,
+            phone_number: this.inpEditPhone.value,
+            email: this.inpEditEmail.value,
+            car_model: this.inpEditCar.value,
+            plate_number: this.inpEditPlate.value
+        };
+
+        const btn = this.formEditProfile.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        btn.textContent = 'Menyimpan...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetchApi('/driver/profile/update', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            // Update data lokal dengan respon terbaru dari server
+            this.driverData = response.data;
+            
+            // Render ulang tampilan
+            this.renderProfile();
+
+            // Tutup Modal
+            this.editProfileModal.classList.add('hidden');
+            this.editProfileModal.classList.remove('flex');
+
+            Utils.showToast('Profil berhasil diperbarui!', 'success');
+
+        } catch (error) {
+            console.error(error);
+            // Error sudah dihandle fetchApi (muncul toast), 
+            // tapi tombol harus kita reset manual
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
 
 }

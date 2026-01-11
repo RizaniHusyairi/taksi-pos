@@ -113,5 +113,7 @@ Route::middleware('auth:sanctum')->group(function() {
 
         Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);
+
+        Route::post('/profile/update', [DriverApiController::class, 'updateProfile']);
     });
 });

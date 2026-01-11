@@ -122,6 +122,10 @@ export class AdminApp{
         mail_encryption: document.getElementById('mailEncryption').value,
         mail_from_address: document.getElementById('mailUsername').value.trim(), // Biasanya sama dengan username
         mail_from_name: document.getElementById('mailFromName').value.trim(),
+        // Data WA Baru
+        wa_token: document.getElementById('waToken').value.trim(),
+        admin_wa_number: document.getElementById('adminWaNumber').value.trim(),
+
       };
 
       // Validasi sederhana di frontend
@@ -871,6 +875,8 @@ async renderSettings() {
     if(document.getElementById('mailPassword')) document.getElementById('mailPassword').value = settings.mail_password || ''; // Hati-hati menampilkan password
     if(document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
     if(document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
+    if(document.getElementById('waToken')) document.getElementById('waToken').value = settings.wa_token || '';
+      if(document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
 
   } catch (error) {
     console.error("Gagal memuat pengaturan:", error);

@@ -15,6 +15,7 @@ use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\WithdrawalRequestNotification;
+use App\Services\WhatsAppService;
 
 class DriverApiController extends Controller
 {
@@ -363,6 +364,36 @@ class DriverApiController extends Controller
             }
         }
 
+        // --- NOTIFIKASI WHATSAPP ---
+        try {
+            $waToken = Setting::where('key', 'wa_token')->value('value');
+            $adminWa = Setting::where('key', 'admin_wa_number')->value('value');
+
+            if ($waToken && $adminWa && $newWithdrawal) {
+                
+                $driverName = $driver->name;
+                $amountRp = number_format($amountToWithdraw, 0, ',', '.');
+                $time = now()->format('d M Y H:i');
+                $bank = $driver->driverProfile->bank_name ?? '-';
+                $rek = $driver->driverProfile->account_number ?? '-';
+
+                $message = "*PENCAIRAN DANA BARU*\n\n"
+                    . "Halo Admin, ada pengajuan baru:\n"
+                    . "👤 *Driver:* $driverName\n"
+                    . "💰 *Jumlah:* Rp $amountRp\n"
+                    . "🏦 *Bank:* $bank ($rek)\n"
+                    . "🕒 *Waktu:* $time\n\n"
+                    . "Mohon segera cek dashboard admin untuk memproses.";
+
+                // Panggil Service
+                WhatsAppService::send($adminWa, $message, $waToken);
+            }
+        } catch (\Exception $e) {
+            // Error WA jangan sampai menggagalkan request driver
+            \Illuminate\Support\Facades\Log::error("Gagal kirim WA: " . $e->getMessage());
+        }
+        // ---------------------------
+
         return response()->json(['message' => 'Permintaan pencairan berhasil dikirim.'], 201);
     }
     
@@ -521,5 +552,50 @@ class DriverApiController extends Controller
         ]);
 
         return response()->json(['message' => 'Password berhasil diubah.']);
+    }
+
+    /**
+     * Update Profil Driver (Biodata & Kendaraan)
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        // 1. Validasi Input
+        $validated = $request->validate([
+            // Validasi Tabel Users
+            'name'         => 'required|string|max:255',
+            'email'        => 'required|email|max:255|unique:users,email,' . $user->id,
+            'phone_number' => 'required|string|max:20|unique:users,phone_number,' . $user->id,
+            'username'     => 'required|string|max:50|unique:users,username,' . $user->id,
+            
+            // Validasi Tabel DriverProfiles
+            'car_model'    => 'required|string|max:50',
+            'plate_number' => 'required|string|max:20',
+        ]);
+
+        DB::transaction(function () use ($user, $validated) {
+            // 2. Update Tabel Users
+            $user->update([
+                'name'         => $validated['name'],
+                'email'        => $validated['email'],
+                'phone_number' => $validated['phone_number'],
+                'username'     => $validated['username'],
+            ]);
+
+            // 3. Update Tabel DriverProfiles
+            $user->driverProfile()->updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'car_model'    => $validated['car_model'],
+                    'plate_number' => $validated['plate_number']
+                ]
+            );
+        });
+
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui.',
+            'data'    => $user->load('driverProfile')
+        ]);
     }
 }

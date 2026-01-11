@@ -30,6 +30,7 @@ class User extends Authenticatable
         'name',
         'username',
         'email',
+        'phone_number',
         'password',
     ];
 
@@ -64,6 +65,7 @@ class User extends Authenticatable
 
     // =========================================================
     // === TAMBAHKAN FUNGSI INI ===
+
     // =========================================================
     /**
      * Menentukan kolom yang digunakan untuk otentikasi.

@@ -187,22 +187,36 @@
     <section id="view-profile" class="view-section hidden space-y-5">
         <!-- Profile Info Card -->
         <div>
+          
             <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Informasi Akun</h2>
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 relative">
+                
+                <button id="btnOpenEditProfile" class="absolute top-4 right-4 text-primary-600 dark:text-primary-400 p-1 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-full transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                </button>
+  
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400 grid place-items-center text-3xl font-bold">
                         <span id="profileInitial">A</span>
                     </div>
                     <div>
                         <p id="profileName" class="font-bold text-lg text-slate-800 dark:text-slate-100">Nama Supir</p>
-                        <p class="text-sm text-slate-500 dark:text-slate-400">Supir Taksi</p>
+                        <p id="profilePhone" class="text-sm text-slate-500 dark:text-slate-400">-</p> </div>
+                </div>
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-500 dark:text-slate-400">Kendaraan</span>
+                        <span id="profileCar" class="font-semibold text-slate-700 dark:text-slate-200">-</span>
+                    </div>
+                    <div class="flex justify-between items-center text-sm mt-1">
+                        <span class="text-slate-500 dark:text-slate-400">Email</span>
+                        <span id="profileEmail" class="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">-</span>
                     </div>
                 </div>
-                <div>
-                    <p class="text-xs text-slate-500 dark:text-slate-400">Kendaraan</p>
-                    <p id="profileCar" class="font-semibold text-slate-700 dark:text-slate-200">Avanza - B 1234 CD</p>
-                </div>
             </div>
+            
             <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
               <div class="flex justify-between items-center">
                   <h3 class="font-semibold text-slate-700 dark:text-slate-200">Rekening Pencairan</h3>
@@ -304,6 +318,51 @@
           </form>
       </div>
   </div>
+
+  <div id="editProfileModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-4 max-h-[90vh] overflow-y-auto">
+        <h3 class="font-bold text-lg mb-4 text-slate-800 dark:text-white">Edit Profil</h3>
+        
+        <form id="formEditProfile" class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Nama Lengkap</label>
+                <input id="editName" type="text" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Username</label>
+                <input id="editUsername" type="text" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">No. HP / WA</label>
+                    <input id="editPhone" type="text" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                    <input id="editEmail" type="email" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+                </div>
+            </div>
+
+            <div class="border-t border-slate-100 dark:border-slate-700 my-2"></div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Model Mobil</label>
+                    <input id="editCarModel" type="text" placeholder="Avanza" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Plat Nomor</label>
+                    <input id="editPlate" type="text" placeholder="KT 1234 XX" class="w-full rounded-lg border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm" required>
+                </div>
+            </div>
+
+            <div class="flex gap-2 justify-end mt-4 pt-2">
+                <button type="button" id="closeEditProfile" class="px-4 py-2 text-slate-500 text-sm">Batal</button>
+                <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
 
   <div id="proofModal" class="fixed inset-0 bg-black/90 hidden items-center justify-center p-4 z-50 backdrop-blur-sm" onclick="this.classList.add('hidden')">
     <div class="relative max-w-sm w-full animate-in fade-in zoom-in duration-200">
