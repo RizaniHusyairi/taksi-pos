@@ -188,34 +188,59 @@
         <!-- Profile Info Card -->
         <div>
           
-            <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Informasi Akun</h2>
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 relative">
-                
-                <button id="btnOpenEditProfile" class="absolute top-4 right-4 text-primary-600 dark:text-primary-400 p-1 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-full transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                    </svg>
-                </button>
-  
-                <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400 grid place-items-center text-3xl font-bold">
-                        <span id="profileInitial">A</span>
-                    </div>
-                    <div>
-                        <p id="profileName" class="font-bold text-lg text-slate-800 dark:text-slate-100">Nama Supir</p>
-                        <p id="profilePhone" class="text-sm text-slate-500 dark:text-slate-400">-</p> </div>
-                </div>
-                <div class="pt-2 border-t border-slate-100 dark:border-slate-700">
-                    <div class="flex justify-between items-center text-sm">
-                        <span class="text-slate-500 dark:text-slate-400">Kendaraan</span>
-                        <span id="profileCar" class="font-semibold text-slate-700 dark:text-slate-200">-</span>
-                    </div>
-                    <div class="flex justify-between items-center text-sm mt-1">
-                        <span class="text-slate-500 dark:text-slate-400">Email</span>
-                        <span id="profileEmail" class="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[150px]">-</span>
-                    </div>
-                </div>
-            </div>
+          <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Informasi Akun</h2>
+            
+          <div class="bg-white dark:bg-slate-800 rounded-xl shadow-[0_4px_15px_rgb(0,0,0,0.05)] p-5 relative overflow-hidden">
+              
+              <div class="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-primary-50 dark:bg-primary-900/20 rounded-full blur-2xl pointer-events-none"></div>
+
+              <div class="relative z-10">
+                  <div class="flex items-start gap-4 mb-4">
+                      <div class="w-14 h-14 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 dark:from-primary-900 dark:to-slate-800 text-primary-600 dark:text-primary-400 grid place-items-center text-2xl font-bold border-2 border-white dark:border-slate-700 shadow-sm flex-shrink-0">
+                          <span id="profileInitial">A</span>
+                      </div>
+                      <div class="flex-1 pt-1">
+                          <h3 id="profileName" class="font-bold text-lg text-slate-800 dark:text-slate-100 leading-tight truncate">Nama Supir</h3>
+                           <div class="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400 mt-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 opacity-70">
+                                  <path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c-.41.117-.643.555-.48.95a11.542 11.542 0 006.254 6.254c.395.163.833-.07.95-.48l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd" />
+                                </svg>
+                              <p id="profilePhone">-</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <button id="btnOpenEditProfile" class="w-full mb-4 py-2.5 px-4 border border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] flex items-center justify-center gap-2 group">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 text-primary-500 group-hover:text-primary-700 transition-colors">
+                          <path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" />
+                          <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z" />
+                        </svg>
+                      <span>Edit Profil & Kendaraan</span>
+                  </button>
+
+                  <div class="pt-3 border-t border-slate-100 dark:border-slate-700/50 space-y-2">
+                      <div class="flex justify-between items-center text-sm">
+                          <span class="text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 opacity-60">
+                                  <path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.172 6a2 2 0 10-2.829-2.828 2 2 0 002.829 2.828zm2.828-4a2 2 0 11-2.828 2.828 2 2 0 012.828-2.828zm10 0a2 2 0 11-2.828 2.828 2 2 0 012.828-2.828zm-2.828 4a2 2 0 102.828-2.828 2 2 0 00-2.828 2.828z" clip-rule="evenodd" />
+                                </svg>
+                              Kendaraan
+                          </span>
+                          <span id="profileCar" class="font-semibold text-slate-700 dark:text-slate-200">-</span>
+                      </div>
+                      <div class="flex justify-between items-center text-sm">
+                          <span class="text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 opacity-60">
+                                  <path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z" />
+                                  <path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z" />
+                                </svg>
+                              Email
+                          </span>
+                          <span id="profileEmail" class="font-semibold text-slate-700 dark:text-slate-200 truncate max-w-[180px]">-</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
             
             <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
               <div class="flex justify-between items-center">
@@ -226,8 +251,8 @@
                   <p class="text-xs text-slate-500 dark:text-slate-400">Bank & No. Rek</p>
                   <p id="txtBankInfo" class="font-semibold text-slate-800 dark:text-slate-100 text-lg">-</p>
               </div>
-          </div>
-          <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 space-y-3 mt-3">
               <h3 class="font-semibold text-slate-700 dark:text-slate-200 border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Keamanan Akun</h3>
               
               <form id="formChangePassword" class="space-y-4">
@@ -249,8 +274,8 @@
                       </button>
                   </div>
               </form>
-          </div>
-        </div>
+            </div>
+         </div>
          <!-- Theme Settings Card -->
          <div>
             <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Pengaturan Tampilan</h2>
