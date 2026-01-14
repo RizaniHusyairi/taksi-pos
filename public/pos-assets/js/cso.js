@@ -553,18 +553,31 @@ class CsoApp {
         const isAndroid = /Android/i.test(navigator.userAgent);
 
         if (isAndroid) {
-            // --- METODE CETAK BLUETOOTH (VIA RAWBT) ---
+            // --- KHUSUS ANDROID (RawBT) ---
             
-            // Kita perlu mengubah HTML menjadi Base64 agar bisa dikirim lewat URL
-            // Trik 'unescape' + 'encodeURIComponent' digunakan untuk menangani karakter UTF-8 (seperti Rp, emoji, dll)
-            const base64Data = btoa(unescape(encodeURIComponent(receiptHTML)));
+            // Masalah Utama: RawBT tidak bisa baca src="/pos-assets/..."
+            // Solusi: Kita HAPUS tag <img> untuk versi Bluetooth agar tidak error/blank
+            // Atau ganti dengan Text Header Saja
             
-            // Format URL Scheme untuk RawBT
-            // Opsi: cut=1 (potong kertas), h=auto (tinggi otomatis)
-            const rawbtUrl = `rawbt:data:text/html;base64,${base64Data}`;
-            
-            // Buka aplikasi RawBT
-            window.location.href = rawbtUrl;
+            // Kita buat HTML khusus RawBT yang lebih sederhana (Tanpa CSS eksternal/Gambar URL)
+            let rawBtHTML = receiptHTML;
+
+            // A. Hapus tag <img> (Penyebab utama Blank Page)
+            // Regex ini akan menghapus semua tag <img ... >
+            rawBtHTML = rawBtHTML.replace(/<img[^>]*>/g, ''); 
+
+            // B. Tambahkan Judul Teks Pengganti Logo (Opsional, agar tidak kosong melompong di atas)
+            // Kita sisipkan teks sebelum "KOPERASI ANGKASA JAYA" jika logo dihapus
+            // (Sebenarnya di generateReceiptHTML text KOPERASI sudah ada, jadi aman dihapus saja img-nya)
+
+            // C. Encode ke Base64
+            const base64Data = btoa(unescape(encodeURIComponent(rawBtHTML)));
+
+            // D. Gunakan Skema 'intent:' (Lebih stabil daripada 'rawbt:')
+            // Format: intent:base64,{DATA}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;
+            const intentUrl = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=${window.location.href};end;`;
+
+            window.location.href = intentUrl;
 
         } else {
             // --- METODE CETAK STANDARD (DESKTOP/LAPTOP) ---
