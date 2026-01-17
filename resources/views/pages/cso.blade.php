@@ -218,56 +218,103 @@
   </nav>
 
   <!-- Payment Modal -->
-  <div id="paymentModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-30">
-    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-lg w-full p-4 view-section">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="font-semibold text-slate-800 dark:text-slate-100">Proses Pembayaran</h3>
-        <button id="closePayModal" class="text-slate-500 dark:text-slate-400">✕</button>
-      </div>
-      <div id="payInfo" class="text-sm text-slate-600 dark:text-slate-300 mb-4 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg"></div>
-      <div class="grid grid-cols-1 gap-3">
-        <button id="payQRIS" class="rounded-lg border border-slate-300 dark:border-slate-600 p-3 text-left hover:bg-primary-50 dark:hover:bg-slate-700">
-          <div class="font-medium text-slate-800 dark:text-slate-100">QRIS</div>
-          <div class="text-xs text-slate-500 dark:text-slate-400">Tampilkan QR & konfirmasi</div>
-        </button>
-        <button id="payCashCSO" class="rounded-lg border border-slate-300 dark:border-slate-600 p-3 text-left hover:bg-primary-50 dark:hover:bg-slate-700">
-          <div class="font-medium text-slate-800 dark:text-slate-100">Tunai ke CSO</div>
-          <div class="text-xs text-slate-500 dark:text-slate-400">Konfirmasi penerimaan</div>
-        </button>
-        <button id="payCashDriver" class="rounded-lg border border-slate-300 dark:border-slate-600 p-3 text-left hover:bg-primary-50 dark:hover:bg-slate-700">
-          <div class="font-medium text-slate-800 dark:text-slate-100">Tunai ke Supir</div>
-          <div class="text-xs text-slate-500 dark:text-slate-400">Penumpang bayar ke supir</div>
-        </button>
-      </div>
-      <div id="qrisBox" class="hidden mt-4 p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-        
-        <div class="text-center mb-4">
-            <div class="text-sm mb-2 text-slate-700 dark:text-slate-200 font-semibold">1. Scan QRIS Bank BTN</div>
-            <img src="{{ asset('assets/img/qris-placeholder.svg') }}" alt="QRIS" class="w-48 h-48 mx-auto bg-white rounded-lg shadow-sm border p-2">
+  <div id="paymentModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-30 backdrop-blur-sm transition-opacity">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 view-section relative overflow-hidden flex flex-col max-h-[90vh]">
+      
+      <div class="flex items-center justify-between mb-4 flex-shrink-0">
+        <div>
+            <h3 class="font-bold text-xl text-slate-800 dark:text-slate-100">Konfirmasi Order</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Pastikan data perjalanan sudah benar</p>
         </div>
+        <button id="closePayModal" class="p-2 bg-slate-100 dark:bg-slate-700 rounded-full text-slate-500 hover:text-slate-700 transition-colors">✕</button>
+      </div>
 
-        <div class="space-y-2">
-            <div class="text-sm text-slate-700 dark:text-slate-200 font-semibold">2. Foto Bukti Transfer</div>
-            
-            <div id="proofPreviewBox" class="hidden w-full h-32 bg-slate-200 dark:bg-slate-800 rounded-lg overflow-hidden relative mb-2">
-                <img id="proofPreviewImg" class="w-full h-full object-cover">
-                <button id="removeProof" class="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow-md">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <div class="overflow-y-auto flex-grow pr-1">
+          
+          <div id="payInfo" class="mb-6 p-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 rounded-xl"></div>
+
+          <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                Nomor WhatsApp Penumpang <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span class="text-slate-500 font-bold text-sm">+62</span>
+                </div>
+                <input type="tel" id="passengerPhone" 
+                    class="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-500/20 transition-all text-slate-800 dark:text-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400" 
+                    placeholder="812-3456-7890" inputmode="numeric">
+                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                </div>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1 ml-1">Struk digital akan dikirim otomatis ke nomor ini.</p>
+          </div>
+
+          <div class="space-y-3 mb-6">
+            <button id="payQRIS" class="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700 transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                </div>
+                <div class="text-left">
+                    <div class="font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-700">QRIS (Transfer)</div>
+                    <div class="text-xs text-slate-500">Upload bukti bayar</div>
+                </div>
+                <div class="ml-auto text-slate-400">▼</div>
+            </button>
+
+            <div id="qrisBox" class="hidden p-4 border border-blue-200 dark:border-slate-600 rounded-xl bg-blue-50/50 dark:bg-slate-700/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                
+                <div class="text-center mb-4">
+                    <p class="text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">Scan Barcode Bank BTN</p>
+                    <img src="{{ asset('assets/img/qris-placeholder.svg') }}" alt="QRIS" class="w-40 h-40 mx-auto bg-white rounded-lg shadow-sm border p-2 object-contain">
+                </div>
+
+                <div class="space-y-2">
+                    <p class="text-xs font-bold text-slate-600 dark:text-slate-300">Upload Bukti Transfer</p>
+                    
+                    <div id="proofPreviewBox" class="hidden w-full h-40 bg-slate-200 dark:bg-slate-800 rounded-lg overflow-hidden relative mb-2 border-2 border-slate-300 dark:border-slate-600">
+                        <img id="proofPreviewImg" class="w-full h-full object-contain">
+                        <button id="removeProof" class="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-1.5 shadow-md transition-colors">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+
+                    <label for="proofInput" class="flex items-center justify-center w-full px-4 py-4 bg-white dark:bg-slate-800 border-2 border-dashed border-blue-300 dark:border-slate-500 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700 transition-all group">
+                        <div class="text-center">
+                            <svg class="w-8 h-8 mx-auto text-blue-400 group-hover:text-blue-600 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Klik untuk Foto Bukti</span>
+                        </div>
+                        <input type="file" id="proofInput" accept="image/*" capture="environment" class="hidden">
+                    </label>
+                </div>
+
+                <button id="confirmQR" disabled class="mt-4 w-full bg-slate-300 dark:bg-slate-600 text-slate-500 font-bold py-3 rounded-xl cursor-not-allowed transition-all shadow-sm">
+                    Kirim & Konfirmasi Pembayaran
                 </button>
             </div>
 
-            <label for="proofInput" class="flex items-center justify-center w-full px-4 py-3 bg-white dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl cursor-pointer hover:border-primary-500 transition-colors">
-                <div class="text-center">
-                    <svg class="w-6 h-6 mx-auto text-slate-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    <span class="text-sm text-slate-500">Ketuk untuk Memfoto</span>
+            <button id="payCashCSO" class="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-green-500 hover:bg-green-50 dark:hover:bg-slate-700 transition-all group">
+                <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                 </div>
-                <input type="file" id="proofInput" accept="image/*" capture="environment" class="hidden">
-            </label>
-        </div>
+                <div class="text-left">
+                    <div class="font-bold text-slate-800 dark:text-slate-100 group-hover:text-green-700">Tunai ke CSO</div>
+                    <div class="text-xs text-slate-500">Bayar cash di loket</div>
+                </div>
+            </button>
 
-        <button id="confirmQR" disabled class="mt-4 w-full bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold py-3 rounded-xl cursor-not-allowed transition-all">
-            Upload & Konfirmasi Pembayaran
-        </button>
+            <button id="payCashDriver" class="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-slate-700 transition-all group">
+                <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                </div>
+                <div class="text-left">
+                    <div class="font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-700">Tunai ke Supir</div>
+                    <div class="text-xs text-slate-500">Bayar saat sampai tujuan</div>
+                </div>
+            </button>
+          </div>
+
       </div>
     </div>
   </div>
@@ -279,18 +326,13 @@
         <h3 class="font-semibold text-slate-800 dark:text-slate-100">Struk Pembayaran</h3>
         <button id="closeReceipt" class="text-slate-500 dark:text-slate-400">✕</button>
       </div>
-      <div class="text-xs text-slate-500 dark:text-slate-400 mb-2">Pratinjau struk (58mm).</div>
-      <div id="receiptArea" class="bg-white p-2 rounded-md mx-auto"></div>
-      <div class="mt-4 flex gap-2 justify-end">
-        <button id="shareReceipt" class="bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-2 text-sm font-semibold flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-          </svg>
-          Kirim WA
-      </button>
-
-      <button id="printReceipt" class="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Cetak</button>
-      <button id="closeReceipt2" class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 text-sm font-semibold">Selesai</button>      </div>
+      
+      <div id="receiptArea" class="bg-white p-2 rounded-md mx-auto border border-slate-200"></div>
+      
+      <div class="mt-4 text-center">
+        <p class="text-xs text-green-600 font-semibold mb-2">✓ Link struk telah dikirim ke WA Penumpang & Supir.</p>
+        <button id="closeReceipt2" class="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-3 text-sm font-bold">Tutup / Selesai</button>
+      </div>
     </div>
   </div>
 

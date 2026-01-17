@@ -12,7 +12,12 @@ use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\DriverProfile;
 use App\Models\DriverQueue; 
+use App\Models\Setting; 
 use Illuminate\Support\Facades\Hash;
+use App\Services\WhatsAppService;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
+use Illuminate\Support\Facades\Log;
 
 class CsoApiController extends Controller
 {
@@ -209,6 +214,8 @@ class CsoApiController extends Controller
 
     public function processOrder(Request $request)
     {
+        
+
         // 1. Validasi Input Lengkap
         $validated = $request->validate([
             'driver_id'     => 'required|exists:users,id',
@@ -216,6 +223,7 @@ class CsoApiController extends Controller
             'method'        => 'required|in:QRIS,CashCSO,CashDriver',
             // Bukti foto wajib jika QRIS
             'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120',
+            'passenger_phone' => 'required|string|min:10|max:15',
         ], [
             'payment_proof.required_if' => 'Wajib upload foto bukti transfer untuk QRIS.',
         ]);
@@ -262,6 +270,56 @@ class CsoApiController extends Controller
             // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
             return $booking->load(['driver.driverProfile', 'zoneTo', 'cso']);
         });
+
+        // 3. LOGIKA NOTIFIKASI (Di luar transaction DB agar tidak lambat)
+        try {
+            $driver = $result->driver;
+            $waToken = Setting::where('key', 'wa_token')->value('value');
+            
+            // Link Struk (menggunakan ID transaksi)
+            $receiptUrl = route('receipt.show', $result->transaction->id);
+            
+            $zoneName = $result->zoneTo->name;
+            $priceRp = number_format($result->price, 0, ',', '.');
+            
+            // --- A. KIRIM WA KE PENUMPANG ---
+            if ($waToken && $validated['passenger_phone']) {
+
+                $msgPassenger = "*STRUK PEMBAYARAN TAKSI*\n\n"
+                    . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n"
+                    . "Tujuan: $zoneName\n"
+                    . "Tarif: Rp $priceRp\n\n"
+                    . "Lihat struk digital Anda di sini:\n"
+                    . "$receiptUrl\n\n"
+                    . "Selamat menikmati perjalanan!";
+                
+                WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
+            }
+
+            // --- B. KIRIM WA KE DRIVER ---
+            // Asumsi driver punya no HP di kolom 'phone_number' atau 'username'
+            $driverPhone = $driver->phone_number ?? $driver->username;
+            
+            if ($waToken && $driverPhone) {
+                $msgDriver = "*ORDER BARU MASUK!* 🚖\n\n"
+                    . "Tujuan: *$zoneName*\n"
+                    . "Penumpang: " . $validated['passenger_phone'] . "\n"
+                    . "Tarif: Rp $priceRp\n\n"
+                    . "Struk Pembayaran:\n$receiptUrl\n\n"
+                    . "Harap segera menuju titik jemput.";
+
+                WhatsAppService::send($driverPhone, $msgDriver, $waToken);
+            }
+
+            // --- C. KIRIM EMAIL KE DRIVER ---
+            if ($driver->email) {
+                // Pastikan Anda sudah membuat Mail Class: php artisan make:mail NewOrderForDriver
+                Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
+            }
+
+        } catch (\Exception $e) {
+            Log::error("Notifikasi Gagal: " . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Order berhasil diproses',

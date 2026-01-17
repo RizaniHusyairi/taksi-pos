@@ -89,6 +89,7 @@ class CsoApp {
       this.refreshHistoryBtn = document.getElementById('refreshHistory');
       this.receiptModal = document.getElementById('receiptModal');
       this.receiptArea = document.getElementById('receiptArea');
+      this.inpPassengerPhone = document.getElementById('passengerPhone');
 
       // --- ELEMEN PROFILE BARU ---
       this.profileInitial = document.getElementById('profileInitial');
@@ -124,7 +125,16 @@ class CsoApp {
       this.removeProofBtn.addEventListener('click', () => this.resetProof());
       this.btnClosePay.addEventListener('click', () => this.closePayment());
       this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
-      this.btnQRIS.addEventListener('click', () => { this.qrisBox.classList.remove('hidden'); });
+      this.btnQRIS.addEventListener('click', () => { 
+            // Toggle visibility: Kalau hidden, munculkan. Kalau sudah muncul, biarkan.
+            if(this.qrisBox.classList.contains('hidden')){
+                this.qrisBox.classList.remove('hidden');
+                // Opsional: Scroll ke bawah agar input terlihat
+                this.qrisBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                this.qrisBox.classList.add('hidden');
+            }
+        });
       this.btnConfirmQR.addEventListener('click', () => this.finishPayment('QRIS'));
       this.btnCashCSO.addEventListener('click', () => this.finishPayment('CashCSO'));
       this.btnCashDriver.addEventListener('click', () => this.finishPayment('CashDriver'));
@@ -134,8 +144,6 @@ class CsoApp {
       document.getElementById('closeReceipt2')?.addEventListener('click', () => this.hideReceipt());
       // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
 
-      document.getElementById('printReceipt')?.addEventListener('click', () => this.printReceiptHandler());
-      document.getElementById('shareReceipt')?.addEventListener('click', () => this.shareReceiptHandler());
       // --- LISTENER PROFILE BARU ---
       if (this.formEditProfile) {
           this.formEditProfile.addEventListener('submit', (e) => this.handleUpdateProfile(e));
@@ -404,6 +412,7 @@ class CsoApp {
         // Reset UI Modal
         this.qrisBox.classList.add('hidden');
         this.resetProof(); 
+        this.inpPassengerPhone.value = ''; // Reset Phone Input
 
         // Tampilkan Info di Modal
         this.payInfo.innerHTML = `
@@ -458,25 +467,52 @@ class CsoApp {
     async finishPayment(method) {
         if (!this.selectedOrderData) return;
 
+        // 1. Ambil & Validasi Nomor HP
+        let phone = this.inpPassengerPhone.value.trim();
+        
+        if (!phone) {
+            Utils.showToast('Nomor WhatsApp Penumpang WAJIB diisi!', 'error');
+            this.inpPassengerPhone.focus();
+            return;
+        }
+
+        // Format HP (08xx -> 628xx)
+        phone = phone.replace(/\D/g, ''); // Hapus karakter non-angka
+        // if (phone.startsWith('0')) {
+        //     phone = '62' + phone.substring(1);
+        // }
+        if (phone.length < 10) {
+            Utils.showToast('Nomor HP tidak valid.', 'error');
+            return;
+        }
+        console.log(phone)
+
         // Setup Loading UI
         let originalBtnText = '';
         let btnElement = null;
 
+        // Tentukan tombol mana yang sedang loading
         if (method === 'QRIS') {
             btnElement = this.btnConfirmQR;
-            originalBtnText = btnElement.textContent;
+        } else if (method === 'CashCSO') {
+            btnElement = this.btnCashCSO;
+        } else if (method === 'CashDriver') {
+            btnElement = this.btnCashDriver;
+        }
+
+        if (btnElement) {
+            originalBtnText = btnElement.innerHTML; // Simpan HTML asli (termasuk icon)
             btnElement.textContent = 'Memproses...';
             btnElement.disabled = true;
         }
 
         try {
             const formData = new FormData();
-            // Ambil data dari memori sementara
             formData.append('driver_id', this.selectedOrderData.driver_id);
             formData.append('zone_id', this.selectedOrderData.zone_id);
             formData.append('method', method);
+            formData.append('passenger_phone', phone); // <--- KIRIM NO HP
 
-            // Validasi Bukti QRIS
             if (method === 'QRIS') {
                 const file = this.proofInput.files[0];
                 if (!file) throw new Error("Wajib foto bukti transfer QRIS.");
@@ -485,7 +521,6 @@ class CsoApp {
 
             const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             
-            // PANGGIL ROUTE BARU
             const response = await fetch('/api/cso/process-order', {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
@@ -497,29 +532,24 @@ class CsoApp {
                 throw new Error(errData.message || 'Gagal memproses order');
             }
             
-            const result = await response.json(); // Berisi data booking lengkap dari backend
+            const result = await response.json();
 
-            Utils.showToast('Order Berhasil!', 'success');
+            Utils.showToast('Order Sukses! Notifikasi WA terkirim.', 'success');
             
-            // Simpan data hasil response untuk dicetak struknya
-            // Backend harus return struktur yang cocok dengan generateReceiptHTML
-            // Di controller tadi kita sudah return $booking->load(...)
+            // Tampilkan Struk (Hanya untuk preview, tombol cetak sudah dihapus)
             this.lastReceiptData = result.data; 
-            
-            // Tampilkan Struk
             this.showReceipt(this.lastReceiptData);
             
-            // Bersihkan UI
-            this.closePayment();     // Tutup modal bayar
-            this.renderDrivers();    // Refresh list driver (driver tadi harusnya hilang)
-            this.renderHistory();    // Refresh history transaksi
+            this.closePayment();
+            this.renderDrivers();
+            this.renderHistory();
 
         } catch (error) {
             console.error(error);
             Utils.showToast(error.message, 'error');
         } finally {
             if (btnElement) {
-                btnElement.textContent = originalText;
+                btnElement.innerHTML = originalBtnText;
                 btnElement.disabled = false;
             }
         }
@@ -688,14 +718,12 @@ class CsoApp {
         // Ambil Data Driver & Profile
         const driverObj = isBooking ? tx.driver : booking?.driver;
         const profile = driverObj?.driver_profile || {};
-
         
-        // LOGIKA BARU: Ambil Line Number
+        // Logika Line Number
         const lineNo = profile.line_number ? `#L${profile.line_number}` : ''; 
-        // Gabungkan Nama Driver + Line Number (Contoh: "Budi (#L5)")
         const driverDisplayName = driverObj ? `${lineNo}` : 'N/A';
 
-        // ... (Logika Tanggal, Waktu, Zone, Price tetap sama) ...
+        // Logika Tanggal & Waktu
         const dateTime = new Date(tx.created_at || Date.now());
         const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
         const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
@@ -706,20 +734,29 @@ class CsoApp {
         
         const price = tx.price || tx.amount;
         const amountStr = new Intl.NumberFormat('id-ID').format(price);
-        const code = String(tx.id || booking?.id || 'N/A').toUpperCase();
-
+        // ID Transaksi untuk Link
+        const txId = tx.id || booking?.transaction?.id || booking?.id; 
+        const code = String(txId).toUpperCase();
 
         const csoObj = tx.cso || booking?.cso;
         const kasirName = csoObj?.name?.split(' ')[0] || 'Admin';
-
         const methodDisplay = tx.method?.includes('Cash') ? "CASH" : "QRIS";
 
-        // --- 2. STYLE CSS (Tetap Sama) ---
+        // --- 2. LOGIKA QR CODE (BARU) ---
+        // Membuat URL Lengkap ke halaman struk publik
+        const publicUrl = `${window.location.origin}/receipt/${txId}`;
+        
+        // Generate QR Code menggunakan API (Gratis & Cepat)
+        // size=100x100 cukup untuk struk thermal
+        const qrCodeImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(publicUrl)}`;
+
+        // --- 3. STYLE CSS ---
         const style = `
             font-family: 'Courier New', Courier, monospace;
             font-size: 9px;
             width: 90%;
             max-width: 58mm; 
+            margin: 0 auto;
             color: #000;
             font-weight: bold;
             line-height: 1.2;
@@ -731,11 +768,10 @@ class CsoApp {
         const flexBetween = `display: flex; justify-content: space-between;`;
         const dashedLine = `border-bottom: 1px dashed #000; margin: 5px 0;`;
         const mb1 = `margin-bottom: 4px;`;
-        const mt2 = `margin-top: 8px;`;
-
-        // Logo URL (Pastikan file sudah ada)
+        
         const logoUrl = '/pos-assets/img/logo-apt.svg'; 
 
+        // Logo Header
         const logoHtml = `
             <div style="${center} margin-bottom: 8px;">
                 <img src="${logoUrl}" alt="Logo" style="width: 80px; height: auto; filter: grayscale(100%) contrast(120%); display: block; margin: 0 auto;">
@@ -744,7 +780,7 @@ class CsoApp {
             </div>
         `;
 
-        // --- 3. HTML STRUK (Ditambahkan Baris Supir) ---
+        // --- 4. HTML STRUK ---
         return `
         <div style="${style}">
             
@@ -804,7 +840,11 @@ class CsoApp {
 
             <div style="${dashedLine}"></div>
             
-            <div style="${center} ${mt2} font-size: 8px; color: #333;">
+            <div style="${center} margin-top: 8px; margin-bottom: 8px;">
+                <img src="${qrCodeImgUrl}" style="width: 80px; height: 80px; display: block; margin: 0 auto;">
+                <div style="font-size: 8px; margin-top: 2px;">Scan untuk cek struk online</div>
+            </div>
+            <div style="${center} font-size: 8px; color: #333;">
                 <div style="margin-top: 5px;">Powered by Koperasi Angkasa Jaya</div>
                 <div>Simpan struk ini sebagai bukti.</div>
             </div>
