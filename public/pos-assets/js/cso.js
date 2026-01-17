@@ -553,7 +553,7 @@ class CsoApp {
         const isAndroid = /Android/i.test(navigator.userAgent);
 
         if (isAndroid) {
-            // --- KHUSUS ANDROID (RawBT) ---
+             // --- KHUSUS ANDROID (RawBT) ---
             
             // Masalah Utama: RawBT tidak bisa baca src="/pos-assets/..."
             // Solusi: Kita HAPUS tag <img> untuk versi Bluetooth agar tidak error/blank
