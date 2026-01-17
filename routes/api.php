@@ -10,7 +10,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 
-Route::get('/receipt/{uuid}', [PublicReceiptController::class, 'show'])->name('receipt.show');
 
 
 // === Rute API untuk Aplikasi POS Taksi ===

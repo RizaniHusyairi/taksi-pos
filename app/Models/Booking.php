@@ -24,7 +24,8 @@ class Booking extends Model
         'zone_id',
         'price',
         'status',
-        'manual_destination'
+        'manual_destination',
+        'passenger_phone'
     ];
 
     /**
@@ -49,5 +50,11 @@ class Booking extends Model
     public function zoneTo(): BelongsTo
     {
         return $this->belongsTo(Zone::class, 'zone_id');
+    }
+    
+    // --- TAMBAHKAN INI ---
+    public function transaction()
+    {
+        return $this->hasOne(Transaction::class, 'booking_id', 'id');
     }
 }

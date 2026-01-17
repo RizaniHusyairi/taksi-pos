@@ -774,7 +774,7 @@ class CsoApp {
         // Logo Header
         const logoHtml = `
             <div style="${center} margin-bottom: 8px;">
-                <img src="${logoUrl}" alt="Logo" style="width: 80px; height: auto; filter: grayscale(100%) contrast(120%); display: block; margin: 0 auto;">
+                <img src="${logoUrl}" alt="Logo" style="width: 80px; height: auto; display: block; margin: 0 auto;">
                 <div style="${bold} font-size: 12px; margin-top: 6px;">KOPERASI ANGKASA JAYA</div>
                  <div style="font-size: 8px;">Bandara Udara APT. Pranoto Samarinda</div>
             </div>

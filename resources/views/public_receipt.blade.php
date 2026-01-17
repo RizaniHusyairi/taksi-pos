@@ -13,7 +13,7 @@
         .bold { font-weight: bold; }
         .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
         .mb { margin-bottom: 5px; }
-        .logo-img { filter: grayscale(100%); width: 60px; margin: 0 auto; display: block; }
+        .logo-img {  width: 130px; margin: 0 auto; display: block; }
         .qr-img { width: 100px; margin: 15px auto; display: block; } /* Style QR */
     </style>
 </head>
@@ -21,13 +21,13 @@
     <div class="receipt">
         <div class="center mb">
             <img src="{{ asset('pos-assets/img/logo-apt.svg') }}" alt="Logo" class="logo-img">
-            <div class="bold" style="margin-top:5px;">KOPERASI ANGKASA JAYA</div>
-            <div style="font-size:10px;">Bandara APT. Pranoto Samarinda</div>
+            <div class="bold" style="margin-top:5px;">KOPERASI ANG  KASA JAYA</div>
+            <div style="font-size:10px;">Bandar Udara APT. Pranoto Samarinda</div>
         </div>
         <div class="divider"></div>
         <div class="flex mb"><span>Waktu</span> <span>{{ $transaction->created_at->format('d M Y H:i') }}</span></div>
         <div class="flex mb"><span>Kasir</span> <span>{{ $transaction->cso->name ?? 'Admin' }}</span></div>
-        <div class="flex mb"><span>Supir</span> <span>{{ $transaction->booking->driver->name ?? '-' }}</span></div>
+        <div class="flex mb"><span>Supir</span> <span>{{ $transaction->booking->driver->name ?? '-' }} </span></div>
         <div class="divider"></div>
         <div class="mb bold">Rute: {{ $transaction->booking->zoneTo->name ?? 'Manual' }}</div>
         <div class="flex mb">

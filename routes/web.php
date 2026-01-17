@@ -8,6 +8,7 @@ use App\Http\Controllers\PageController;
 use App\Models\Setting;
 use App\Models\DriverQueue;
 use App\Models\DriverProfile;
+use App\Http\Controllers\PublicReceiptController;
 
 
 
@@ -15,6 +16,9 @@ use App\Models\DriverProfile;
 Route::get('/', [PageController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+Route::get('/receipt/{uuid}', [PublicReceiptController::class, 'show'])->name('receipt.show');
+
 
 Route::get('/init-rotation', function () {
     // Set giliran awal mulai dari L1
