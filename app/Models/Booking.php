@@ -13,6 +13,23 @@ class Booking extends Model
 {
     use HasFactory;
 
+    public const STATUS_ASSIGNED    = 'Assigned';
+    public const STATUS_COMPLETED   = 'Completed';
+    public const STATUS_PAID        = 'Paid';
+    public const STATUS_CASH_DRIVER = 'CashDriver';
+    public const STATUS_CANCELLED   = 'Cancelled';
+
+    protected static array $allowedTransitions = [
+        self::STATUS_ASSIGNED => [
+            self::STATUS_COMPLETED,
+            self::STATUS_CANCELLED,
+        ],
+        self::STATUS_COMPLETED => [
+            self::STATUS_PAID,
+            self::STATUS_CASH_DRIVER,
+        ],
+    ];
+
     /**
      * The attributes that are mass assignable.
      *

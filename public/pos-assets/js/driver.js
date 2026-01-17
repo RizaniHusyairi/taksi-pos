@@ -103,11 +103,51 @@ export class DriverApp {
             updateTheme();
         });
 
-        // Listen for system theme changes
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
-        
-        updateTheme(); // Set initial theme
-    }
+export class DriverApp {
+async init() {
+    this.initTheme(); // Panggil inisialisasi tema
+    this.cacheEls();
+    this.bind();
+    // Muat data awal yang penting saat aplikasi start
+    await this.loadInitialData();
+    
+    window.addEventListener('hashchange', () => this.route());
+    this.route();
+    window.addEventListener('storage', (e) => {
+    // Abaikan update storage dari tema agar tidak re-render
+    
+    });
+}
+
+initTheme() {
+    this.themeToggleBtn = document.getElementById('theme-toggle');
+    this.sunIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>`;
+    this.moonIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>`;
+
+    const updateTheme = () => {
+        const theme = localStorage.getItem('theme') || 'system';
+        if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            this.themeToggleBtn.innerHTML = this.sunIcon;
+        } else {
+            document.documentElement.classList.remove('dark');
+            this.themeToggleBtn.innerHTML = this.moonIcon;
+        }
+    };
+
+    this.themeToggleBtn.addEventListener('click', () => {
+        const currentTheme = localStorage.getItem('theme') || 'system';
+        const isDark = document.documentElement.classList.contains('dark');
+        // Cycle: system -> light -> dark -> system
+        let newTheme;
+        if (isDark) {
+            newTheme = 'light';
+        } else {
+            newTheme = 'dark';
+        }
+        localStorage.setItem('theme', newTheme);
+        updateTheme();
+    });
 
     cacheEls() {
         // Views
@@ -418,32 +458,25 @@ export class DriverApp {
             btn.classList.add('bg-primary-600', 'hover:bg-primary-700', 'active:scale-95');
         }
     }
+}
 
-    route() {
-        const hash = (location.hash || '#orders').slice(1);
-        this.views.forEach(v => {
-        const el = document.getElementById('view-' + v);
-        if (el) el.classList.toggle('hidden', v !== hash);
-        });
-
-        document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
-        });
-
-        const titles = { orders: 'Beranda', wallet: 'Dompet', history: 'Riwayat', profile: 'Profil' };
-        this.pageTitle.textContent = titles[hash] || 'Beranda';
-
-        // Bagian ini yang memuat data secara on-demand
-        switch(hash) {
-            case 'wallet':
-                this.renderWallet(); // <-- Dipanggil HANYA saat tab Dompet dibuka
-                break;
-            case 'history':
-                this.renderTrips(); // <-- Dipanggil HANYA saat tab Riwayat dibuka
-                break;
-            // Tidak perlu case untuk 'orders' atau 'profile' 
-            // karena datanya sudah dimuat oleh loadInitialData()
-        }
+// --- FUNGSI BARU UNTUK MEMUAT DATA ---
+async loadInitialData() {
+    try {
+        // Sekarang 'data' adalah objek driver itu sendiri
+        const data = await apiFetch('/api/driver/profile');
+        
+        // Langsung simpan seluruh respons sebagai data driver
+        this.driverData = data;
+        
+        // Ambil active_booking dari properti yang sudah kita tambahkan
+        this.activeBooking = data.active_booking;
+        
+        this.renderProfile();
+        this.renderStatus();
+        this.renderActiveOrder();
+    } catch (error) {
+        console.error("Gagal memuat data awal driver:", error);
     }
 
     // --- FUNGSI BARU UNTUK MEMUAT DATA ---
@@ -539,6 +572,7 @@ export class DriverApp {
             }
         }
     }
+}
 
 
     renderActiveOrder() {
@@ -780,6 +814,7 @@ export class DriverApp {
             }).join('');
         } catch (error) { console.error(error); }
     }
+}
 
     // --- FUNGSI AKSI (sekarang memanggil API) ---
         

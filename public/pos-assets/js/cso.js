@@ -1,33 +1,9 @@
 import { Utils } from './utils.js';
+import { apiFetch } from './core/api.js';
+import { escapeHTML } from './core/sanitize.js';
 
 
-async function fetchApi(endpoint, options = {}) {
-  const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-  };
-  // Untuk API Sanctum, session cookie sudah cukup, tapi jika butuh token:
-  // const token = localStorage.getItem('authToken');
-  // if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  try {
-      const response = await fetch(`/api${endpoint}`, { 
-        ...options, 
-        headers,
-        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
-    });
-      if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Terjadi kesalahan pada server');
-      }
-      return response.json();
-  } catch (error) {
-      console.error(`API Error on ${endpoint}:`, error);
-      Utils.showToast(error.message, 'error');
-      throw error;
-  }
-}
 
 class CsoApp {
   init() {
@@ -268,7 +244,7 @@ class CsoApp {
 
   async renderZones() {
       try {
-          const zones = await fetchApi('/cso/zones');
+          const zones = await apiFetch('/api/cso/zones');
           this.zones = zones; // Simpan data zona
           const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
           this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
@@ -288,7 +264,7 @@ class CsoApp {
     this.updateConfirmButtonState();
 
     try {
-        const drivers = await fetchApi('/cso/available-drivers');
+        const drivers = await apiFetch('/api/cso/available-drivers');
 
         if (drivers.length === 0) {
             this.driversList.innerHTML = `

@@ -7,6 +7,7 @@
 
   <title>Supir - Taksi POS</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <title>Supir - Koperasi Taksi POS</title>
   <script>
     // Konfigurasi Tailwind CSS dengan dark mode berbasis class
     tailwind.config = {

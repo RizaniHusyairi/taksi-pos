@@ -167,6 +167,30 @@ class CsoApiController extends Controller
         return response()->json($booking, 201); // 201 Created
     }
 
+    public function confirmPayment(Request $request)
+    {
+        $data = $request->validate([
+            'booking_id' => 'required|exists:bookings,id',
+            'method' => 'required|in:QRIS,CashCSO',
+        ]);
+
+        $booking = Booking::findOrFail($data['booking_id']);
+
+        $this->authorize('confirmPaymentByCso', [$booking, $data['method']]);
+
+        DB::transaction(function () use ($booking, $data) {
+            Transaction::create([
+                'booking_id' => $booking->id,
+                'method' => $data['method'],
+                'amount' => $booking->price,
+            ]);
+
+            $booking->update(['status' => 'Paid']);
+        });
+
+        return response()->json(['message' => 'Payment confirmed']);
+    }
+
     /**
      * Mencatat pembayaran untuk sebuah booking.
      */

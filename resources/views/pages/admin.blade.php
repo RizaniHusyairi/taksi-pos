@@ -6,6 +6,7 @@
   <title>Admin - Taksi POS</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script src="https://cdn.tailwindcss.com"></script>
+
   <script>
     tailwind.config = {
       theme: {
