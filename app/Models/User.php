@@ -31,6 +31,7 @@ class User extends Authenticatable
         'username',
         'email',
         'phone_number',
+        'qris_path',
         'password',
     ];
 

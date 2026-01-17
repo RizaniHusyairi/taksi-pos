@@ -91,6 +91,8 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
 
+        Route::post('/profile/qris', [CsoApiController::class, 'uploadQris']);
+
     });
     
     

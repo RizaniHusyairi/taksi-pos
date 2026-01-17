@@ -18,6 +18,7 @@ use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class CsoApiController extends Controller
 {
@@ -234,10 +235,8 @@ class CsoApiController extends Controller
         // 2. Mulai Transaksi Database (Atomic)
         $result = DB::transaction(function () use ($validated, $zone, $cso, $request) {
             
-            // A. Tentukan Status Awal
-            // Jika CashDriver -> Status 'CashDriver' (Belum setor ke kantor)
-            // Jika QRIS/CashCSO -> Status 'Paid' (Uang sudah masuk)
-            $status = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
+            
+            $status = 'Assigned';
 
             // B. Simpan Data Booking
             $booking = Booking::create([
@@ -246,6 +245,7 @@ class CsoApiController extends Controller
                 'zone_id'   => $zone->id,
                 'price'     => $zone->price,
                 'status'    => $status, 
+                'passenger_phone' => $validated['passenger_phone']
             ]);
 
             // C. Simpan Transaksi (Jika ada pembayaran ke kantor/QRIS)
@@ -356,5 +356,37 @@ class CsoApiController extends Controller
             ->get();
 
         return response()->json($transactions);
+    }
+
+    /**
+     * Upload Gambar QRIS Pribadi CSO
+     */
+    public function uploadQris(Request $request)
+    {
+        $request->validate([
+            'qris_image' => 'required|image|mimes:jpeg,png,jpg|max:2048', // Max 2MB
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('qris_image')) {
+            // 1. Hapus gambar lama jika ada
+            if ($user->qris_path && Storage::disk('public')->exists($user->qris_path)) {
+                Storage::disk('public')->delete($user->qris_path);
+            }
+
+            // 2. Simpan gambar baru
+            $path = $request->file('qris_image')->store('qris_codes', 'public');
+
+            // 3. Update database
+            $user->update(['qris_path' => $path]);
+
+            return response()->json([
+                'message' => 'QRIS berhasil diupload.',
+                'path' => $path
+            ]);
+        }
+
+        return response()->json(['message' => 'Gagal upload.'], 400);
     }
 }

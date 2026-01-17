@@ -985,7 +985,7 @@ export class DriverApp {
         if (!this.activeBooking) return;
         
         const status = this.activeBooking.status;
-        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending'];
+        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending','Assigned'];
 
         if (notStartedStatuses.includes(status)) {
             // AKSI 1: MULAI PERJALANAN (Update status ke OnTrip)
