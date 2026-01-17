@@ -103,6 +103,15 @@ class CsoApp {
       this.inpCurrentPass = document.getElementById('currentPass');
       this.inpNewPass = document.getElementById('newPass');
       this.inpConfirmPass = document.getElementById('confirmPass');
+
+      // Modal Konfirmasi Tunai (BARU)
+      this.cashConfirmModal = document.getElementById('cashConfirmModal');
+      this.btnCancelCash = document.getElementById('btnCancelCash');
+      this.btnProceedCash = document.getElementById('btnProceedCash');
+      this.confirmMethodName = document.getElementById('confirmMethodName');
+    
+      // Variabel untuk menyimpan metode sementara sebelum dikonfirmasi
+      this.pendingCashMethod = null;
       
       // State
       this.zones = [];
@@ -136,8 +145,24 @@ class CsoApp {
             }
         });
       this.btnConfirmQR.addEventListener('click', () => this.finishPayment('QRIS'));
-      this.btnCashCSO.addEventListener('click', () => this.finishPayment('CashCSO'));
-      this.btnCashDriver.addEventListener('click', () => this.finishPayment('CashDriver'));
+      this.btnCashCSO.addEventListener('click', () => this.askCashConfirmation('CashCSO'));
+      this.btnCashDriver.addEventListener('click', () => this.askCashConfirmation('CashDriver'));
+
+      this.btnCancelCash?.addEventListener('click', () => {
+          this.cashConfirmModal.classList.add('hidden');
+          this.cashConfirmModal.classList.remove('flex');
+          this.pendingCashMethod = null;
+      });
+
+      this.btnProceedCash?.addEventListener('click', () => {
+          // Jika user klik Ya, baru jalankan finishPayment
+          if (this.pendingCashMethod) {
+              this.finishPayment(this.pendingCashMethod);
+              // Tutup modal konfirmasi
+              this.cashConfirmModal.classList.add('hidden');
+              this.cashConfirmModal.classList.remove('flex');
+          }
+      });
       
       // Event listener struk
       document.getElementById('closeReceipt')?.addEventListener('click', () => this.hideReceipt());
@@ -431,6 +456,27 @@ class CsoApp {
         // Tidak perlu cancelBooking ke API karena data belum masuk DB
         this.selectedOrderData = null; 
         this.resetProof();
+    }
+    
+    askCashConfirmation(method) {
+        // 1. Validasi Nomor HP dulu (Supaya tidak muncul modal kalau nomor HP kosong)
+        let phone = this.inpPassengerPhone.value.trim();
+        if (!phone) {
+            Utils.showToast('Nomor WhatsApp Penumpang WAJIB diisi!', 'error');
+            this.inpPassengerPhone.focus();
+            return;
+        }
+
+        // 2. Simpan metode yang dipilih ke variabel sementara
+        this.pendingCashMethod = method;
+
+        // 3. Update Teks di Modal agar informatif
+        const label = method === 'CashCSO' ? 'TUNAI KE CSO' : 'TUNAI KE SUPIR';
+        this.confirmMethodName.textContent = label;
+
+        // 4. Buka Modal
+        this.cashConfirmModal.classList.remove('hidden');
+        this.cashConfirmModal.classList.add('flex');
     }
 
   // --- LOGIKA PREVIEW FOTO ---

@@ -11,7 +11,7 @@ class PublicReceiptController extends Controller
         // tapi untuk sekarang kita pakai ID yang di-encode base64 atau ID biasa jika Anda mau simpel)
         
         // Asumsi: $uuid adalah ID transaksi
-        $transaction = Transaction::with(['booking.zoneTo', 'booking.driver', 'cso'])->findOrFail($uuid);
+        $transaction = Transaction::with(['booking.zoneTo', 'booking.driver.driverProfile', 'booking.cso'])->findOrFail($uuid);
         
         return view('public_receipt', compact('transaction'));
     }

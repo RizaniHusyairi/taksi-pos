@@ -26,8 +26,18 @@
         </div>
         <div class="divider"></div>
         <div class="flex mb"><span>Waktu</span> <span>{{ $transaction->created_at->format('d M Y H:i') }}</span></div>
-        <div class="flex mb"><span>Kasir</span> <span>{{ $transaction->cso->name ?? 'Admin' }}</span></div>
-        <div class="flex mb"><span>Supir</span> <span>{{ $transaction->booking->driver->name ?? '-' }} </span></div>
+        <div class="flex mb"><span>Kasir</span> <span>{{ $transaction->booking->cso->name ?? 'Admin' }}</span></div>
+        <div class="flex mb"><span>Supir</span> 
+            <span>
+                {{ $transaction->booking->driver->name ?? '-' }} 
+                {{-- LOGIKA TAMPILKAN LINE NUMBER --}}
+                @if(!empty($transaction->booking->driver->driverProfile->line_number))
+                    <span style="font-size: 11px; font-weight: normal; color: #555;">
+                        (#L{{ $transaction->booking->driver->driverProfile->line_number }})
+                    </span>
+                @endif
+            </span>
+        </div>
         <div class="divider"></div>
         <div class="mb bold">Rute: {{ $transaction->booking->zoneTo->name ?? 'Manual' }}</div>
         <div class="flex mb">

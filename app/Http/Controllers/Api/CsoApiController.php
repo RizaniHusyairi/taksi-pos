@@ -281,14 +281,21 @@ class CsoApiController extends Controller
             
             $zoneName = $result->zoneTo->name;
             $priceRp = number_format($result->price, 0, ',', '.');
+
+            // --- AMBIL DATA SUPIR & LINE NUMBER ---
+            $driverName = $driver->name;
+            // Cek apakah ada line number, jika ada format jadi (#L5), jika tidak kosongkan
+            $driverLine = !empty($driver->driverProfile->line_number) 
+                ? "(#L" . $driver->driverProfile->line_number . ")" 
+                : "";
             
             // --- A. KIRIM WA KE PENUMPANG ---
             if ($waToken && $validated['passenger_phone']) {
-
                 $msgPassenger = "*STRUK PEMBAYARAN TAKSI*\n\n"
-                    . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n"
-                    . "Tujuan: $zoneName\n"
-                    . "Tarif: Rp $priceRp\n\n"
+                    . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n\n"
+                    . "📍 Tujuan: $zoneName\n"
+                    . "🚖 Supir: *$driverName $driverLine*\n" // <--- BARIS INI DITAMBAHKAN
+                    . "💰 Tarif: Rp $priceRp\n\n"
                     . "Lihat struk digital Anda di sini:\n"
                     . "$receiptUrl\n\n"
                     . "Selamat menikmati perjalanan!";

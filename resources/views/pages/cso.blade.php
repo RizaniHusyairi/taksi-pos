@@ -336,6 +336,31 @@
     </div>
   </div>
 
+  <div id="cashConfirmModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100">
+        
+        <div class="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+        </div>
+
+        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">Konfirmasi Pembayaran</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            Apakah Anda yakin ingin memproses pesanan ini dengan metode <span id="confirmMethodName" class="font-bold text-slate-800 dark:text-white">TUNAI</span>?
+        </p>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button id="btnCancelCash" class="w-full py-2.5 rounded-lg border border-slate-300 text-slate-600 font-semibold hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700">
+                Batal
+            </button>
+            <button id="btnProceedCash" class="w-full py-2.5 rounded-lg bg-primary-600 text-white font-bold hover:bg-primary-700 shadow-lg active:scale-95 transition-transform">
+                Ya, Proses
+            </button>
+        </div>
+    </div>
+  </div>
+
   <script type="module">
     import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
     
