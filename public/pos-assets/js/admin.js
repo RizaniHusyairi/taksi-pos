@@ -611,8 +611,13 @@ export class AdminApp{
 
       // 4. Render HTML
       tbody.innerHTML = transactions.map(t => {
-        const csoName = t.cso?.name || '<span class="text-slate-400 italic">Self/Driver</span>';
-        const driverName = t.driver?.name || '-';
+        // Ambil data dari t.booking, bukan langsung dari t
+        const booking = t.booking || {}; 
+        const cso = booking.cso || {};
+        const driver = booking.driver || {};
+
+        const csoName = cso?.name || '<span class="text-slate-400 italic">Self/Driver</span>';
+        const driverName = driver?.name || '-';
         
         // --- LOGIKA BARU PENENTUAN TUJUAN ---
         let destName = '<span class="text-red-400">?</span>';
@@ -653,12 +658,19 @@ export class AdminApp{
                 payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Belum Dicairkan</span>`;
             }
         }
+        // --- FORMAT RUPIAH (FIX) ---
+        // Pastikan t.amount dikonversi ke Number dulu agar tidak error jika data string
+        const formattedAmount = Number(t.amount).toLocaleString('id-ID', { 
+            style: 'currency', 
+            currency: 'IDR', 
+            minimumFractionDigits: 0 
+        });
         // ------------------------------------
 
         return `<tr class="border-t hover:bg-slate-50 transition-colors">
           <td class="py-3 px-2 text-slate-600 text-xs">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-          <td class="py-3 px-2 font-medium text-xs">${t.cso?.name || '-'}</td>
-          <td class="py-3 px-2 text-xs">${t.driver?.name || '-'}</td>
+          <td class="py-3 px-2 font-medium text-xs">${csoName}</td>
+          <td class="py-3 px-2 text-xs">${driverName}</td>
           <td class="py-3 px-2 text-slate-700 text-xs">${t.booking?.zone_to?.name || 'Manual'}</td>
           <td class="py-3 px-2">
             <span class="px-2 py-1 rounded text-[10px] font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}">
@@ -666,7 +678,7 @@ export class AdminApp{
             </span>
           </td>
           <td class="py-3 px-2">${payoutBadge}</td> <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700 text-xs">
-            ${t.amount.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}
+            ${formattedAmount}
           </td>
         </tr>`;
       }).join('');

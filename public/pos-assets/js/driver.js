@@ -187,7 +187,7 @@ export class DriverApp {
     bind() {
 
         this.btnQueue?.addEventListener('click', () => this.handleQueueAction());
-        this.btnComplete.addEventListener('click', () => this.handleOrderAction());
+        // this.btnComplete.addEventListener('click', () => this.handleOrderAction());
         document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
 
         if(this.btnRequestWithdrawal) {
@@ -257,6 +257,16 @@ export class DriverApp {
         // --- TAMBAHAN LISTENER PASSWORD ---
         if (this.formChangePassword) {
             this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+        }
+
+        if (this.activeBox) {
+            this.activeBox.addEventListener('click', (e) => {
+                // Cek jika yang diklik adalah tombol #btnOrderAction atau anak elemennya
+                const btn = e.target.closest('#btnOrderAction');
+                if (btn) {
+                    this.handleOrderAction();
+                }
+            });
         }
 
     }
@@ -534,41 +544,81 @@ export class DriverApp {
     renderActiveOrder() {
         if (this.activeBooking) {
             this.activeBox.classList.remove('hidden');
-            this.textBook.textContent = 'Pesanan Aktif';
+            this.textBook.textContent = 'Pesanan Berjalan';
             
-            // Format Rupiah
+            // 1. Ambil UI Config berdasarkan status
+            // Asumsi status di DB: 'Assigned' (Jemput), 'OnTrip'/'Started' (Jalan)
+            // Jika DB masih pakai 'Paid'/'CashDriver' untuk status awal, anggap itu 'Assigned'
+            let status = this.activeBooking.status;
+            if(['Paid', 'CashDriver'].includes(status)) status = 'Assigned'; 
+
+            const ui = this.getDriverStatusUI(status);
+            
+            // 2. Format Data
             const price = Utils.formatCurrency(this.activeBooking.price);
-            
-            this.activeInfo.innerHTML = `
-            <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Rute:</span> <span class="font-medium">Bandara → ${this.activeBooking.zone_to.name}</span></div>
-            <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Tarif:</span> <span class="font-medium text-success">${price}</span></div>
-            <div class="flex items-center gap-2"><span class="font-semibold w-20">Status:</span> <span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">${this.activeBooking.status}</span></div>
-            `;
-            
-            console.log('Order aktif ditemukan:', this.activeBooking);
+            const passengerPhone = this.activeBooking.passenger_phone || '-';
+            const waLink = `https://wa.me/${passengerPhone.replace(/^0/,'62').replace(/\D/g,'')}`;
 
-            // --- LOGIKA TAMPILAN TOMBOL ---
-            const status = this.activeBooking.status;
-            
-            // Daftar status "Belum Jalan"
-            const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending'];
+            // 3. Render HTML Card Baru
+            this.activeBox.innerHTML = `
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden border border-slate-100 dark:border-slate-700">
+                
+                <div class="${ui.bgClass} p-5 text-center text-white transition-colors duration-300">
+                    <div class="flex justify-center mb-2">${ui.icon}</div>
+                    <h2 class="text-xl font-black tracking-wider uppercase">${ui.title}</h2>
+                    <p class="text-white/90 text-xs font-medium mt-1">${ui.desc}</p>
+                </div>
 
-            if (notStartedStatuses.includes(status)) {
-                // Tampilan Tombol: MULAI PERJALANAN
-                this.btnComplete.textContent = "Mulai Perjalanan";
-                this.btnComplete.classList.remove('bg-success', 'hover:bg-emerald-600'); // Hapus warna hijau
-                this.btnComplete.classList.add('bg-blue-600', 'hover:bg-blue-700'); // Ganti warna biru
-            } else if (status === 'OnTrip') {
-                // Tampilan Tombol: SELESAIKAN PERJALANAN
-                this.btnComplete.textContent = "Selesaikan Perjalanan";
-                this.btnComplete.classList.remove('bg-blue-600', 'hover:bg-blue-700'); // Hapus warna biru
-                this.btnComplete.classList.add('bg-success', 'hover:bg-emerald-600'); // Ganti warna hijau
-            }
+                <div class="p-5 space-y-5">
+                    
+                    <div class="flex items-start gap-4">
+                        <div class="flex flex-col items-center mt-1">
+                            <div class="w-3 h-3 rounded-full bg-slate-300 ring-4 ring-slate-100 dark:ring-slate-700"></div>
+                            <div class="w-0.5 h-12 bg-slate-200 dark:bg-slate-600 my-1"></div>
+                            <div class="w-3 h-3 rounded-full bg-primary-600 ring-4 ring-primary-100 dark:ring-primary-900"></div>
+                        </div>
+                        <div class="flex-1 space-y-6">
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Titik Jemput</p>
+                                <p class="font-bold text-slate-800 dark:text-slate-100 text-sm">Bandara APT Pranoto</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tujuan</p>
+                                <p class="font-bold text-slate-800 dark:text-slate-100 text-lg leading-tight">
+                                    ${this.activeBooking.zone_to.name}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 border border-slate-100 dark:border-slate-600 flex items-center justify-between">
+                        <div>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">Penumpang</p>
+                            <a href="tel:${passengerPhone}" class="flex items-center gap-1 font-mono font-bold text-slate-700 dark:text-slate-200">
+                                ${passengerPhone}
+                            </a>
+                        </div>
+                        <div class="flex gap-2">
+                            <a href="${waLink}" target="_blank" class="w-10 h-10 rounded-lg bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 flex items-center justify-center hover:bg-green-200 transition-colors">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center pb-2">
+                         <span class="text-xs text-slate-400">Tarif Perjalanan</span>
+                         <div class="text-xl font-bold text-slate-800 dark:text-slate-100">${price}</div>
+                    </div>
+
+                    <button id="btnOrderAction" class="w-full ${ui.btnClass} text-white font-bold py-3.5 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                        ${ui.btnText}
+                    </button>
+                </div>
+            </div>`;
 
         } else {
             this.activeBox.classList.add('hidden');
             this.textBook.textContent = '';
-            console.log('Tidak ada order aktif');
         }
     }
 
@@ -827,6 +877,40 @@ export class DriverApp {
         }
     }
 
+    // Helper: Menerjemahkan Status & Warna untuk Supir
+    getDriverStatusUI(status) {
+        switch (status) {
+            case 'Assigned':
+                return {
+                    title: 'JEMPUT PENUMPANG',
+                    desc: 'Segera menuju lokasi penjemputan (Bandara).',
+                    bgClass: 'bg-yellow-500', // Kuning
+                    btnText: 'Mulai Perjalanan',
+                    btnClass: 'bg-blue-600 hover:bg-blue-700',
+                    icon: '<svg class="w-8 h-8 text-white animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>'
+                };
+            // Status baru: OnTrip
+            case 'OnTrip':
+                return {
+                    title: 'ANTAR KE TUJUAN',
+                    desc: 'Perjalanan menuju lokasi tujuan.',
+                    bgClass: 'bg-blue-600', // Biru
+                    btnText: 'Selesaikan Perjalanan',
+                    btnClass: 'bg-success hover:bg-emerald-600',
+                    icon: '<svg class="w-8 h-8 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>'
+                };
+            default:
+                return {
+                    title: status,
+                    desc: 'Menunggu konfirmasi...',
+                    bgClass: 'bg-slate-500',
+                    btnText: 'Proses',
+                    btnClass: 'bg-slate-600',
+                    icon: ''
+                };
+        }
+    }
+
     async handleCompleteBooking() {
         if (!this.driverData.active_booking) return;
         if (!confirm('Selesaikan perjalanan ini?')) return;
@@ -983,18 +1067,40 @@ export class DriverApp {
 
     async handleOrderAction() {
         if (!this.activeBooking) return;
-        
-        const status = this.activeBooking.status;
-        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending','Assigned'];
 
-        if (notStartedStatuses.includes(status)) {
-            // AKSI 1: MULAI PERJALANAN (Update status ke OnTrip)
-            if (!confirm('Mulai perjalanan mengantar penumpang?')) return;
-            await this.updateOrderStatus('OnTrip');
-        } 
-        else if (status === 'OnTrip') {
-            // AKSI 2: SELESAI (Panggil fungsi complete yang lama)
-            await this.handleCompleteBooking();
+        const currentStatus = this.activeBooking.status;
+        // Logic mapping status (Sesuaikan dengan backend Anda)
+        // Jika 'Paid'/'Assigned' -> Ubah jadi 'Started'
+        // Jika 'Started' -> Ubah jadi 'Completed'
+        
+        let nextEndpoint = '';
+        let confirmMsg = '';
+        console.log("Current Booking Status:", this.activeBooking);
+
+        if (['Paid', 'CashDriver', 'Assigned'].includes(currentStatus)) {
+            nextEndpoint = `/driver/bookings/${this.activeBooking.id}/start`; // Endpoint backend untuk mulai jalan
+            confirmMsg = 'Mulai perjalanan sekarang?';
+        } else if (currentStatus === 'OnTrip') {
+            nextEndpoint = `/driver/bookings/${this.activeBooking.id}/complete`; // Endpoint backend untuk selesai
+            confirmMsg = 'Selesaikan perjalanan?';
+        }
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            // Contoh call API (Sesuaikan dengan controller driver Anda)
+            await fetchApi(nextEndpoint, { 
+                method: 'POST',
+                body: JSON.stringify({ booking_id: this.activeBooking.id })
+            });
+            
+            // Refresh data
+            this.init(); 
+            Utils.showToast('Status berhasil diperbarui', 'success');
+
+        } catch (e) {
+            console.error(e);
+            Utils.showToast('Gagal update status', 'error');
         }
     }
 

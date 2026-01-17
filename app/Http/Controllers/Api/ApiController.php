@@ -189,8 +189,10 @@ class ApiController extends Controller
     public function adminGetTransactions(Request $request)
     {
         // Mulai query dengan eager loading untuk data terkait
-        $query = Transaction::with(['booking.zoneTo', 'driver', 'cso'])
-                            ->orderBy('created_at', 'desc');
+        $query = Transaction::with(['booking.zoneTo', 
+            'booking.driver', // Ambil driver lewat booking
+            'booking.cso'     // Ambil cso lewat booking
+            ])->orderBy('created_at', 'desc');
 
         // Terapkan filter berdasarkan query string dari URL
         if ($request->has('date_from')) {

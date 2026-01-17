@@ -92,6 +92,10 @@ class CsoApp {
       this.receiptArea = document.getElementById('receiptArea');
       this.inpPassengerPhone = document.getElementById('passengerPhone');
 
+      this.inpStartDate = document.getElementById('filterStartDate');
+      this.inpEndDate = document.getElementById('filterEndDate');
+      this.btnFilterHistory = document.getElementById('btnFilterHistory');
+
       // --- ELEMEN PROFILE BARU ---
       this.profileInitial = document.getElementById('profileInitial');
       this.profileNameDisplay = document.getElementById('profileNameDisplay');
@@ -124,6 +128,8 @@ class CsoApp {
       // QRIS Zoom Elements (BARU)
       this.qrisZoomModal = document.getElementById('qrisZoomModal');
       this.qrisZoomImage = document.getElementById('qrisZoomImage');
+
+
     
       // State
       this.currentUserQrisUrl = null;
@@ -221,6 +227,11 @@ class CsoApp {
       if (this.formChangePassword) {
           this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
       }
+
+      this.btnFilterHistory?.addEventListener('click', () => this.renderHistory());
+      const today = new Date().toISOString().split('T')[0];
+      if(this.inpStartDate) this.inpStartDate.value = today;
+      if(this.inpEndDate) this.inpEndDate.value = today;
   }
   route() {
       // Fungsi routing tidak berubah, sudah bagus
@@ -390,12 +401,35 @@ class CsoApp {
         this.historyList.innerHTML = `<div class="text-center text-slate-500 py-8">Memuat riwayat...</div>`;
         
         try {
-            const transactions = await fetchApi('/cso/history');
+            // 1. Ambil Nilai Filter
+            const start = this.inpStartDate?.value || '';
+            const end = this.inpEndDate?.value || '';
+            
+            // 2. Buat URL dengan Query Params
+            let url = '/cso/history';
+            const params = new URLSearchParams();
+            
+            if (start && end) {
+                params.append('start_date', start);
+                params.append('end_date', end);
+            }
+            
+            // Jika ada params, tambahkan ke URL (contoh: /cso/history?start_date=2024-01-01&end_date=...)
+            if (params.toString()) {
+                url += `?${params.toString()}`;
+            }
+
+            // 3. Panggil API
+            const transactions = await fetchApi(url);
 
             if (transactions.length === 0) {
                 this.historyList.innerHTML = `
                     <div class="text-center py-10">
-                        <p class="text-slate-500 dark:text-slate-400">Belum ada transaksi hari ini.</p>
+                        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                        </div>
+                        <p class="text-slate-500 dark:text-slate-400">Tidak ada transaksi ditemukan.</p>
+                        ${ (start && end) ? '<p class="text-xs text-slate-400 mt-1">Coba ubah filter tanggal.</p>' : '' }
                     </div>`;
                 return;
             }
@@ -409,6 +443,14 @@ class CsoApp {
                 
                 const passengerPhone = booking.passenger_phone || '-';
                 const rawStatus = (booking.status || 'Assigned'); 
+
+                // --- FORMAT RUPIAH ---
+                // Mengubah angka (misal: 150000) menjadi "Rp 150.000"
+                const formattedPrice = Number(tx.amount).toLocaleString('id-ID', {
+                    style: 'currency', 
+                    currency: 'IDR', 
+                    minimumFractionDigits: 0 
+                });
 
                 // --- LOGIKA STATUS PERJALANAN (BARU) ---
                 let statusBadge = '';
@@ -469,8 +511,8 @@ class CsoApp {
                                 <span class="font-semibold">${driver.name || '-'}</span>
                                 ${lineDisplay}
                             </div>
-                            <div class="text-slate-500 font-medium">
-                                ${tx.method} (${tx.amount.toLocaleString('id-ID', {style:'currency', currency:'IDR', minimumFractionDigits:0})})
+                            <div class="text-primary-600 dark:text-primary-400 font-bold text-sm">
+                                ${formattedPrice}
                             </div>
                         </div>
                         
@@ -480,10 +522,13 @@ class CsoApp {
                         </div>
                     </div>
 
-                    <div class="mt-3 text-right">
-                        <button class="btn-view-receipt inline-flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
-                            Lihat Struk
+                    <div class="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
+                        <span class="text-[10px] px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 font-medium">
+                            Metode: ${tx.method}
+                        </span>
+                        <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
+                            Struk
                         </button>
                     </div>
                 </div>`;
@@ -566,7 +611,7 @@ class CsoApp {
 
     closePayment() {
         this.modal.classList.add('hidden');
-        this.modal.classList.remove('flex');
+        this.modal.classList.remove('flex');    
         // Tidak perlu cancelBooking ke API karena data belum masuk DB
         this.selectedOrderData = null; 
         this.resetProof();

@@ -126,20 +126,35 @@
     </section>
 
     <!-- View: Riwayat -->
-    <section id="view-history" class="view-section hidden space-y-5">
-        <div>
-            <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2 flex justify-between items-center">
-                <span>Riwayat Transaksi Hari Ini</span>
-                <button id="refreshHistory" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600 dark:text-slate-300" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
-                    </svg>
+    <section id="view-history" class="view-section hidden space-y-4">
+        
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300">Riwayat Transaksi</h2>
+            <button id="refreshHistory" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-600 dark:text-slate-300" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <div class="flex items-end gap-2">
+                <div class="flex-1">
+                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Dari Tanggal</label>
+                    <input type="date" id="filterStartDate" class="w-full rounded-lg border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-xs py-2 px-2 dark:text-white">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-[10px] font-medium text-slate-500 mb-1">Sampai Tanggal</label>
+                    <input type="date" id="filterEndDate" class="w-full rounded-lg border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-xs py-2 px-2 dark:text-white">
+                </div>
+                <button id="btnFilterHistory" class="bg-primary-600 hover:bg-primary-700 text-white p-2 rounded-lg transition-colors shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 </button>
-            </h2>
-            <div id="csoTxList" class="space-y-3">
-                <!-- History cards will be inserted here -->
             </div>
         </div>
+
+        <div id="csoTxList" class="space-y-3">
+            </div>
     </section>
     <section id="view-profile" class="view-section hidden space-y-5">
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 text-center">

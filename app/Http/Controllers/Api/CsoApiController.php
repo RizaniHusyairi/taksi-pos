@@ -335,22 +335,36 @@ class CsoApiController extends Controller
     }
 
     
+    
     /**
-     * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.
+     * Mengambil riwayat transaksi CSO (Bisa difilter tanggal).
      */
     public function getHistory(Request $request)
     {
         $cso = $request->user();
+        
+        // Mulai Query: Ambil transaksi milik CSO ini
+        $query = Transaction::whereHas('booking', function ($q) use ($cso) {
+            $q->where('cso_id', $cso->id);
+        });
 
-        $transactions = Transaction::whereHas('booking', function ($query) use ($cso) {
-                $query->where('cso_id', $cso->id);
-            })
-            ->whereDate('created_at', today())
-            ->with([
-                'booking.zoneTo:id,name', // Ambil nama zona tujuan
-                'booking.driver.driverProfile', // PENTING: Untuk Line Number (#L..)
-                'booking.cso',                 // PENTING: Untuk Nama CSO
-                'cso'                          // Jaga-jaga jika relasi ada di transaksi langsung
+        // --- LOGIKA FILTER TANGGAL ---
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            // Jika ada filter, gunakan rentang tanggal tersebut
+            $start = $request->start_date . ' 00:00:00';
+            $end   = $request->end_date . ' 23:59:59';
+            $query->whereBetween('created_at', [$start, $end]);
+        } else {
+            // Jika TIDAK ada filter, defaultnya tampilkan 50 transaksi terakhir 
+            // (agar tidak terlalu berat me-load semua data sejak awal berdiri)
+            $query->limit(50);
+        }
+
+        $transactions = $query->with([
+                'booking.zoneTo:id,name',
+                'booking.driver.driverProfile', 
+                'booking.cso',
+                'booking' // Pastikan relasi booking induk termuat untuk status/phone
             ])
             ->orderBy('created_at', 'desc')
             ->get();
