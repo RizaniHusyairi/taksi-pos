@@ -9,6 +9,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+
+Route::get('/receipt/{uuid}', [PublicReceiptController::class, 'show'])->name('receipt.show');
+
+
 // === Rute API untuk Aplikasi POS Taksi ===
 Route::middleware('auth:sanctum')->group(function() {
 
@@ -87,9 +91,10 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/profile', [CsoApiController::class, 'getProfile']);
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
+
     });
-
-
+    
+    
     // =========================================================
     // === RUTE BARU: Khusus untuk Panel Supir ===
     // =========================================================
@@ -106,7 +111,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/balance', [DriverApiController::class, 'getBalance']);
         Route::get('/withdrawals', [DriverApiController::class, 'getWithdrawalHistory']);
         Route::post('/withdrawals', [DriverApiController::class, 'requestWithdrawal']);
-
+        
         // Riwayat Perjalanan
         Route::get('/history', [DriverApiController::class, 'getTripHistory']);
         Route::post('/location', [DriverApiController::class, 'updateLocation']);

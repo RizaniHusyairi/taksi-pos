@@ -36,6 +36,8 @@ return new class extends Migration
             // Disimpan di sini untuk arsip, seandainya tarif di tabel 'zones' berubah.
             $table->decimal('price', 10, 2);
 
+            $table->string('passenger_phone')->nullable();
+
             // Status booking saat ini.
             $table->string('status')->default('Assigned');
             // Contoh status: Assigned, Completed, Paid, CashDriver, Cancelled
