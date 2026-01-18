@@ -49,10 +49,10 @@ export class DriverApp {
 
     // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
     constructor() {
-        // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
-        this.AIRPORT_LAT = -0.371975;
-        this.AIRPORT_LNG = 117.257919;
-        this.MAX_RADIUS_KM = 2.0; // Radius toleransi
+        const config = window.taksiConfig?.driver_queue || {};
+        this.AIRPORT_LAT = config.latitude || -0.371975;
+        this.AIRPORT_LNG = config.longitude || 117.257919;
+        this.MAX_RADIUS_KM = config.max_radius_km || 2.0; // Radius toleransi
 
         this.currentLat = null;
         this.currentLng = null;

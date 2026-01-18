@@ -100,12 +100,12 @@ class DriverApiController extends Controller
 
         if ($validated['action'] === 'join') {
             // ... (Logika Join Tetap Sama) ...
-            $airportLat = -0.419266; 
-            $airportLng = 117.255554;
+            $airportLat = config('taksi.driver_queue.latitude');
+            $airportLng = config('taksi.driver_queue.longitude');
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
 
             // Ganti 2.0 dengan 10000.0 untuk testing
-            if ($distance > 10000.0) { 
+            if ($distance > config('taksi.driver_queue.max_radius_km')) { 
                 return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
 
