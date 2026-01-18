@@ -1,5 +1,262 @@
 // import { DB } from '../assets/js/data.js';
 import { Utils } from './utils.js';
+<<<<<<< HEAD
+import { apiFetch } from './core/api.js';
+
+
+
+export class DriverApp {
+async init() {
+    this.initTheme(); // Panggil inisialisasi tema
+    this.cacheEls();
+    this.bind();
+    // Muat data awal yang penting saat aplikasi start
+    await this.loadInitialData();
+    
+    window.addEventListener('hashchange', () => this.route());
+    this.route();
+    window.addEventListener('storage', (e) => {
+    // Abaikan update storage dari tema agar tidak re-render
+    
+    });
+}
+
+initTheme() {
+    this.themeToggleBtn = document.getElementById('theme-toggle');
+    this.sunIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>`;
+    this.moonIcon = `<svg class="w-6 h-6 text-slate-700 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>`;
+
+    const updateTheme = () => {
+        const theme = localStorage.getItem('theme') || 'system';
+        if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            this.themeToggleBtn.innerHTML = this.sunIcon;
+        } else {
+            document.documentElement.classList.remove('dark');
+            this.themeToggleBtn.innerHTML = this.moonIcon;
+        }
+    };
+
+    this.themeToggleBtn.addEventListener('click', () => {
+        const currentTheme = localStorage.getItem('theme') || 'system';
+        const isDark = document.documentElement.classList.contains('dark');
+        // Cycle: system -> light -> dark -> system
+        let newTheme;
+        if (isDark) {
+            newTheme = 'light';
+        } else {
+            newTheme = 'dark';
+        }
+        localStorage.setItem('theme', newTheme);
+        updateTheme();
+    });
+
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
+    
+    updateTheme(); // Set initial theme
+}
+
+cacheEls() {
+    // Views
+    this.views = ['orders', 'wallet', 'history', 'profile'];
+    this.pageTitle = document.getElementById('pageTitle');
+    
+    // Orders View
+    this.activeBox = document.getElementById('activeOrderBox');
+    this.activeInfo = document.getElementById('activeOrderInfo');
+    this.btnComplete = document.getElementById('markComplete');
+    this.statusToggle = document.getElementById('statusToggle');
+    this.statusText = document.getElementById('driverStatusText');
+
+    // Wallet View
+    this.walletBalance = document.getElementById('walletBalance');
+    this.wdForm = document.getElementById('formWd');
+    this.wdList = document.getElementById('wdList');
+
+    // History View
+    this.tripList = document.getElementById('tripList');
+
+    // Profile View
+    this.profileInitial = document.getElementById('profileInitial');
+    this.profileName = document.getElementById('profileName');
+    this.profileCar = document.getElementById('profileCar');
+    this.logoutBtn = document.getElementById('logoutBtn');
+}
+
+bind() {
+
+    this.statusToggle.addEventListener('change', (e) => this.handleStatusChange(e));
+    this.btnComplete.addEventListener('click', () => this.handleCompleteBooking());
+    this.wdForm.addEventListener('submit', (e) => this.handleWithdrawalRequest(e));
+    document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault(); // Mencegah perilaku default dari tag <a>
+            const targetHash = item.getAttribute('href');
+            
+            // Hanya ubah hash jika berbeda untuk memicu event 'hashchange'
+            if (window.location.hash !== targetHash) {
+                window.location.hash = targetHash;
+            }
+        });
+    });
+
+}
+
+route() {
+    const hash = (location.hash || '#orders').slice(1);
+    this.views.forEach(v => {
+    const el = document.getElementById('view-' + v);
+    if (el) el.classList.toggle('hidden', v !== hash);
+    });
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+    item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
+    });
+
+    const titles = { orders: 'Beranda', wallet: 'Dompet', history: 'Riwayat', profile: 'Profil' };
+    this.pageTitle.textContent = titles[hash] || 'Beranda';
+
+    // Bagian ini yang memuat data secara on-demand
+    switch(hash) {
+        case 'wallet':
+            this.renderWallet(); // <-- Dipanggil HANYA saat tab Dompet dibuka
+            break;
+        case 'history':
+            this.renderTrips(); // <-- Dipanggil HANYA saat tab Riwayat dibuka
+            break;
+        // Tidak perlu case untuk 'orders' atau 'profile' 
+        // karena datanya sudah dimuat oleh loadInitialData()
+    }
+}
+
+// --- FUNGSI BARU UNTUK MEMUAT DATA ---
+async loadInitialData() {
+    try {
+        // Sekarang 'data' adalah objek driver itu sendiri
+        const data = await apiFetch('/api/driver/profile');
+        
+        // Langsung simpan seluruh respons sebagai data driver
+        this.driverData = data;
+        
+        // Ambil active_booking dari properti yang sudah kita tambahkan
+        this.activeBooking = data.active_booking;
+        
+        this.renderProfile();
+        this.renderStatus();
+        this.renderActiveOrder();
+    } catch (error) {
+        console.error("Gagal memuat data awal driver:", error);
+    }
+}
+
+renderProfile() {
+    if (!this.driverData) return;
+    this.profileInitial.textContent = this.driverData.name.charAt(0).toUpperCase();
+    this.profileName.textContent = this.driverData.name;
+    const profile = this.driverData.driver_profile;
+    this.profileCar.textContent = `${profile.car_model || '-'} • ${profile.plate_number || '-'}`;
+}
+
+renderStatus() {
+    if (!this.driverData) return;
+    const status = this.driverData.driver_profile.status;
+    const isAvailable = status === 'available';
+    const isOntrip = status === 'ontrip';
+
+    this.statusToggle.checked = isAvailable;
+    this.statusToggle.disabled = isOntrip;
+
+    if (isOntrip) {
+        this.statusText.textContent = 'Sedang dalam perjalanan';
+        this.statusText.className = 'text-sm text-pending font-semibold';
+    } else if (isAvailable) {
+        this.statusText.textContent = 'Tersedia (Online)';
+        this.statusText.className = 'text-sm text-success font-semibold';
+    } else {
+        this.statusText.textContent = 'Offline';
+        this.statusText.className = 'text-sm text-slate-500 dark:text-slate-400';
+    }
+
+    // ... (logika untuk mengubah teks status tidak berubah) ...
+}
+
+renderActiveOrder() {
+    if (this.activeBooking) {
+        this.activeBox.classList.remove('hidden');
+        this.activeInfo.innerHTML = `
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Rute:</span> <span>Bandara → ${this.activeBooking.zone_to.name}</span></div>
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Tarif:</span> <span>${Utils.formatCurrency(this.activeBooking.price)}</span></div>
+        <div class="flex items-center gap-2"><span class="font-semibold w-16">Status:</span> <span>${this.activeBooking.status}</span></div>
+    `;
+
+    } else {
+        this.activeBox.classList.add('hidden');
+    }
+}
+
+async renderWallet() {
+    try {
+        const [balance, withdrawals] = await Promise.all([
+            apiFetch('/api/driver/balance'),
+            apiFetch('/api/driver/withdrawals')
+        ]);
+        this.walletBalance.textContent = Utils.formatCurrency(balance.balance);
+        // ... (logika render tabel riwayat withdrawal tidak berubah, gunakan data 'withdrawals') ...
+        this.wdList.innerHTML = withdrawals.map(w => `<tr class="border-t dark:border-slate-700">
+    <td class="py-2 pr-2">${new Date(w.requested_at).toLocaleDateString('id-ID')}</td>
+    <td class="py-2 pr-2">${Utils.formatCurrency(w.amount)}</td>
+    <td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${w.status==='Pending'?'bg-yellow-100 text-yellow-800':(w.status==='Approved'?'bg-blue-100 text-blue-800':(w.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-700'))}">${w.status}</span></td>
+    </tr>`).join('');
+    } catch (error) {
+        console.error("Gagal memuat data dompet:", error);
+    }
+}
+async renderTrips() {
+
+    // ... (logika mengambil tanggal dari filter tidak berubah) ...
+    const from = document.getElementById('histFrom').value;
+    const to = document.getElementById('histTo').value;
+    const df = from ? new Date(from) : null;
+    const dt = to ? new Date(to) : null;
+    if (df) { df.setHours(0, 0, 0, 0); }
+    if (dt) { dt.setHours(23, 59, 59, 999); }
+
+    const params = new URLSearchParams();
+    // ... (tambahkan date_from dan date_to ke params) ...
+    if (df) params.append('date_from', df.toISOString());
+    if (dt) params.append('date_to', dt.toISOString());
+    
+    try {
+        const history = await apiFetch(`/api/driver/history?${params.toString()}`);
+        // ... (logika render riwayat perjalanan tidak berubah, gunakan data 'history') ...
+        if (history.length === 0) {
+            this.tripList.innerHTML = `<div class="text-center text-slate-500 dark:text-slate-400 p-8 bg-white dark:bg-slate-800 rounded-xl shadow-md">Tidak ada riwayat perjalanan pada rentang tanggal yang dipilih.</div>`;
+            return;
+        }
+
+        this.tripList.innerHTML = history.map(t => {
+            console.log(t);
+            return `
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-bold text-slate-800 dark:text-slate-100">${t.booking.zone_to.name}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">${new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                </div>
+                <p class="font-bold text-lg text-success">${Utils.formatCurrency(t.amount)}</p>
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-between text-xs">
+                <span class="px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-800 dark:text-primary-300 font-medium">${t.method}</span>
+                <span class="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-medium">${t.booking.status}</span>
+            </div>
+        </div>`;
+        }).join('');
+    } catch (error) {
+        console.error("Gagal memuat riwayat perjalanan:", error);
+=======
 
 async function fetchApi(endpoint, options = {}) {
     // ... (copy paste fungsi fetchApi dari cso.js) ...
@@ -49,14 +306,11 @@ export class DriverApp {
 
     // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
     constructor() {
-        // Ambil konfigurasi dari global variable (injected di Blade)
-        // Fallback jika tidak ada (Safe default)
-        const config = window.taksiConfig?.driver_queue || {};
-
-        this.AIRPORT_LAT = config.latitude || -0.371975;
-        this.AIRPORT_LNG = config.longitude || 117.257919;
-        this.MAX_RADIUS_KM = parseFloat(config.radius_km || 2.0); // Pastikan float
-
+        // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
+        this.AIRPORT_LAT = -0.371975; 
+        this.AIRPORT_LNG = 117.257919;
+        this.MAX_RADIUS_KM = 2.0; // Radius toleransi
+        
         this.currentLat = null;
         this.currentLng = null;
         this.watchId = null;
@@ -190,7 +444,7 @@ export class DriverApp {
     bind() {
 
         this.btnQueue?.addEventListener('click', () => this.handleQueueAction());
-        this.btnComplete.addEventListener('click', () => this.handleOrderAction());
+        // this.btnComplete.addEventListener('click', () => this.handleOrderAction());
         document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
 
         if (this.btnRequestWithdrawal) {
@@ -260,6 +514,16 @@ export class DriverApp {
         // --- TAMBAHAN LISTENER PASSWORD ---
         if (this.formChangePassword) {
             this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+        }
+
+        if (this.activeBox) {
+            this.activeBox.addEventListener('click', (e) => {
+                // Cek jika yang diklik adalah tombol #btnOrderAction atau anak elemennya
+                const btn = e.target.closest('#btnOrderAction');
+                if (btn) {
+                    this.handleOrderAction();
+                }
+            });
         }
 
     }
@@ -538,21 +802,21 @@ export class DriverApp {
         if (this.activeBooking) {
             this.activeBox.classList.remove('hidden');
             this.textBook.textContent = 'Pesanan Aktif';
-
+            
             // Format Rupiah
             const price = Utils.formatCurrency(this.activeBooking.price);
-
+            
             this.activeInfo.innerHTML = `
             <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Rute:</span> <span class="font-medium">Bandara → ${this.activeBooking.zone_to.name}</span></div>
             <div class="flex items-center gap-2 mb-1"><span class="font-semibold w-20">Tarif:</span> <span class="font-medium text-success">${price}</span></div>
             <div class="flex items-center gap-2"><span class="font-semibold w-20">Status:</span> <span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">${this.activeBooking.status}</span></div>
             `;
-
+            
             console.log('Order aktif ditemukan:', this.activeBooking);
 
             // --- LOGIKA TAMPILAN TOMBOL ---
             const status = this.activeBooking.status;
-
+            
             // Daftar status "Belum Jalan"
             const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending'];
 
@@ -571,7 +835,6 @@ export class DriverApp {
         } else {
             this.activeBox.classList.add('hidden');
             this.textBook.textContent = '';
-            console.log('Tidak ada order aktif');
         }
     }
 
@@ -726,7 +989,9 @@ export class DriverApp {
                         </div>
                         <div class="text-right">
                             <p class="font-bold text-success">${Utils.formatCurrency(t.amount)}</p>
-                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 inline-block mt-1">${t.method}</span>
+                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 inline-block mt-1">
+                                ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
+                            </span>
                         </div>
                     </div>
                 </div>`;
@@ -827,6 +1092,40 @@ export class DriverApp {
 
             // Pesan spesifik jika error 422 (Kejauhan) sudah muncul via Utils.showToast dari fetchApi,
             // tapi jika ingin custom handling bisa di sini.
+        }
+    }
+
+    // Helper: Menerjemahkan Status & Warna untuk Supir
+    getDriverStatusUI(status) {
+        switch (status) {
+            case 'Assigned':
+                return {
+                    title: 'JEMPUT PENUMPANG',
+                    desc: 'Segera menuju lokasi penjemputan (Bandara).',
+                    bgClass: 'bg-yellow-500', // Kuning
+                    btnText: 'Mulai Perjalanan',
+                    btnClass: 'bg-blue-600 hover:bg-blue-700',
+                    icon: '<svg class="w-8 h-8 text-white animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>'
+                };
+            // Status baru: OnTrip
+            case 'OnTrip':
+                return {
+                    title: 'ANTAR KE TUJUAN',
+                    desc: 'Perjalanan menuju lokasi tujuan.',
+                    bgClass: 'bg-blue-600', // Biru
+                    btnText: 'Selesaikan Perjalanan',
+                    btnClass: 'bg-success hover:bg-emerald-600',
+                    icon: '<svg class="w-8 h-8 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>'
+                };
+            default:
+                return {
+                    title: status,
+                    desc: 'Menunggu konfirmasi...',
+                    bgClass: 'bg-slate-500',
+                    btnText: 'Proses',
+                    btnClass: 'bg-slate-600',
+                    icon: ''
+                };
         }
     }
 
@@ -986,15 +1285,15 @@ export class DriverApp {
 
     async handleOrderAction() {
         if (!this.activeBooking) return;
-
+        
         const status = this.activeBooking.status;
-        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending', 'Assigned'];
+        const notStartedStatuses = ['Paid', 'CashDriver', 'Confirmed', 'Pending','Assigned'];
 
         if (notStartedStatuses.includes(status)) {
             // AKSI 1: MULAI PERJALANAN (Update status ke OnTrip)
             if (!confirm('Mulai perjalanan mengantar penumpang?')) return;
             await this.updateOrderStatus('OnTrip');
-        }
+        } 
         else if (status === 'OnTrip') {
             // AKSI 2: SELESAI (Panggil fungsi complete yang lama)
             await this.handleCompleteBooking();
@@ -1087,12 +1386,82 @@ export class DriverApp {
 
         this.editProfileModal.classList.remove('hidden');
         this.editProfileModal.classList.add('flex');
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
     }
+}
+
+// --- FUNGSI AKSI (sekarang memanggil API) ---
+    
+async handleStatusChange(e) {
+    const newStatus = e.target.checked ? 'available' : 'offline';
+    try {
+        // Panggil API dan simpan data driver yang baru sebagai hasilnya
+        const updatedDriverData = apiFetch('/api/driver/status', {
+            method: 'POST',
+            body: JSON.stringify({ status: newStatus })
+        });
+
+        // Perbarui state lokal dengan data baru dari server
+        this.driverData = updatedDriverData;
+        
+        // Render ulang komponen yang relevan dengan data baru
+        this.renderStatus();
+        this.renderProfile();
+
+        Utils.showToast(`Status diubah menjadi: ${newStatus === 'available' ? 'Tersedia' : 'Offline'}`, 'success');
+
+    } catch (error) {
+        // Kembalikan toggle ke posisi semula jika terjadi error
+        e.target.checked = !e.target.checked;
+    }
+}
+
+async handleCompleteBooking() {
+    if (!this.activeBooking) { Utils.showToast('Tidak ada order aktif', 'error'); return; }
+if (!confirm('Apakah Anda yakin perjalanan ini sudah selesai?')) return;
+
+try {
+    // Panggil API, yang sekarang akan mengembalikan data profil terbaru
+    const updatedProfile = apiFetch(`/api/driver/bookings/${this.activeBooking.id}/complete`, { method: 'POST' });
+    
+    // Perbarui state lokal dengan data terbaru dari server
+    this.driverData = updatedProfile;
+    this.activeBooking = updatedProfile.active_booking; // Ini akan menjadi null
+    
+    // Render ulang semua komponen yang relevan
+    this.renderStatus();
+    this.renderActiveOrder();
+    this.renderProfile();
+
+    Utils.showToast('Perjalanan selesai', 'success');
+    } 
+    catch (error) { /* error ditangani apiFetch */ }
+}
+
+async handleWithdrawalRequest(e) {
+    e.preventDefault();
+    const amount = parseInt(document.getElementById('wdAmount').value, 10);
+    if (isNaN(amount) || amount < 10000) {
+        Utils.showToast('Jumlah penarikan minimal Rp 10.000', 'error');
+        return;
+    }
+    try {
+        apiFetch('/api/driver/withdrawals', {
+            method: 'POST',
+            body: JSON.stringify({ amount })
+        });
+        Utils.showToast('Pengajuan penarikan dikirim', 'success');
+        document.getElementById('wdAmount').value = '';
+        this.renderWallet(); // Refresh data dompet
+    } catch (error) { /* error ditangani apiFetch */ }
+}
 
     // Kirim Data ke API
     async submitEditProfile(e) {
         e.preventDefault();
 
+<<<<<<< HEAD
+=======
         // Siapkan Payload
         const payload = {
             name: this.inpEditName.value,
@@ -1136,4 +1505,5 @@ export class DriverApp {
         }
     }
 
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 }

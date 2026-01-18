@@ -11,6 +11,10 @@ use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\DriverProfile;
+<<<<<<< HEAD
+use App\Services\PaymentService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+=======
 use App\Models\DriverQueue; 
 use App\Models\Setting; 
 use Illuminate\Support\Facades\Hash;
@@ -19,10 +23,14 @@ use Illuminate\Support\Facades\Mail;
 use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 
 class CsoApiController extends Controller
 {
 
+<<<<<<< HEAD
+    use AuthorizesRequests;
+=======
     /**
      * Mengambil data profil CSO yang sedang login
      */
@@ -78,6 +86,7 @@ class CsoApiController extends Controller
 
         return response()->json(['message' => 'Password berhasil diubah.']);
     }
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 
 
     /**
@@ -167,6 +176,30 @@ class CsoApiController extends Controller
         return response()->json($booking, 201); // 201 Created
     }
 
+    public function confirmPayment(Request $request)
+    {
+        $data = $request->validate([
+            'booking_id' => 'required|exists:bookings,id',
+            'method' => 'required|in:QRIS,CashCSO',
+        ]);
+
+        $booking = Booking::findOrFail($data['booking_id']);
+
+        $this->authorize('confirmPaymentByCso', [$booking, $data['method']]);
+
+        DB::transaction(function () use ($booking, $data) {
+            Transaction::create([
+                'booking_id' => $booking->id,
+                'method' => $data['method'],
+                'amount' => $booking->price,
+            ]);
+
+            $booking->update(['status' => 'Paid']);
+        });
+
+        return response()->json(['message' => 'Payment confirmed']);
+    }
+
     /**
      * Mencatat pembayaran untuk sebuah booking.
      */
@@ -174,6 +207,33 @@ class CsoApiController extends Controller
     {
         $validated = $request->validate([
             'booking_id' => 'required|exists:bookings,id',
+<<<<<<< HEAD
+            'method' => 'required|in:QRIS,CashCSO,CashDriver',
+        ]);
+
+        $booking = Booking::findOrFail($validated['booking_id']);
+
+        $this->authorize('recordPayment', $booking);
+
+        DB::transaction(function () use ($booking, $validated) {
+
+            $transaction = $paymentService->pay(
+                $validated['booking_id'],
+                $validated['method']
+            );
+
+            $newStatus = $validated['method'] === 'CashDriver'
+                ? Booking::STATUS_CASH_DRIVER
+                : Booking::STATUS_PAID;
+
+            $booking->transitionTo($newStatus);
+        });
+
+        return response()->json(['message' => 'Payment recorded']);
+    }
+
+
+=======
             'method'     => 'required|in:QRIS,CashCSO,CashDriver',
             // Validasi: payment_proof wajib ada JIKA methodnya QRIS
             'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB
@@ -335,22 +395,37 @@ class CsoApiController extends Controller
     }
 
     
+    
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
     /**
-     * Mengambil riwayat transaksi hari ini untuk CSO yang sedang login.
+     * Mengambil riwayat transaksi CSO (Bisa difilter tanggal).
      */
     public function getHistory(Request $request)
     {
         $cso = $request->user();
+        
+        // Mulai Query: Ambil transaksi milik CSO ini
+        $query = Transaction::whereHas('booking', function ($q) use ($cso) {
+            $q->where('cso_id', $cso->id);
+        });
 
-        $transactions = Transaction::whereHas('booking', function ($query) use ($cso) {
-                $query->where('cso_id', $cso->id);
-            })
-            ->whereDate('created_at', today())
-            ->with([
-                'booking.zoneTo:id,name', // Ambil nama zona tujuan
-                'booking.driver.driverProfile', // PENTING: Untuk Line Number (#L..)
-                'booking.cso',                 // PENTING: Untuk Nama CSO
-                'cso'                          // Jaga-jaga jika relasi ada di transaksi langsung
+        // --- LOGIKA FILTER TANGGAL ---
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            // Jika ada filter, gunakan rentang tanggal tersebut
+            $start = $request->start_date . ' 00:00:00';
+            $end   = $request->end_date . ' 23:59:59';
+            $query->whereBetween('created_at', [$start, $end]);
+        } else {
+            // Jika TIDAK ada filter, defaultnya tampilkan 50 transaksi terakhir 
+            // (agar tidak terlalu berat me-load semua data sejak awal berdiri)
+            $query->limit(50);
+        }
+
+        $transactions = $query->with([
+                'booking.zoneTo:id,name',
+                'booking.driver.driverProfile', 
+                'booking.cso',
+                'booking' // Pastikan relasi booking induk termuat untuk status/phone
             ])
             ->orderBy('created_at', 'desc')
             ->get();

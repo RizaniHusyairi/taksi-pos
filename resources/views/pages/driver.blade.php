@@ -4,9 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
+<<<<<<< HEAD
+=======
 
   <title>Supir - Taksi POS</title>
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
   <script src="https://cdn.tailwindcss.com"></script>
+  <title>Supir - Koperasi Taksi POS</title>
   <script>
     // Konfigurasi Tailwind CSS dengan dark mode berbasis class
     tailwind.config = {
@@ -69,17 +73,7 @@
       <!-- Active Order Card -->
       <h2 id="text-book" class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Pesanan Aktif</h2>
       <div id="activeOrderBox" class="hidden">
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg border-2 border-pending p-4">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-bold text-slate-800 dark:text-slate-100">Anda Punya Order Baru!</div>
-            <div class="text-xs bg-pending text-white px-2 py-0.5 rounded-full font-semibold animate-pulse">BARU</div>
           </div>
-          <div id="activeOrderInfo" class="space-y-1 text-sm text-slate-700 dark:text-slate-300"></div>
-          <button id="markComplete" class="mt-4 w-full bg-success hover:bg-emerald-600 text-white font-bold py-3 rounded-lg shadow-md transition-transform active:scale-95">
-            Selesaikan Perjalanan
-          </button>
-        </div>
-      </div>
 
       <!-- Driver Status Card -->
       <div>

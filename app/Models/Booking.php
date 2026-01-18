@@ -13,6 +13,23 @@ class Booking extends Model
 {
     use HasFactory;
 
+    public const STATUS_ASSIGNED    = 'Assigned';
+    public const STATUS_COMPLETED   = 'Completed';
+    public const STATUS_PAID        = 'Paid';
+    public const STATUS_CASH_DRIVER = 'CashDriver';
+    public const STATUS_CANCELLED   = 'Cancelled';
+
+    protected static array $allowedTransitions = [
+        self::STATUS_ASSIGNED => [
+            self::STATUS_COMPLETED,
+            self::STATUS_CANCELLED,
+        ],
+        self::STATUS_COMPLETED => [
+            self::STATUS_PAID,
+            self::STATUS_CASH_DRIVER,
+        ],
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -51,10 +68,55 @@ class Booking extends Model
     {
         return $this->belongsTo(Zone::class, 'zone_id');
     }
+<<<<<<< HEAD
+
+    public function canTransitionTo(string $newStatus): bool
+    {
+        $current = $this->status;
+
+        return isset(self::$allowedTransitions[$current])
+            && in_array($newStatus, self::$allowedTransitions[$current], true);
+    }
+
+    public function transitionTo(string $newStatus): void
+    {
+        if (! $this->canTransitionTo($newStatus)) {
+            throw new \DomainException(
+                "Invalid booking status transition: {$this->status} → {$newStatus}"
+            );
+        }
+
+        $this->update(['status' => $newStatus]);
+    }
+
+    public function canBePaid(): bool
+    {
+        return in_array($this->status, ['Assigned']);
+    }
+
+    public function markAsPaid(): void
+    {
+        if (! $this->canBePaid()) {
+            throw new DomainException(
+                "Booking already paid or invalid state ({$this->status})"
+            );
+        }
+
+        $this->update(['status' => 'Paid']);
+    }
+
+    public function transaction()
+    {
+        return $this->hasOne(Transaction::class);
+    }
+
+  
+=======
     
     // --- TAMBAHKAN INI ---
     public function transaction()
     {
         return $this->hasOne(Transaction::class, 'booking_id', 'id');
     }
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 }

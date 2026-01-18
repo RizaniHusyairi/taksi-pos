@@ -16,11 +16,19 @@ return new class extends Migration
 
             // Kolom foreign key ke tabel 'bookings'
             // Ini cara modern dan aman untuk membuat relasi di Laravel.
+<<<<<<< HEAD
+                $table->foreignId('booking_id')
+                    ->constrained()
+                    ->cascadeOnDelete()
+                    ->unique();
+
+=======
             $table->foreignId('booking_id')
                   ->constrained('bookings')
                   ->onDelete('cascade'); // Opsi: jika booking dihapus, transaksi ini juga ikut terhapus.
             
                   
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
             // Kolom untuk metode pembayaran dengan nilai yang sudah ditentukan.
             $table->enum('method', ['QRIS', 'CashCSO', 'CashDriver']);
 
