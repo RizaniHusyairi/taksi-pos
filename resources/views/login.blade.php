@@ -53,14 +53,7 @@
 
     <div id="loginMsg" class="mt-4 text-sm text-center text-red-600 hidden">Username atau password salah.</div>
 
-    <div class="mt-8 text-xs text-slate-500">
-      <p><strong>Demo Akun</strong></p>
-      <ul class="list-disc pl-5 mt-2 space-y-1">
-        <li>Admin: <code>admin / 123456</code></li>
-        <li>CSO: <code>cso1 / 123456</code></li>
-        <li>Supir: <code>driver1 / 123456</code>, <code>driver2 / 123456</code></li>
-      </ul>
-    </div>
+    
   </div>
 
   <script type="module">

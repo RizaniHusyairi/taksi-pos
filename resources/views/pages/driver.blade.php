@@ -470,6 +470,12 @@
     </a>
   </nav>
 
+  <script>
+      // Inject Config dari Laravel ke JS Global
+      window.taksiConfig = {
+          driver_queue: @json(config('taksi.driver_queue'))
+      };
+  </script>
   <script type="module">
     import { DriverApp } from '{{ asset("pos-assets/js/driver.js") }}';
 

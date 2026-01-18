@@ -100,13 +100,14 @@ class DriverApiController extends Controller
 
         if ($validated['action'] === 'join') {
             // ... (Logika Join Tetap Sama) ...
-            $airportLat = -0.419266; 
-            $airportLng = 117.255554;
+            $airportLat = config('taksi.driver_queue.latitude'); 
+            $airportLng = config('taksi.driver_queue.longitude');
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
+            $maxRadius = config('taksi.driver_queue.radius_km');
 
-            // Ganti 2.0 dengan 10000.0 untuk testing
-            if ($distance > 10000.0) { 
-                return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
+            if ($distance > $maxRadius) { 
+                // Opsional: Bisa tampilkan pesan radius yang lebih spesifik
+                return response()->json(['message' => "Terlalu jauh dari bandara (Maksimal {$maxRadius} km)."], 422);
             }
 
             $sortOrder = 1000; // Default untuk Re-join (Antrian Belakang)
@@ -472,10 +473,10 @@ class DriverApiController extends Controller
         }
 
         // 2. Cek Jarak
-        $airportLat = -0.371975; // Koordinat Bandara (Sesuaikan dengan data Anda)
-        $airportLng = 117.257919;
+        $airportLat = config('taksi.driver_queue.latitude');
+        $airportLng = config('taksi.driver_queue.longitude');
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-        $radius = 2.0; // Radius 2 KM
+        $radius = config('taksi.driver_queue.radius_km'); // Radius dari config
         $inArea = ($distance <= $radius);
         
         // 3. Logika Update Status
