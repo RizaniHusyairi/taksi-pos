@@ -482,10 +482,11 @@ class DriverApiController extends Controller
         }
 
         // 2. Cek Jarak
-        $airportLat = -0.371975; // Koordinat Bandara (Sesuaikan dengan data Anda)
-        $airportLng = 117.257919;
+
+        $airportLat = config('taksi.driver_queue.latitude');
+        $airportLng = config('taksi.driver_queue.longitude');
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-        $radius = 2.0; // Radius 2 KM
+        $radius = config('taksi.driver_queue.max_radius_km');
         $inArea = ($distance <= $radius);
         
         // 3. Logika Update Status
