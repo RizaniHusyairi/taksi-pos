@@ -41,6 +41,8 @@ class Booking extends Model
         'zone_id',
         'price',
         'status',
+        'manual_destination',
+        'passenger_phone'
     ];
 
     /**
@@ -66,6 +68,7 @@ class Booking extends Model
     {
         return $this->belongsTo(Zone::class, 'zone_id');
     }
+<<<<<<< HEAD
 
     public function canTransitionTo(string $newStatus): bool
     {
@@ -108,4 +111,12 @@ class Booking extends Model
     }
 
   
+=======
+    
+    // --- TAMBAHKAN INI ---
+    public function transaction()
+    {
+        return $this->hasOne(Transaction::class, 'booking_id', 'id');
+    }
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 }

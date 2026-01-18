@@ -15,11 +15,19 @@ return new class extends Migration
             $table->id();
             // Kunci asing yang terhubung ke tabel users
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->enum('status', ['offline', 'standby', 'ontrip'])->default('offline');
+            
+            // Menambah kolom nomor urut tetap (L1, L2, dst)
+            // Kita simpan angkanya saja (integer) agar mudah dihitung rotasinya
+            $table->integer('line_number')->nullable()->unique();
+            $table->date('last_queue_date')->nullable();
+
 
             // Kolom-kolom spesifik driver
             $table->string('car_model'); // <-- Ubah dari 'car'
             $table->string('plate_number'); // <-- Ubah dari 'plate'
-            $table->enum('status', ['available', 'ontrip', 'offline'])->default('offline');
+            $table->string('bank_name')->nullable();
+            $table->string('account_number')->nullable(); 
 
             $table->timestamps();
         });

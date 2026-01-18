@@ -28,11 +28,15 @@ return new class extends Migration
             // Foreign Key ke tabel 'zones' untuk Zona Tujuan
             $table->foreignId('zone_id')
                   ->constrained('zones')
-                  ->onDelete('cascade');
+                  ->onDelete('cascade')->nullable();
+            
+            $table->string('manual_destination')->nullable();
 
             // Harga/tarif perjalanan saat booking dibuat.
             // Disimpan di sini untuk arsip, seandainya tarif di tabel 'zones' berubah.
             $table->decimal('price', 10, 2);
+
+            $table->string('passenger_phone')->nullable();
 
             // Status booking saat ini.
             $table->string('status')->default('Assigned');

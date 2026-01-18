@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
+use App\Services\WhatsAppService;
 use App\Models\Setting; 
 use App\Models\User;
 use App\Models\Zone;
@@ -13,8 +13,11 @@ use App\Models\DriverProfile;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\Withdrawals;
+use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\WithdrawalApprovedNotification;
 
 class ApiController extends Controller
 {
@@ -24,10 +27,17 @@ class ApiController extends Controller
         // 1. Hitung Semua Metrik
         $revenueToday = Transaction::whereDate('created_at', today())->sum('amount');
         $transactionsToday = Transaction::whereDate('created_at', today())->count();
-        $activeDrivers = User::where('role', 'driver')
-                            ->whereHas('driverProfile', function ($query) {
-                                $query->whereIn('status', ['available', 'ontrip']);
-                            })->count();
+        // A. Hitung driver di antrian (Online/Available)
+        $driversInQueue = DriverQueue::count();
+
+        // B. Hitung driver yang sedang OnTrip (Ada booking belum selesai)
+        // Kita hitung jumlah User ID unik yang memiliki booking aktif
+        $driversOnTrip = Booking::whereIn('status', ['Assigned']) // Sesuaikan status on trip di sistemmu
+            ->distinct('driver_id')
+            ->count('driver_id');
+
+        // Total Aktif = Queue + OnTrip (Asumsi driver on trip otomatis keluar dari queue, jadi tidak double count)
+        $activeDrivers = $driversInQueue + $driversOnTrip;
         $pendingWithdrawals = Withdrawals::where('status', 'Pending')->count();
 
         // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
@@ -71,6 +81,7 @@ class ApiController extends Controller
         ]);
     }
 
+<<<<<<< HEAD
     public function getZones()
     {
         // Mengambil semua zona kecuali 'Bandara' (jika ada logika seperti itu)
@@ -200,6 +211,8 @@ class ApiController extends Controller
 
         return response()->json(['balance' => round($balance)]);
     }
+=======
+>>>>>>> 02fb6853decde7e985c741a4668e771b992f392e
 
     // =========================================================
     // === METODE BARU: Untuk Panel Admin ===
@@ -261,7 +274,6 @@ class ApiController extends Controller
             $user->driverProfile()->create([
                 'car' => $validated['car_model'],
                 'plate' => $validated['plate_number'],
-                'status' => 'offline', // default status
             ]);
         }
 
@@ -309,8 +321,10 @@ class ApiController extends Controller
     public function adminGetTransactions(Request $request)
     {
         // Mulai query dengan eager loading untuk data terkait
-        $query = Transaction::with(['booking.zoneTo', 'driver', 'cso'])
-                            ->orderBy('created_at', 'desc');
+        $query = Transaction::with(['booking.zoneTo', 
+            'booking.driver', // Ambil driver lewat booking
+            'booking.cso'     // Ambil cso lewat booking
+            ])->orderBy('created_at', 'desc');
 
         // Terapkan filter berdasarkan query string dari URL
         if ($request->has('date_from')) {
@@ -342,36 +356,117 @@ class ApiController extends Controller
     // Ambil semua withdrawal request dengan data supirnya
     public function adminGetWithdrawals()
     {
-        $withdrawals = Withdrawals::with('driver') // Eager load relasi 'driver'
+        $withdrawals = Withdrawals::with('driver.driverProfile') 
                                 ->orderBy('requested_at', 'desc')
                                 ->get();
         return response()->json($withdrawals);
     }
 
     // Setujui permintaan
-    public function adminApproveWithdrawal(Withdrawals $withdrawal)
+    // [UBAH INI] Setujui Permintaan + Upload Bukti (Satu Langkah)
+    public function adminApproveWithdrawal(Request $request, Withdrawals $withdrawal)
     {
-        $withdrawal->update(['status' => 'Approved', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal approved']);
+        $request->validate([
+            'proof_image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
+
+        if ($request->hasFile('proof_image')) {
+            $path = $request->file('proof_image')->store('proofs', 'public');
+            
+            DB::transaction(function () use ($withdrawal, $path) {
+                // 1. Update status Withdrawal
+                $withdrawal->update([
+                    'status' => 'Approved', 
+                    'processed_at' => now(),
+                    'proof_image' => $path
+                ]);
+
+                // 2. [BARU] Update Status Transaksi Terkait menjadi 'Paid' (Lunas/Cair)
+                Transaction::where('withdrawal_id', $withdrawal->id)
+                    ->update(['payout_status' => 'Paid']);
+            });
+
+            // 2. KIRIM NOTIFIKASI (Di luar Transaction DB agar tidak rollback jika email gagal)
+            $driver = $withdrawal->driver;
+            
+            // --- KIRIM EMAIL ---
+            try {
+                // Pastikan driver punya email valid
+                if ($driver->email) {
+                    Mail::to($driver->email)->send(new WithdrawalApprovedNotification($withdrawal));
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Gagal kirim email ke driver: ' . $e->getMessage());
+            }
+
+            // --- KIRIM WHATSAPP ---
+            try {
+                $waToken = Setting::where('key', 'wa_token')->value('value');
+                
+                // Pastikan driver punya nomor HP (sesuaikan nama kolom di DB Anda, misal: phone_number)
+                // Jika Anda menyimpan no HP di tabel driver_profiles, sesuaikan kodenya.
+                // Asumsi: No HP ada di tabel users kolom 'username' (jika username pakai no HP) atau kolom baru 'phone_number'
+                $driverPhone = $driver->phone_number ?? $driver->username; 
+
+                if ($waToken && $driverPhone) {
+                    $amountRp = number_format($withdrawal->amount, 0, ',', '.');
+                    $date = now()->format('d M Y H:i');
+                    
+                    $message = "*PENCAIRAN DANA BERHASIL*\n\n"
+                        . "Halo $driver->name,\n\n"
+                        . "Pengajuan pencairan dana Anda sebesar *Rp $amountRp* telah DISETUJUI dan DITRANSFER oleh admin.\n\n"
+                        . "📅 Waktu: $date\n"
+                        . "🏦 Bank: Bank BTN\n\n"
+                        . "Silakan cek rekening Anda. Terima kasih!";
+
+                    WhatsAppService::send($driverPhone, $message, $waToken);
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Gagal kirim WA ke driver: ' . $e->getMessage());
+            }
+            
+            return response()->json([
+                'message' => 'Permintaan disetujui, bukti terupload, dan status transaksi diperbarui.',
+                'path' => $path
+            ]);
+        }
+
+
+        return response()->json(['message' => 'Gagal mengupload bukti.'], 400);
     }
 
     // Tolak permintaan
+    // === Update pada adminRejectWithdrawal ===
     public function adminRejectWithdrawal(Withdrawals $withdrawal)
     {
-        $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal rejected']);
+        DB::transaction(function () use ($withdrawal) {
+            // 1. Update Withdrawal
+            $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);
+
+            // 2. [BARU] Kembalikan Status Transaksi ke 'Unpaid' dan lepas kaitannya
+            Transaction::where('withdrawal_id', $withdrawal->id)
+                ->update([
+                    'payout_status' => 'Unpaid',
+                    'withdrawal_id' => null // Lepas ikatan agar bisa diajukan lagi nanti
+                ]);
+        });
+
+        return response()->json(['message' => 'Permintaan ditolak dan saldo dikembalikan ke Unpaid.']);
+    }
+
+    // === [METHOD BARU] Ambil Detail Transaksi dalam sebuah Withdrawal ===
+    public function adminGetWithdrawalDetails(Withdrawals $withdrawal)
+    {
+        // Ambil transaksi yang withdrawal_id nya sesuai dengan id penarikan ini
+        $transactions = Transaction::with(['booking.zoneTo'])
+            ->where('withdrawal_id', $withdrawal->id)
+            ->get();
+
+        return response()->json($transactions);
     }
 
     // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda
-    public function adminMarkAsPaid(Withdrawals $withdrawal)
-    {
-        // Hanya bisa di-set Paid jika status sebelumnya Approved
-        if ($withdrawal->status !== 'Approved') {
-            return response()->json(['message' => 'Hanya permintaan yang sudah disetujui yang bisa ditandai lunas.'], 422);
-        }
-        $withdrawal->update(['status' => 'Paid', 'processed_at' => now()]);
-        return response()->json(['message' => 'Withdrawal marked as paid']);
-    }
+    
 
     public function adminGetRevenueReport(Request $request)
     {
@@ -461,13 +556,32 @@ class ApiController extends Controller
         // Validasi input jika perlu
         $validated = $request->validate([
             'commission_rate' => 'required|numeric|min:0|max:100',
+            'admin_email'     => 'required|email|max:255',
             // Tambahkan validasi untuk setting lain jika ada
+
+            // --- Validasi SMTP Baru ---
+            'mail_host'         => 'nullable|string',
+            'mail_port'         => 'nullable|numeric',
+            'mail_username'     => 'nullable|string',
+            'mail_password'     => 'nullable|string',
+            'mail_encryption'   => 'nullable|string|in:tls,ssl,null',
+            'mail_from_address' => 'nullable|email',
+            'mail_from_name'    => 'nullable|string',
+
+            // Validasi WA Baru
+            'wa_token'          => 'nullable|string',
+            'admin_wa_number'   => 'nullable|string',
         ]);
     
         // Loop melalui data yang dikirim dan update ke database
         foreach ($validated as $key => $value) {
-            // Konversi dari persen kembali ke desimal sebelum disimpan
-            $dbValue = $key === 'commission_rate' ? $value / 100 : $value;
+            // Konversi khusus untuk rate (persen ke desimal)
+            if ($key === 'commission_rate') {
+                $dbValue = $value / 100;
+            } else {
+                // Untuk email dan setting lain, simpan apa adanya
+                $dbValue = $value;
+            }
             
             Setting::updateOrCreate(
                 ['key' => $key],
@@ -492,6 +606,106 @@ class ApiController extends Controller
                     ->get();
                     
         return response()->json($users);
+    }
+
+    // =========================================================
+    // === MANAJEMEN ANTRIAN (QUEUE) ===
+    // =========================================================
+
+    /**
+     * Ambil data antrian saat ini
+     */
+    public function adminGetQueue()
+    {
+        $queue = DriverQueue::with('driver.driverProfile')
+            ->orderBy('sort_order', 'asc')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($q, $index) {
+                return [
+                    'user_id' => $q->user_id,
+                    'name' => $q->driver->name ?? 'Unknown',
+                    'line_number' => $q->driver->driverProfile->line_number ?? '-',
+                    'sort_order' => $q->sort_order,
+                    'joined_at' => $q->created_at,
+                    'real_position' => $index + 1 // Urutan asli (1, 2, 3...)
+                ];
+            });
+
+        return response()->json($queue);
+    }
+
+    /**
+     * Keluarkan driver dari antrian (Kick)
+     */
+    public function adminRemoveFromQueue($userId)
+    {
+        DB::transaction(function () use ($userId) {
+            // 1. Hapus dari tabel queue
+            DriverQueue::where('user_id', $userId)->delete();
+
+            // 2. Update status profil jadi offline
+            DriverProfile::where('user_id', $userId)->update(['status' => 'offline']);
+        });
+
+        return response()->json(['message' => 'Driver berhasil dikeluarkan dari antrian.']);
+    }
+
+    /**
+     * Ubah urutan antrian (Naik/Turun)
+     * Logic: Menukar nilai sort_order dengan driver di sebelahnya
+     */
+    public function adminMoveQueue(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required',
+            'direction' => 'required|in:up,down'
+        ]);
+
+        $current = DriverQueue::where('user_id', $request->user_id)->firstOrFail();
+
+        if ($request->direction === 'up') {
+            // Cari driver di atasnya (sort_order lebih kecil)
+            $neighbor = DriverQueue::where('sort_order', '<', $current->sort_order)
+                ->orderBy('sort_order', 'desc')
+                ->first();
+        } else {
+            // Cari driver di bawahnya (sort_order lebih besar)
+            $neighbor = DriverQueue::where('sort_order', '>', $current->sort_order)
+                ->orderBy('sort_order', 'asc')
+                ->first();
+        }
+
+        if ($neighbor) {
+            // Lakukan Swap (Tukar Nilai)
+            $tempOrder = $current->sort_order;
+            
+            // Jika nilai sort_order kebetulan sama (konflik), kita buat selisih manual
+            if ($tempOrder == $neighbor->sort_order) {
+                $tempOrder = $request->direction === 'up' ? $neighbor->sort_order + 1 : $neighbor->sort_order - 1;
+            }
+
+            $current->update(['sort_order' => $neighbor->sort_order]);
+            $neighbor->update(['sort_order' => $tempOrder]);
+        }
+
+        return response()->json(['message' => 'Urutan diperbarui.']);
+    }
+
+    /**
+     * Update Line Number Driver
+     */
+    public function adminUpdateLineNumber(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required',
+            'line_number' => 'required|string|max:10'
+        ]);
+
+        DriverProfile::where('user_id', $request->user_id)
+            ->update(['line_number' => $request->line_number]);
+
+        return response()->json(['message' => 'Line Number diperbarui.']);
     }
 }
 

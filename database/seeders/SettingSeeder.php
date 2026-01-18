@@ -16,7 +16,13 @@ class SettingSeeder extends Seeder
         DB::table('settings')->insert([
             [
                 'key' => 'commission_rate',
-                'value' => '20', // Simpan sebagai '20' untuk 20%
+                'value' => '0.2', // Simpan sebagai '0.2' untuk 20%
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'key' => 'admin_email',
+                'value' => 'leo.rizan68@gmail.com', 
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
