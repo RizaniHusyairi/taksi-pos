@@ -932,18 +932,27 @@ export class AdminApp {
         // --- LOGIKA HITUNG NET ---
         if (t.method === 'CashDriver') {
           // Jika CashDriver: Driver BERHUTANG komisi ke admin
-          // Rumus: -(Amount * Rate)
-          // Contoh: 100.000 * 20% = -20.000
-          const debt = amount * rate;
-          netAmount = -debt;
+
+          // Cek apakah ini booking Manual (Tidak ada Zone To)
+          const isManual = !t.booking?.zone_to;
+
+          if (isManual) {
+            // Manual: Flat Fee 10.000
+            const debt = 10000;
+            netAmount = -debt;
+            calculationInfo = `<div class="text-[10px] text-red-400">Potongan Flat 10rb</div>`;
+          } else {
+            // Standard: Komisi Persentase
+            const debt = amount * rate;
+            netAmount = -debt;
+            calculationInfo = `<div class="text-[10px] text-red-400">Potongan Komisi ${(rate * 100)}%</div>`;
+          }
 
           rowClass = 'bg-red-50/50';
           netClass = 'text-red-600 font-bold';
-          calculationInfo = `<div class="text-[10px] text-red-400">Potongan Komisi ${(rate * 100)}%</div>`;
+
         } else {
           // Jika QRIS/CashCSO: Driver MENERIMA sisa setelah komisi
-          // Rumus: Amount * (1 - Rate)
-          // Contoh: 100.000 * (1 - 0.2) = 80.000
           netAmount = amount * (1 - rate);
 
           rowClass = '';
@@ -954,11 +963,13 @@ export class AdminApp {
         // Akumulasi Total Akhir
         totalNet += netAmount;
 
+        const routeName = t.booking?.zone_to?.name || t.booking?.manual_destination || 'Manual';
+
         return `
           <tr class="border-b border-slate-50 ${rowClass}">
               <td class="px-4 py-3 text-xs text-slate-500">${new Date(t.created_at).toLocaleString('id-ID')}</td>
               <td class="px-4 py-3 text-xs font-medium text-slate-700">
-                  ${t.booking?.zone_to?.name || 'Manual'}
+                  ${routeName}
               </td>
               <td class="px-4 py-3 text-xs">
                   <span class="px-2 py-1 rounded-full border ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'} text-[10px] font-bold">

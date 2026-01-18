@@ -179,15 +179,9 @@ class DriverApiController extends Controller
                         'amount'     => $request->manual_price,
                     ]);
 
-                    // C. Potong Saldo 10rb (Fee Aplikasi)
-                    Withdrawals::create([
-                        'driver_id'    => $user->id,
-                        'amount'       => 10000,
-                        'status'       => 'Paid', 
-                        'type'         => 'fee', // Tandai sebagai potongan
-                        'requested_at' => now(),
-                        'processed_at' => now(),
-                    ]);
+                    // C. (Update Plan: JANGAN Potong Saldo Sekarang)
+                    // Biarkan status Unpaid, nanti dihitung sebagai hutang saat getBalance/withdrawal
+                    // Withdrawals::create([...]); <-- DIHAPUS
                 }
             });
 
@@ -269,15 +263,31 @@ class DriverApiController extends Controller
         $driverShare = $pendingIncome * (1 - $rate);
 
         // 2. Hitung Hutang (Uang di Driver) - CashDriver yang statusnya 'Unpaid'
-        // Driver harus bayar komisi ke sistem
-        $pendingDebtData = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id);
+        
+        // A. Booking via Sistem (Ada Zone ID) -> Kena Rate Komisi
+        $standardDebt = Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)
+                  ->whereNotNull('zone_id'); // Syarat: Ada Zona
             })
             ->where('method', 'CashDriver')
             ->where('payout_status', 'Unpaid')
             ->sum('amount');
+        
+        $debtFromStandard = $standardDebt * $rate;
 
-        $driverDebt = $pendingDebtData * $rate;
+        // B. Booking Manual (Penumpang Sendiri / Zone ID Null) -> Flat Fee 10.000
+        $manualCount = Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)
+                  ->whereNull('zone_id'); // Syarat: Tidak Ada Zona (Manual)
+            })
+            ->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
+            ->count();
+        
+        $debtFromManual = $manualCount * 10000;
+
+        // Total Hutang Driver ke Sistem
+        $driverDebt = $debtFromStandard + $debtFromManual;
 
         // 3. Saldo Bersih
         $netBalance = $driverShare - $driverDebt;

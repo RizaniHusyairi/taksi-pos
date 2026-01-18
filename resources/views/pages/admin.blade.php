@@ -340,7 +340,7 @@
                     <tr>
                         <th class="px-4 py-3">Tanggal</th>
                         <th class="px-4 py-3">Rute</th>
-                        <th class="px-4 py-3">Metode</th>
+                        <th class="px-4 py-3" style="width: 120px;">Metode</th>
                         <th class="px-4 py-3 text-right">Nominal Awal</th>
                         <th class="px-4 py-3 text-right">Bersih (Ke Driver)</th>
                     </tr>
