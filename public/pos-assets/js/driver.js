@@ -9,10 +9,10 @@ async function fetchApi(endpoint, options = {}) {
         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
     };
     try {
-        const response = await fetch(`/api${endpoint}`, { 
-        ...options, 
-        headers,
-        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+        const response = await fetch(`/api${endpoint}`, {
+            ...options,
+            headers,
+            credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
         });
         if (!response.ok) {
             const errorData = await response.json();
@@ -38,7 +38,7 @@ window.viewProof = (path) => {
     const imgEl = document.getElementById('imgProof');
     // Pastikan path diawali /storage/
     imgEl.src = `/storage/${path}`;
-    
+
     // Buka Modal
     const modal = document.getElementById('proofModal');
     modal.classList.remove('hidden');
@@ -46,14 +46,14 @@ window.viewProof = (path) => {
 };
 
 export class DriverApp {
-    
+
     // --- TAMBAHKAN DI BAGIAN ATAS CLASS ---
     constructor() {
         // Koordinat Bandara APT Pranoto (Sesuaikan presisi-nya nanti)
-        this.AIRPORT_LAT = -0.371975; 
+        this.AIRPORT_LAT = -0.371975;
         this.AIRPORT_LNG = 117.257919;
         this.MAX_RADIUS_KM = 2.0; // Radius toleransi
-        
+
         this.currentLat = null;
         this.currentLng = null;
         this.watchId = null;
@@ -68,7 +68,7 @@ export class DriverApp {
 
         // Mulai pantau lokasi GPS segera setelah init
         this.startAutoLocationSender();
-        
+
         window.addEventListener('hashchange', () => this.route());
         this.route();
     }
@@ -105,7 +105,7 @@ export class DriverApp {
 
         // Listen for system theme changes
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
-        
+
         updateTheme(); // Set initial theme
     }
 
@@ -113,7 +113,7 @@ export class DriverApp {
         // Views
         this.views = ['orders', 'wallet', 'history', 'profile'];
         this.pageTitle = document.getElementById('pageTitle');
-        
+
         // Orders View
         this.textBook = document.getElementById('text-book');
         this.activeBox = document.getElementById('activeOrderBox');
@@ -168,13 +168,13 @@ export class DriverApp {
         // --- ELEMEN BARU ---
         this.profilePhone = document.getElementById('profilePhone');
         this.profileEmail = document.getElementById('profileEmail');
-        
+
         // Modal Edit Profil
         this.editProfileModal = document.getElementById('editProfileModal');
         this.btnOpenEditProfile = document.getElementById('btnOpenEditProfile');
         this.closeEditProfile = document.getElementById('closeEditProfile');
         this.formEditProfile = document.getElementById('formEditProfile');
-        
+
         // Input Form Edit
         this.inpEditName = document.getElementById('editName');
         this.inpEditUsername = document.getElementById('editUsername');
@@ -190,14 +190,14 @@ export class DriverApp {
         // this.btnComplete.addEventListener('click', () => this.handleOrderAction());
         document.getElementById('histFilter').addEventListener('click', () => this.renderTrips());
 
-        if(this.btnRequestWithdrawal) {
+        if (this.btnRequestWithdrawal) {
             this.btnRequestWithdrawal.addEventListener('click', () => this.handleWithdrawalRequest());
         }
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 e.preventDefault(); // Mencegah perilaku default dari tag <a>
                 const targetHash = item.getAttribute('href');
-                
+
                 // Hanya ubah hash jika berbeda untuk memicu event 'hashchange'
                 if (window.location.hash !== targetHash) {
                     window.location.hash = targetHash;
@@ -210,7 +210,7 @@ export class DriverApp {
             this.bankModal.classList.add('flex');
             // Isi form dengan data lama jika ada
             const p = this.driverData?.driver_profile;
-            if(p) {
+            if (p) {
                 document.getElementById('inAccNumber').value = p.account_number || '';
             }
         });
@@ -228,7 +228,7 @@ export class DriverApp {
             this.editProfileModal.classList.add('hidden');
             this.editProfileModal.classList.remove('flex');
         });
-        
+
         // Listener Submit Form
         this.formEditProfile?.addEventListener('submit', (e) => this.submitEditProfile(e));
 
@@ -241,7 +241,7 @@ export class DriverApp {
         // Listener Radio Button (Toggle Form)
         this.radioReasons.forEach(radio => {
             radio.addEventListener('change', (e) => {
-                if(e.target.value === 'self') {
+                if (e.target.value === 'self') {
                     this.boxSelf.classList.remove('hidden');
                     this.boxOther.classList.add('hidden');
                 } else {
@@ -273,7 +273,7 @@ export class DriverApp {
 
     startAutoLocationSender() {
         if (!navigator.geolocation) {
-            if(this.distanceText) this.distanceText.textContent = "GPS Error";
+            if (this.distanceText) this.distanceText.textContent = "GPS Error";
             return;
         }
 
@@ -282,13 +282,13 @@ export class DriverApp {
             (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
-                
+
                 this.currentLat = lat;
                 this.currentLng = lng;
 
                 // Hitung jarak lokal untuk UI Driver (Visual saja)
                 const dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, lat, lng);
-                if(this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
+                if (this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
 
                 // KIRIM KE SERVER (Throttling: Agar tidak spam server tiap milidetik)
                 // Kita kirim setiap kali lokasi berubah signifikan atau interval waktu
@@ -315,12 +315,12 @@ export class DriverApp {
             if (res.status === 'standby') {
                 // Jangan hide tombol di sini!
                 // Update data lokal agar UI reaktif
-                if(this.driverData && this.driverData.driver_profile) {
+                if (this.driverData && this.driverData.driver_profile) {
                     this.driverData.driver_profile.status = 'standby';
-                    this.updateQueueUI(); 
+                    this.updateQueueUI();
                 }
             } else if (res.status === 'offline') {
-                if(this.driverData && this.driverData.driver_profile) {
+                if (this.driverData && this.driverData.driver_profile) {
                     this.driverData.driver_profile.status = 'offline';
                     this.updateQueueUI();
                 }
@@ -334,10 +334,10 @@ export class DriverApp {
         const R = 6371; // Radius bumi KM
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
 
@@ -348,10 +348,10 @@ export class DriverApp {
 
         const profile = this.driverData.driver_profile;
         const virtualStatus = profile.status; // 'standby', 'offline', 'ontrip'
-        
+
         // Cek apakah sedang ada booking aktif?
-        const isOnTrip  = (virtualStatus === 'ontrip' || this.driverData.active_booking != null);
-        
+        const isOnTrip = (virtualStatus === 'ontrip' || this.driverData.active_booking != null);
+
         // Cek apakah standby (Di antrian & di lokasi)
         const isStandby = (virtualStatus === 'standby');
 
@@ -359,7 +359,7 @@ export class DriverApp {
         let dist = 9999;
         if (this.currentLat && this.currentLng) {
             dist = this.calculateDistance(this.AIRPORT_LAT, this.AIRPORT_LNG, this.currentLat, this.currentLng);
-            if(this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
+            if (this.distanceText) this.distanceText.textContent = dist.toFixed(2) + " km";
         }
 
         // Update Teks Status Header
@@ -378,7 +378,7 @@ export class DriverApp {
         const btn = this.btnQueue;
         btn.classList.remove('hidden'); // Pastikan tombol selalu muncul dulu
         btn.disabled = false;
-        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all"; 
+        btn.className = "w-full py-3 rounded-xl font-bold text-white shadow-md transition-all";
 
         // KONDISI 1: SEDANG NARIK
         if (isOnTrip) {
@@ -400,17 +400,17 @@ export class DriverApp {
         // KONDISI 3: OFFLINE (Bisa Masuk / Menunggu GPS)
         // Jika offline, berarti dia keluar manual atau belum sampai.
         // Kita izinkan masuk manual (Re-join) atau tunggu GPS.
-        
+
         if (gpsError || !this.currentLat) {
             btn.disabled = true;
             btn.textContent = "Menunggu Sinyal GPS...";
             btn.classList.add('bg-slate-400', 'cursor-not-allowed');
-        } 
+        }
         else if (dist > this.MAX_RADIUS_KM) {
             btn.disabled = true;
             btn.textContent = `Terlalu Jauh (${dist.toFixed(1)} km)`;
             btn.classList.add('bg-slate-400', 'cursor-not-allowed', 'opacity-70');
-        } 
+        }
         else {
             // Jarak dekat tapi status offline (berarti habis keluar manual)
             // Tampilkan tombol "Masuk Antrian" (Manual Re-join)
@@ -422,19 +422,19 @@ export class DriverApp {
     route() {
         const hash = (location.hash || '#orders').slice(1);
         this.views.forEach(v => {
-        const el = document.getElementById('view-' + v);
-        if (el) el.classList.toggle('hidden', v !== hash);
+            const el = document.getElementById('view-' + v);
+            if (el) el.classList.toggle('hidden', v !== hash);
         });
 
         document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
+            item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
         });
 
         const titles = { orders: 'Beranda', wallet: 'Dompet', history: 'Riwayat', profile: 'Profil' };
         this.pageTitle.textContent = titles[hash] || 'Beranda';
 
         // Bagian ini yang memuat data secara on-demand
-        switch(hash) {
+        switch (hash) {
             case 'wallet':
                 this.renderWallet(); // <-- Dipanggil HANYA saat tab Dompet dibuka
                 break;
@@ -453,10 +453,10 @@ export class DriverApp {
             const data = await fetchApi('/driver/profile');
             // Langsung simpan seluruh respons sebagai data driver
             this.driverData = data;
-            
+
             // Ambil active_booking dari properti yang sudah kita tambahkan
             this.activeBooking = data.active_booking;
-            
+
             this.renderProfile();
             this.updateQueueUI();
             this.renderActiveOrder();
@@ -470,13 +470,13 @@ export class DriverApp {
         this.profileInitial.textContent = this.driverData.name.charAt(0).toUpperCase();
         this.profileName.textContent = this.driverData.name;
         // Data Tambahan (Email & HP)
-        if(this.profilePhone) this.profilePhone.textContent = this.driverData.phone_number || '-';
-        if(this.profileEmail) this.profileEmail.textContent = this.driverData.email || '-';
+        if (this.profilePhone) this.profilePhone.textContent = this.driverData.phone_number || '-';
+        if (this.profileEmail) this.profileEmail.textContent = this.driverData.email || '-';
         const profile = this.driverData.driver_profile;
         this.profileCar.textContent = `${profile.car_model || '-'} • ${profile.plate_number || '-'}`;
 
         const p = this.driverData.driver_profile;
-        
+
         // Render Info Bank
         if (p.bank_name && p.account_number) {
             this.txtBankInfo.textContent = `${p.bank_name} - ${p.account_number}`;
@@ -518,21 +518,21 @@ export class DriverApp {
         if (action === 'leave') {
             this.leaveModal.classList.remove('hidden');
             this.leaveModal.classList.add('flex');
-            
+
             // Reset form modal
             this.formLeave.reset();
             this.boxSelf.classList.add('hidden');
             this.boxOther.classList.remove('hidden');
-            return; 
+            return;
         }
 
         // 2. JIKA AKSI JOIN -> LANGSUNG EKSEKUSI API
         if (action === 'join') {
             if (this.currentLat && this.currentLng) {
-                this.executeStatusChange({ 
-                    action: 'join', 
-                    latitude: this.currentLat, 
-                    longitude: this.currentLng 
+                this.executeStatusChange({
+                    action: 'join',
+                    latitude: this.currentLat,
+                    longitude: this.currentLng
                 });
             } else {
                 Utils.showToast('Lokasi GPS belum siap.', 'error');
@@ -545,19 +545,19 @@ export class DriverApp {
         if (this.activeBooking) {
             this.activeBox.classList.remove('hidden');
             this.textBook.textContent = 'Pesanan Berjalan';
-            
+
             // 1. Ambil UI Config berdasarkan status
             // Asumsi status di DB: 'Assigned' (Jemput), 'OnTrip'/'Started' (Jalan)
             // Jika DB masih pakai 'Paid'/'CashDriver' untuk status awal, anggap itu 'Assigned'
             let status = this.activeBooking.status;
-            if(['Paid', 'CashDriver'].includes(status)) status = 'Assigned'; 
+            if (['Paid', 'CashDriver'].includes(status)) status = 'Assigned';
 
             const ui = this.getDriverStatusUI(status);
-            
+
             // 2. Format Data
             const price = Utils.formatCurrency(this.activeBooking.price);
             const passengerPhone = this.activeBooking.passenger_phone || '-';
-            const waLink = `https://wa.me/${passengerPhone.replace(/^0/,'62').replace(/\D/g,'')}`;
+            const waLink = `https://wa.me/${passengerPhone.replace(/^0/, '62').replace(/\D/g, '')}`;
 
             // 3. Render HTML Card Baru
             this.activeBox.innerHTML = `
@@ -628,14 +628,14 @@ export class DriverApp {
                 fetchApi('/driver/balance'),
                 fetchApi('/driver/withdrawals')
             ]);
-            
+
             // 1. Render Saldo Utama
             this.walletBalance.textContent = Utils.formatCurrency(balanceData.balance);
-            
+
             // 2. Render Detail (Pemasukan vs Hutang)
             // Asumsi backend kirim data income_pending & debt_pending (sesuai controller baru)
-            if(this.infoIncome) this.infoIncome.textContent = Utils.formatCurrency(balanceData.income_pending || 0);
-            if(this.infoDebt) this.infoDebt.textContent = Utils.formatCurrency(balanceData.debt_pending || 0);
+            if (this.infoIncome) this.infoIncome.textContent = Utils.formatCurrency(balanceData.income_pending || 0);
+            if (this.infoDebt) this.infoDebt.textContent = Utils.formatCurrency(balanceData.debt_pending || 0);
 
             // --- LOGIKA TOMBOL BARU ---
             const profile = this.driverData?.driver_profile;
@@ -649,13 +649,13 @@ export class DriverApp {
                 this.btnRequestWithdrawal.disabled = true;
                 this.btnRequestWithdrawal.textContent = "Lengkapi Rekening BTN Dulu";
                 this.btnRequestWithdrawal.classList.add('bg-slate-400', 'cursor-not-allowed');
-                
+
             } else if (balanceData.balance < 10000) {
                 // KASUS 2: Saldo kurang
                 this.btnRequestWithdrawal.disabled = true;
                 this.btnRequestWithdrawal.textContent = "Saldo Belum Cukup (< 10rb)";
                 this.btnRequestWithdrawal.classList.add('bg-slate-400', 'cursor-not-allowed');
-                
+
             } else {
                 // KASUS 3: Siap Cair
                 this.btnRequestWithdrawal.disabled = false;
@@ -673,7 +673,7 @@ export class DriverApp {
                 this.btnRequestWithdrawal.textContent = "Cairkan Dana Sekarang";
                 this.btnRequestWithdrawal.classList.remove('bg-slate-400');
             }
-            
+
             // 4. Render Tabel Riwayat (Sama seperti kode lama)
             if (withdrawals.length === 0) {
                 this.wdList.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-slate-400 text-xs">Belum ada riwayat penarikan.</td></tr>`;
@@ -681,20 +681,20 @@ export class DriverApp {
             }
 
             this.wdList.innerHTML = withdrawals.map(w => {
-               // ... (COPY PASTE LOGIKA RENDER TABEL DARI KODE LAMA ANDA) ...
-               // Kode render tabel di pesan sebelumnya sudah bagus, pakai itu saja.
-               let badgeClass = 'bg-slate-100 text-slate-600';
-               if(w.status === 'Pending') badgeClass = 'bg-yellow-100 text-yellow-800';
-               if(w.status === 'Approved' || w.status === 'Paid') badgeClass = 'bg-emerald-100 text-emerald-800';
-               
-               return `
+                // ... (COPY PASTE LOGIKA RENDER TABEL DARI KODE LAMA ANDA) ...
+                // Kode render tabel di pesan sebelumnya sudah bagus, pakai itu saja.
+                let badgeClass = 'bg-slate-100 text-slate-600';
+                if (w.status === 'Pending') badgeClass = 'bg-yellow-100 text-yellow-800';
+                if (w.status === 'Approved' || w.status === 'Paid') badgeClass = 'bg-emerald-100 text-emerald-800';
+
+                return `
                <tr class="border-t border-slate-100 dark:border-slate-700">
                    <td class="py-3 pr-2 align-top">
                        <div class="text-slate-700 dark:text-slate-200 font-medium text-sm">
-                           ${new Date(w.requested_at).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}
+                           ${new Date(w.requested_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                        </div>
                        <div class="text-[10px] text-slate-400">
-                           ${new Date(w.requested_at).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                           ${new Date(w.requested_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                        </div>
                    </td>
                    <td class="py-3 pr-2 align-top font-mono font-medium text-slate-800 dark:text-slate-100">
@@ -708,7 +708,7 @@ export class DriverApp {
                </tr>`;
             }).join('');
 
-        } catch (error) { 
+        } catch (error) {
             console.error(error);
             this.wdList.innerHTML = `<tr><td colspan="3" class="text-center text-red-500 py-4">Gagal memuat data.</td></tr>`;
         }
@@ -721,10 +721,10 @@ export class DriverApp {
         const params = new URLSearchParams();
         if (from) params.append('date_from', from);
         if (to) params.append('date_to', to);
-        
+
         try {
             const history = await fetchApi(`/driver/history?${params.toString()}`);
-            
+
             if (history.length === 0) {
                 this.tripList.innerHTML = `<div class="text-center text-slate-500 p-4">Tidak ada riwayat.</div>`;
                 return;
@@ -732,8 +732,8 @@ export class DriverApp {
 
             this.tripList.innerHTML = history.map(t => {
                 // 1. Tentukan Nama Tujuan
-                const destName = t.booking.zone_to 
-                    ? t.booking.zone_to.name 
+                const destName = t.booking.zone_to
+                    ? t.booking.zone_to.name
                     : (t.booking.manual_destination || 'Tujuan Manual');
 
                 // 2. LOGIKA STATUS CAIR/LUNAS
@@ -773,7 +773,9 @@ export class DriverApp {
                         </div>
                         <div class="text-right">
                             <p class="font-bold text-success">${Utils.formatCurrency(t.amount)}</p>
-                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 inline-block mt-1">${t.method}</span>
+                            <span class="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 inline-block mt-1">
+                                ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
+                            </span>
                         </div>
                     </div>
                 </div>`;
@@ -782,23 +784,23 @@ export class DriverApp {
     }
 
     // --- FUNGSI AKSI (sekarang memanggil API) ---
-        
+
     async handleStatusChange(e) {
         // 1. Mencegah toggle berubah dulu sebelum validasi server sukses
-        e.preventDefault(); 
-        
+        e.preventDefault();
+
         const targetCheckbox = e.target;
         const wantToOnline = !targetCheckbox.checked; // Keadaan saat ini (sebelum di-klik user adalah checked=false jika offline)
         // Koreksi logika checkbox:
         // Jika checkbox tadi tidak dicentang, dan user klik, maka user ingin mencentang (Online)
         // e.preventDefault() membuat checked tidak berubah secara visual dulu.
-        
+
         // Logika: 
         // Status awal visual: OFFLINE (unchecked). User klik.
         // Kita preventDefault.
         // Kita cek lokasi. Jika sukses -> set checked = true.
-        
-        const nextStatus = targetCheckbox.checked ? 'offline' : 'available'; 
+
+        const nextStatus = targetCheckbox.checked ? 'offline' : 'available';
         // Karena preventDefault(), 'checked' masih status LAMA.
         // Jadi jika checkbox sekarang false (offline), user klik ingin jadi 'available'.
 
@@ -816,14 +818,14 @@ export class DriverApp {
                     // Sukses dapat lokasi
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
-                    
+
                     await this.sendStatusUpdate(nextStatus, lat, lng, targetCheckbox);
                 },
                 (error) => {
                     // Gagal dapat lokasi
                     console.error(error);
                     let msg = 'Gagal mengambil lokasi GPS.';
-                    if(error.code === 1) msg = 'Izin lokasi ditolak. Mohon aktifkan GPS.';
+                    if (error.code === 1) msg = 'Izin lokasi ditolak. Mohon aktifkan GPS.';
                     Utils.showToast(msg, 'error');
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -849,21 +851,21 @@ export class DriverApp {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
-            
+
             // Jika sukses (tidak throw error):
             // 1. Update visual checkbox secara manual
             checkboxEl.checked = (status === 'available');
-            
+
             // 2. Update data lokal
             // response.data berisi user object dr backend
-            this.driverData = response.data; 
+            this.driverData = response.data;
 
             // 3. Render ulang UI
             this.renderStatus();
             this.renderProfile();
 
-            const msg = status === 'available' 
-                ? 'Berhasil masuk antrian bandara!' 
+            const msg = status === 'available'
+                ? 'Berhasil masuk antrian bandara!'
                 : 'Anda sekarang Offline.';
             Utils.showToast(msg, 'success');
 
@@ -871,7 +873,7 @@ export class DriverApp {
             // Error sudah ditangani fetchApi (toast muncul), 
             // tapi kita pastikan checkbox visual sesuai status asli (batal berubah)
             checkboxEl.checked = (status !== 'available');
-            
+
             // Pesan spesifik jika error 422 (Kejauhan) sudah muncul via Utils.showToast dari fetchApi,
             // tapi jika ingin custom handling bisa di sini.
         }
@@ -914,7 +916,7 @@ export class DriverApp {
     async handleCompleteBooking() {
         if (!this.driverData.active_booking) return;
         if (!confirm('Selesaikan perjalanan ini?')) return;
-    
+
         try {
             // Tampilkan loading
             this.btnComplete.disabled = true;
@@ -922,20 +924,20 @@ export class DriverApp {
 
             // Panggil API Complete
             await fetchApi(`/driver/bookings/${this.driverData.active_booking.id}/complete`, { method: 'POST' });
-            
+
             // --- PERBAIKAN UTAMA DI SINI ---
             // Jangan update manual parsial. Reload data utuh dari server agar 100% sinkron.
-            await this.loadInitialData(); 
-            
+            await this.loadInitialData();
+
             Utils.showToast('Perjalanan selesai', 'success');
-        } catch (error) { 
+        } catch (error) {
             /* handled */
             console.error(error);
             // Kembalikan tombol jika error
-            this.renderActiveOrder(); 
+            this.renderActiveOrder();
         }
     }
-    
+
     async handleWithdrawalRequest() {
         if (!confirm("Apakah Anda yakin ingin mencairkan semua saldo bersih yang tersedia?")) return;
 
@@ -950,13 +952,13 @@ export class DriverApp {
             });
 
             Utils.showToast('Pengajuan pencairan berhasil dikirim!', 'success');
-            
+
             // Refresh tampilan dompet
-            this.renderWallet(); 
-        } 
-        catch (error) { 
+            this.renderWallet();
+        }
+        catch (error) {
             // Reset tombol jika error
-            this.renderWallet(); 
+            this.renderWallet();
         }
     }
 
@@ -966,7 +968,7 @@ export class DriverApp {
             bank_name: 'Bank BTN',
             account_number: document.getElementById('inAccNumber').value
         };
-        
+
         try {
             const res = await fetchApi('/driver/bank-details', { // Buat route baru di api.php
                 method: 'POST',
@@ -977,16 +979,16 @@ export class DriverApp {
             this.bankModal.classList.add('hidden');
             this.bankModal.classList.remove('flex');
             Utils.showToast('Rekening berhasil disimpan', 'success');
-        } catch(err) { /* handled */ }
+        } catch (err) { /* handled */ }
     }
 
     // Method Baru untuk Submit Form Modal
     async submitLeaveQueue(e) {
         e.preventDefault();
-        
+
         // Ambil nilai radio yang terpilih
         const reason = document.querySelector('input[name="reason"]:checked').value;
-        
+
         const payload = {
             action: 'leave',
             reason: reason
@@ -995,11 +997,11 @@ export class DriverApp {
         if (reason === 'self') {
             const dest = document.getElementById('manualDest').value;
             const price = document.getElementById('manualPrice').value;
-            
-            if(!dest || !price) {
+
+            if (!dest || !price) {
                 return Utils.showToast('Mohon isi tujuan dan nominal', 'error');
             }
-            
+
             payload.manual_destination = dest;
             payload.manual_price = price;
         } else {
@@ -1009,7 +1011,7 @@ export class DriverApp {
         // Tutup modal & Panggil API
         this.leaveModal.classList.add('hidden');
         this.leaveModal.classList.remove('flex');
-        
+
         await this.executeStatusChange(payload);
     }
 
@@ -1033,7 +1035,7 @@ export class DriverApp {
             // Kita pakai data ini langsung agar UI berubah instan (tanpa menunggu loadInitialData)
             if (response.data) {
                 this.driverData = response.data;
-                
+
                 // Jika di response backend belum ada active_booking, kita pertahankan yang lama biar aman
                 if (this.activeBooking && !this.driverData.active_booking) {
                     this.driverData.active_booking = this.activeBooking;
@@ -1042,14 +1044,14 @@ export class DriverApp {
 
             // 4. Update UI Secara Paksa SEKARANG JUGA
             // Karena this.driverData sudah baru (status: standby), tombol akan langsung berubah merah
-            this.updateQueueUI(); 
-            
+            this.updateQueueUI();
+
             // 5. Pesan Sukses
             if (payload.action === 'join') {
                 Utils.showToast('Berhasil masuk antrian!', 'success');
             } else if (payload.reason === 'self') {
                 Utils.showToast('Data penumpang dicatat. Saldo terpotong Rp 10.000', 'success');
-                this.renderWallet(); 
+                this.renderWallet();
             } else {
                 Utils.showToast('Anda keluar antrian.', 'success');
             }
@@ -1061,7 +1063,7 @@ export class DriverApp {
         } catch (error) {
             console.error("Gagal update status:", error);
             // Jika gagal, kembalikan UI ke kondisi semula (berdasarkan data terakhir yang valid)
-            this.updateQueueUI(); 
+            this.updateQueueUI();
         }
     }
 
@@ -1072,7 +1074,7 @@ export class DriverApp {
         // Logic mapping status (Sesuaikan dengan backend Anda)
         // Jika 'Paid'/'Assigned' -> Ubah jadi 'Started'
         // Jika 'Started' -> Ubah jadi 'Completed'
-        
+
         let nextEndpoint = '';
         let confirmMsg = '';
         console.log("Current Booking Status:", this.activeBooking);
@@ -1089,13 +1091,13 @@ export class DriverApp {
 
         try {
             // Contoh call API (Sesuaikan dengan controller driver Anda)
-            await fetchApi(nextEndpoint, { 
+            await fetchApi(nextEndpoint, {
                 method: 'POST',
                 body: JSON.stringify({ booking_id: this.activeBooking.id })
             });
-            
+
             // Refresh data
-            this.init(); 
+            await this.loadInitialData();
             Utils.showToast('Status berhasil diperbarui', 'success');
 
         } catch (e) {
@@ -1107,17 +1109,17 @@ export class DriverApp {
     // Helper untuk update status ke API (misal: start trip)
     async updateOrderStatus(newStatus) {
         try {
-             // Tampilkan loading di tombol
-             const btn = document.getElementById('btnMainAction'); // ID Tombol dinamis yg kita buat
-             if(btn) btn.textContent = "Memproses...";
+            // Tampilkan loading di tombol
+            const btn = document.getElementById('btnMainAction'); // ID Tombol dinamis yg kita buat
+            if (btn) btn.textContent = "Memproses...";
 
-             await fetchApi(`/driver/bookings/${this.activeBooking.id}/start`, { 
-                method: 'POST' 
+            await fetchApi(`/driver/bookings/${this.activeBooking.id}/start`, {
+                method: 'POST'
             });
 
             // --- PERBAIKAN: RELOAD DATA ---
             await this.loadInitialData();
-            
+
             Utils.showToast('Perjalanan dimulai!', 'success');
 
         } catch (error) {
@@ -1163,7 +1165,7 @@ export class DriverApp {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
-            
+
             Utils.showToast('Password berhasil diubah!', 'success');
             this.formChangePassword.reset(); // Reset form jika sukses
 
@@ -1219,7 +1221,7 @@ export class DriverApp {
 
             // Update data lokal dengan respon terbaru dari server
             this.driverData = response.data;
-            
+
             // Render ulang tampilan
             this.renderProfile();
 

@@ -2,43 +2,43 @@ import { Utils } from './utils.js';
 
 
 async function fetchApi(endpoint, options = {}) {
-  const headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
-  };
-  // Untuk API Sanctum, session cookie sudah cukup, tapi jika butuh token:
-  // const token = localStorage.getItem('authToken');
-  // if (token) headers['Authorization'] = `Bearer ${token}`;
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+    };
+    // Untuk API Sanctum, session cookie sudah cukup, tapi jika butuh token:
+    // const token = localStorage.getItem('authToken');
+    // if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  try {
-      const response = await fetch(`/api${endpoint}`, { 
-        ...options, 
-        headers,
-        credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
-    });
-      if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Terjadi kesalahan pada server');
-      }
-      return response.json();
-  } catch (error) {
-      console.error(`API Error on ${endpoint}:`, error);
-      Utils.showToast(error.message, 'error');
-      throw error;
-  }
+    try {
+        const response = await fetch(`/api${endpoint}`, {
+            ...options,
+            headers,
+            credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Terjadi kesalahan pada server');
+        }
+        return response.json();
+    } catch (error) {
+        console.error(`API Error on ${endpoint}:`, error);
+        Utils.showToast(error.message, 'error');
+        throw error;
+    }
 }
 
 class CsoApp {
-  init() {
-    this.initTheme();
-    this.cacheEls();
-    this.bind();
-    this.renderAll();
-    this.renderProfile();
-    window.addEventListener('hashchange', () => this.route());
-    this.route();
-  }
+    init() {
+        this.initTheme();
+        this.cacheEls();
+        this.bind();
+        this.renderAll();
+        this.renderProfile();
+        window.addEventListener('hashchange', () => this.route());
+        this.route();
+    }
 
     initTheme() {
         this.themeToggleBtn = document.getElementById('themeToggleBtn');
@@ -51,7 +51,7 @@ class CsoApp {
             this.iconDark.classList.toggle('hidden', !isDarkMode);
             this.iconLight.classList.toggle('hidden', isDarkMode);
         };
-        
+
         this.themeToggleBtn.addEventListener('click', () => {
             const isDarkMode = document.documentElement.classList.contains('dark');
             localStorage.theme = isDarkMode ? 'light' : 'dark';
@@ -63,287 +63,287 @@ class CsoApp {
 
 
 
-  cacheEls() {
-      this.views = ['new', 'history','profile'];
-      this.pageTitle = document.getElementById('pageTitle');
-      this.toSel = document.getElementById('toZone');
-      this.priceBox = document.getElementById('priceBox');
-      this.driversList = document.getElementById('driversList');
-      this.btnConfirm = document.getElementById('btnConfirmBooking');
-      
-      // Modal Pembayaran
-      this.modal = document.getElementById('paymentModal');
-      this.payInfo = document.getElementById('payInfo');
-      this.btnClosePay = document.getElementById('closePayModal');
-      this.btnQRIS = document.getElementById('payQRIS');
-      this.btnCashCSO = document.getElementById('payCashCSO');
-      this.btnCashDriver = document.getElementById('payCashDriver');
-      this.qrisBox = document.getElementById('qrisBox');
-      this.proofInput = document.getElementById('proofInput');
-      this.proofPreviewBox = document.getElementById('proofPreviewBox');
-      this.proofPreviewImg = document.getElementById('proofPreviewImg');
-      this.removeProofBtn = document.getElementById('removeProof');
-      this.btnConfirmQR = document.getElementById('confirmQR');
-      
-      // Riwayat & Struk
-      this.historyList = document.getElementById('csoTxList');
-      this.refreshHistoryBtn = document.getElementById('refreshHistory');
-      this.receiptModal = document.getElementById('receiptModal');
-      this.receiptArea = document.getElementById('receiptArea');
-      this.inpPassengerPhone = document.getElementById('passengerPhone');
+    cacheEls() {
+        this.views = ['new', 'history', 'profile'];
+        this.pageTitle = document.getElementById('pageTitle');
+        this.toSel = document.getElementById('toZone');
+        this.priceBox = document.getElementById('priceBox');
+        this.driversList = document.getElementById('driversList');
+        this.btnConfirm = document.getElementById('btnConfirmBooking');
 
-      this.inpStartDate = document.getElementById('filterStartDate');
-      this.inpEndDate = document.getElementById('filterEndDate');
-      this.btnFilterHistory = document.getElementById('btnFilterHistory');
+        // Modal Pembayaran
+        this.modal = document.getElementById('paymentModal');
+        this.payInfo = document.getElementById('payInfo');
+        this.btnClosePay = document.getElementById('closePayModal');
+        this.btnQRIS = document.getElementById('payQRIS');
+        this.btnCashCSO = document.getElementById('payCashCSO');
+        this.btnCashDriver = document.getElementById('payCashDriver');
+        this.qrisBox = document.getElementById('qrisBox');
+        this.proofInput = document.getElementById('proofInput');
+        this.proofPreviewBox = document.getElementById('proofPreviewBox');
+        this.proofPreviewImg = document.getElementById('proofPreviewImg');
+        this.removeProofBtn = document.getElementById('removeProof');
+        this.btnConfirmQR = document.getElementById('confirmQR');
 
-      // --- ELEMEN PROFILE BARU ---
-      this.profileInitial = document.getElementById('profileInitial');
-      this.profileNameDisplay = document.getElementById('profileNameDisplay');
-      
-      this.formEditProfile = document.getElementById('formEditProfile');
-      this.inpEditName = document.getElementById('editName');
-      this.inpEditUsername = document.getElementById('editUsername');
-      
-      this.formChangePassword = document.getElementById('formChangePassword');
-      this.inpCurrentPass = document.getElementById('currentPass');
-      this.inpNewPass = document.getElementById('newPass');
-      this.inpConfirmPass = document.getElementById('confirmPass');
+        // Riwayat & Struk
+        this.historyList = document.getElementById('csoTxList');
+        this.refreshHistoryBtn = document.getElementById('refreshHistory');
+        this.receiptModal = document.getElementById('receiptModal');
+        this.receiptArea = document.getElementById('receiptArea');
+        this.inpPassengerPhone = document.getElementById('passengerPhone');
 
-      // Modal Konfirmasi Tunai (BARU)
-      this.cashConfirmModal = document.getElementById('cashConfirmModal');
-      this.btnCancelCash = document.getElementById('btnCancelCash');
-      this.btnProceedCash = document.getElementById('btnProceedCash');
-      this.confirmMethodName = document.getElementById('confirmMethodName');
+        this.inpStartDate = document.getElementById('filterStartDate');
+        this.inpEndDate = document.getElementById('filterEndDate');
+        this.btnFilterHistory = document.getElementById('btnFilterHistory');
 
-      // QRIS Profile Elements
-      this.inpUploadQris = document.getElementById('inpUploadQris');
-      this.profileQrisPreview = document.getElementById('profileQrisPreview');
-      this.profileQrisPlaceholder = document.getElementById('profileQrisPlaceholder');
-      this.qrisLoading = document.getElementById('qrisLoading');
-      
-      // QRIS Payment Elements
-      this.paymentQrisImage = document.getElementById('paymentQrisImage');
-      this.paymentQrisError = document.getElementById('paymentQrisError');
+        // --- ELEMEN PROFILE BARU ---
+        this.profileInitial = document.getElementById('profileInitial');
+        this.profileNameDisplay = document.getElementById('profileNameDisplay');
 
-      // QRIS Zoom Elements (BARU)
-      this.qrisZoomModal = document.getElementById('qrisZoomModal');
-      this.qrisZoomImage = document.getElementById('qrisZoomImage');
+        this.formEditProfile = document.getElementById('formEditProfile');
+        this.inpEditName = document.getElementById('editName');
+        this.inpEditUsername = document.getElementById('editUsername');
 
+        this.formChangePassword = document.getElementById('formChangePassword');
+        this.inpCurrentPass = document.getElementById('currentPass');
+        this.inpNewPass = document.getElementById('newPass');
+        this.inpConfirmPass = document.getElementById('confirmPass');
 
-    
-      // State
-      this.currentUserQrisUrl = null;
-      this.pendingCashMethod = null;
-      this.zones = [];
-      this.selectedDriverId = null;
-      this.selectedOrderData = null;
-  }
+        // Modal Konfirmasi Tunai (BARU)
+        this.cashConfirmModal = document.getElementById('cashConfirmModal');
+        this.btnCancelCash = document.getElementById('btnCancelCash');
+        this.btnProceedCash = document.getElementById('btnProceedCash');
+        this.confirmMethodName = document.getElementById('confirmMethodName');
+
+        // QRIS Profile Elements
+        this.inpUploadQris = document.getElementById('inpUploadQris');
+        this.profileQrisPreview = document.getElementById('profileQrisPreview');
+        this.profileQrisPlaceholder = document.getElementById('profileQrisPlaceholder');
+        this.qrisLoading = document.getElementById('qrisLoading');
+
+        // QRIS Payment Elements
+        this.paymentQrisImage = document.getElementById('paymentQrisImage');
+        this.paymentQrisError = document.getElementById('paymentQrisError');
+
+        // QRIS Zoom Elements (BARU)
+        this.qrisZoomModal = document.getElementById('qrisZoomModal');
+        this.qrisZoomImage = document.getElementById('qrisZoomImage');
 
 
 
-  bind() {
-      // Event listener untuk tombol logout sudah ditangani oleh form di blade
+        // State
+        this.currentUserQrisUrl = null;
+        this.pendingCashMethod = null;
+        this.zones = [];
+        this.selectedDriverId = null;
+        this.selectedOrderData = null;
+    }
 
-      this.toSel.addEventListener('change', () => this.updatePrice());
-      this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
-      this.btnConfirm.addEventListener('click', () => this.processBooking());
 
-      // Event listener pembayaran
 
-      this.proofInput.addEventListener('change', (e) => this.handleProofSelect(e));
-      this.removeProofBtn.addEventListener('click', () => this.resetProof());
-      this.btnClosePay.addEventListener('click', () => this.closePayment());
-      this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
+    bind() {
+        // Event listener untuk tombol logout sudah ditangani oleh form di blade
 
-      // Listener Upload QRIS
-      this.inpUploadQris?.addEventListener('change', (e) => this.handleQrisUpload(e));
-      this.btnQRIS.addEventListener('click', () => { 
-        if(this.qrisBox.classList.contains('hidden')){
-            this.showQrisBox(); // <-- Kita buat fungsi helper baru ini
-        } else {
-            this.qrisBox.classList.add('hidden');
-        }
-      });
-      this.btnConfirmQR.addEventListener('click', () => this.finishPayment('QRIS'));
-      this.btnCashCSO.addEventListener('click', () => this.askCashConfirmation('CashCSO'));
-      this.btnCashDriver.addEventListener('click', () => this.askCashConfirmation('CashDriver'));
+        this.toSel.addEventListener('change', () => this.updatePrice());
+        this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
+        this.btnConfirm.addEventListener('click', () => this.processBooking());
 
-      this.btnCancelCash?.addEventListener('click', () => {
-          this.cashConfirmModal.classList.add('hidden');
-          this.cashConfirmModal.classList.remove('flex');
-          this.pendingCashMethod = null;
-      });
+        // Event listener pembayaran
 
-      this.btnProceedCash?.addEventListener('click', () => {
-          // Jika user klik Ya, baru jalankan finishPayment
-          if (this.pendingCashMethod) {
-              this.finishPayment(this.pendingCashMethod);
-              // Tutup modal konfirmasi
-              this.cashConfirmModal.classList.add('hidden');
-              this.cashConfirmModal.classList.remove('flex');
-          }
-      });
+        this.proofInput.addEventListener('change', (e) => this.handleProofSelect(e));
+        this.removeProofBtn.addEventListener('click', () => this.resetProof());
+        this.btnClosePay.addEventListener('click', () => this.closePayment());
+        this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
 
-      // 1. Saat gambar kecil diklik -> Buka Zoom
-      this.paymentQrisImage?.addEventListener('click', () => {
-        // Hanya izinkan zoom jika gambar bukan placeholder (tidak grayscale)
-        // Atau cek jika src valid
-        if (this.paymentQrisImage.src && !this.paymentQrisImage.classList.contains('grayscale')) {
-            this.qrisZoomImage.src = this.paymentQrisImage.src;
-            
-            this.qrisZoomModal.classList.remove('hidden');
-            this.qrisZoomModal.classList.add('flex');
-            
-            // Efek animasi kecil agar terlihat smooth
+        // Listener Upload QRIS
+        this.inpUploadQris?.addEventListener('change', (e) => this.handleQrisUpload(e));
+        this.btnQRIS.addEventListener('click', () => {
+            if (this.qrisBox.classList.contains('hidden')) {
+                this.showQrisBox(); // <-- Kita buat fungsi helper baru ini
+            } else {
+                this.qrisBox.classList.add('hidden');
+            }
+        });
+        this.btnConfirmQR.addEventListener('click', () => this.finishPayment('QRIS'));
+        this.btnCashCSO.addEventListener('click', () => this.askCashConfirmation('CashCSO'));
+        this.btnCashDriver.addEventListener('click', () => this.askCashConfirmation('CashDriver'));
+
+        this.btnCancelCash?.addEventListener('click', () => {
+            this.cashConfirmModal.classList.add('hidden');
+            this.cashConfirmModal.classList.remove('flex');
+            this.pendingCashMethod = null;
+        });
+
+        this.btnProceedCash?.addEventListener('click', () => {
+            // Jika user klik Ya, baru jalankan finishPayment
+            if (this.pendingCashMethod) {
+                this.finishPayment(this.pendingCashMethod);
+                // Tutup modal konfirmasi
+                this.cashConfirmModal.classList.add('hidden');
+                this.cashConfirmModal.classList.remove('flex');
+            }
+        });
+
+        // 1. Saat gambar kecil diklik -> Buka Zoom
+        this.paymentQrisImage?.addEventListener('click', () => {
+            // Hanya izinkan zoom jika gambar bukan placeholder (tidak grayscale)
+            // Atau cek jika src valid
+            if (this.paymentQrisImage.src && !this.paymentQrisImage.classList.contains('grayscale')) {
+                this.qrisZoomImage.src = this.paymentQrisImage.src;
+
+                this.qrisZoomModal.classList.remove('hidden');
+                this.qrisZoomModal.classList.add('flex');
+
+                // Efek animasi kecil agar terlihat smooth
+                setTimeout(() => {
+                    this.qrisZoomImage.classList.remove('scale-95');
+                    this.qrisZoomImage.classList.add('scale-100');
+                }, 10);
+            } else {
+                Utils.showToast('QRIS belum tersedia untuk diperbesar.', 'error');
+            }
+        });
+
+        // 2. Saat modal zoom diklik -> Tutup Zoom
+        this.qrisZoomModal?.addEventListener('click', () => {
+            this.qrisZoomImage.classList.remove('scale-100');
+            this.qrisZoomImage.classList.add('scale-95');
+
             setTimeout(() => {
-                this.qrisZoomImage.classList.remove('scale-95');
-                this.qrisZoomImage.classList.add('scale-100');
-            }, 10);
-        } else {
-            Utils.showToast('QRIS belum tersedia untuk diperbesar.', 'error');
+                this.qrisZoomModal.classList.add('hidden');
+                this.qrisZoomModal.classList.remove('flex');
+            }, 150); // Delay sedikit sesuai durasi transisi
+        });
+
+        // Event listener struk
+        document.getElementById('closeReceipt')?.addEventListener('click', () => this.hideReceipt());
+        document.getElementById('closeReceipt2')?.addEventListener('click', () => this.hideReceipt());
+        // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
+
+        // --- LISTENER PROFILE BARU ---
+        if (this.formEditProfile) {
+            this.formEditProfile.addEventListener('submit', (e) => this.handleUpdateProfile(e));
         }
-      });
+        if (this.formChangePassword) {
+            this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
+        }
 
-      // 2. Saat modal zoom diklik -> Tutup Zoom
-      this.qrisZoomModal?.addEventListener('click', () => {
-        this.qrisZoomImage.classList.remove('scale-100');
-        this.qrisZoomImage.classList.add('scale-95');
-        
-        setTimeout(() => {
-            this.qrisZoomModal.classList.add('hidden');
-            this.qrisZoomModal.classList.remove('flex');
-        }, 150); // Delay sedikit sesuai durasi transisi
-      });
-      
-      // Event listener struk
-      document.getElementById('closeReceipt')?.addEventListener('click', () => this.hideReceipt());
-      document.getElementById('closeReceipt2')?.addEventListener('click', () => this.hideReceipt());
-      // Event listener untuk tombol cetak & lihat struk akan di-bind setelah history dirender
+        this.btnFilterHistory?.addEventListener('click', () => this.renderHistory());
+        const today = new Date().toISOString().split('T')[0];
+        if (this.inpStartDate) this.inpStartDate.value = today;
+        if (this.inpEndDate) this.inpEndDate.value = today;
+    }
+    route() {
+        // Fungsi routing tidak berubah, sudah bagus
+        const hash = (location.hash || '#new').slice(1);
+        this.views.forEach(v => {
+            document.getElementById('view-' + v)?.classList.toggle('hidden', v !== hash);
+        });
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
+        });
 
-      // --- LISTENER PROFILE BARU ---
-      if (this.formEditProfile) {
-          this.formEditProfile.addEventListener('submit', (e) => this.handleUpdateProfile(e));
-      }
-      if (this.formChangePassword) {
-          this.formChangePassword.addEventListener('submit', (e) => this.handleChangePassword(e));
-      }
+        const titles = {
+            new: 'Pemesanan Baru',
+            history: 'Riwayat Transaksi'
+            , profile: 'Profil Saya'
+        };
+        this.pageTitle.textContent = titles[hash] || 'CSO Panel';
 
-      this.btnFilterHistory?.addEventListener('click', () => this.renderHistory());
-      const today = new Date().toISOString().split('T')[0];
-      if(this.inpStartDate) this.inpStartDate.value = today;
-      if(this.inpEndDate) this.inpEndDate.value = today;
-  }
-  route() {
-      // Fungsi routing tidak berubah, sudah bagus
-      const hash = (location.hash || '#new').slice(1);
-      this.views.forEach(v => {
-          document.getElementById('view-' + v)?.classList.toggle('hidden', v !== hash);
-      });
-      document.querySelectorAll('.nav-item').forEach(item => {
-          item.classList.toggle('active', item.getAttribute('href') === '#' + hash);
-      });
+        if (hash === 'profile') {
+            this.renderProfile();
+        }
+    }
 
-      const titles = { 
-        new: 'Pemesanan Baru', 
-        history: 'Riwayat Transaksi' 
-      , profile: 'Profil Saya'
-    };
-      this.pageTitle.textContent = titles[hash] || 'CSO Panel';
 
-      if (hash === 'profile') {
-          this.renderProfile();
-      }
-  }
 
-  
 
- 
-  renderAll() {
-    this.renderZones();
-    this.renderDrivers();
-    this.renderHistory();
-  }
+    renderAll() {
+        this.renderZones();
+        this.renderDrivers();
+        this.renderHistory();
+    }
 
-   // --- RENDER FUNCTIONS (NOW ASYNC) ---
+    // --- RENDER FUNCTIONS (NOW ASYNC) ---
 
-  async renderZones() {
-      try {
-          const zones = await fetchApi('/cso/zones');
-          this.zones = zones; // Simpan data zona
-          const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
-          this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
-      } catch (error) {
-          this.toSel.innerHTML = '<option value="">Gagal memuat tujuan</option>';
-      }
-  }
+    async renderZones() {
+        try {
+            const zones = await fetchApi('/cso/zones');
+            this.zones = zones; // Simpan data zona
+            const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+            this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
+        } catch (error) {
+            this.toSel.innerHTML = '<option value="">Gagal memuat tujuan</option>';
+        }
+    }
 
-  async renderDrivers() {
-    this.driversList.innerHTML = `
+    async renderDrivers() {
+        this.driversList.innerHTML = `
         <div class="p-8 text-center text-slate-400 flex flex-col items-center animate-pulse">
             <svg class="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <span class="text-sm">Memuat antrian driver...</span>
         </div>`;
-    
-    this.selectedDriverId = null;
-    this.updateConfirmButtonState();
 
-    try {
-        const drivers = await fetchApi('/cso/available-drivers');
+        this.selectedDriverId = null;
+        this.updateConfirmButtonState();
 
-        if (drivers.length === 0) {
-            this.driversList.innerHTML = `
+        try {
+            const drivers = await fetchApi('/cso/available-drivers');
+
+            if (drivers.length === 0) {
+                this.driversList.innerHTML = `
             <div class="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
                 <p class="text-slate-500 font-medium">Antrian Kosong</p>
                 <p class="text-xs text-slate-400 mt-1">Belum ada supir yang terdaftar dalam antrian hari ini.</p>
             </div>`;
-            return;
-        }
-
-        // --- RENDER HTML ---
-        this.driversList.innerHTML = drivers.map((d,index) => {
-            const profile = d.driver_profile || {};
-            const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
-
-            // Hitung Nomor Urut Antrian (Index + 1)
-            const queueNumber = index + 1;
-            
-            
-            // Kita terima status 'standby' ATAU 'available' agar aman
-            const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
-
-            // Debugging Status Driver
-            
-            let wrapperClass, badgeHtml, btnHtml, clickAttribute;
-
-            if (isStandby) {
-                // STATUS OK: BISA DIKLIK
-                wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer group';
-                
-                // Badge Hijau
-                badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Standby</span>`;
-                
-                btnHtml = `<div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">Pilih</div>`;
-                
-                // PENTING: ID dipasang di sini
-                clickAttribute = `data-driver-id="${d.id}"`;
-
-            } else {
-                // STATUS OFFLINE: TIDAK BISA DIKLIK
-                wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed';
-                
-                badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
-                
-                btnHtml = `<div class="text-xs font-medium text-slate-400">Menunggu...</div>`;
-                
-                // PENTING: Tidak ada ID, jadi tidak bisa diklik
-                clickAttribute = '';
+                return;
             }
 
-            const lineNumber = profile.line_number 
-                ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>` 
-                : '';
+            // --- RENDER HTML ---
+            this.driversList.innerHTML = drivers.map((d, index) => {
+                const profile = d.driver_profile || {};
+                const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
 
-            return `
+                // Hitung Nomor Urut Antrian (Index + 1)
+                const queueNumber = index + 1;
+
+
+                // Kita terima status 'standby' ATAU 'available' agar aman
+                const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
+
+                // Debugging Status Driver
+
+                let wrapperClass, badgeHtml, btnHtml, clickAttribute;
+
+                if (isStandby) {
+                    // STATUS OK: BISA DIKLIK
+                    wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer group';
+
+                    // Badge Hijau
+                    badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Standby</span>`;
+
+                    btnHtml = `<div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">Pilih</div>`;
+
+                    // PENTING: ID dipasang di sini
+                    clickAttribute = `data-driver-id="${d.id}"`;
+
+                } else {
+                    // STATUS OFFLINE: TIDAK BISA DIKLIK
+                    wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed';
+
+                    badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
+
+                    btnHtml = `<div class="text-xs font-medium text-slate-400">Menunggu...</div>`;
+
+                    // PENTING: Tidak ada ID, jadi tidak bisa diklik
+                    clickAttribute = '';
+                }
+
+                const lineNumber = profile.line_number
+                    ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
+                    : '';
+
+                return `
             <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
@@ -369,51 +369,51 @@ class CsoApp {
                 </div>
                 <div class="absolute inset-0 border-2 border-blue-600 rounded-xl opacity-0 pointer-events-none transition-opacity selection-ring"></div>
             </div>`;
-        }).join('');
+            }).join('');
 
-        // --- PASANG LISTENER CLICK ---
-        const clickableCards = this.driversList.querySelectorAll('[data-driver-id]');
+            // --- PASANG LISTENER CLICK ---
+            const clickableCards = this.driversList.querySelectorAll('[data-driver-id]');
 
-        clickableCards.forEach(card => {
-            card.addEventListener('click', () => {
-                const id = card.dataset.driverId;
-                
+            clickableCards.forEach(card => {
+                card.addEventListener('click', () => {
+                    const id = card.dataset.driverId;
 
-                // Update State
-                this.selectedDriverId = id;
 
-                // Visual Feedback
-                this.driversList.querySelectorAll('.selection-ring').forEach(el => el.classList.remove('opacity-100'));
-                const ring = card.querySelector('.selection-ring');
-                if (ring) ring.classList.add('opacity-100');
+                    // Update State
+                    this.selectedDriverId = id;
 
-                this.updateConfirmButtonState();
+                    // Visual Feedback
+                    this.driversList.querySelectorAll('.selection-ring').forEach(el => el.classList.remove('opacity-100'));
+                    const ring = card.querySelector('.selection-ring');
+                    if (ring) ring.classList.add('opacity-100');
+
+                    this.updateConfirmButtonState();
+                });
             });
-        });
 
-    } catch (error) {
-        console.error("Error render drivers:", error);
-        this.driversList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
+        } catch (error) {
+            console.error("Error render drivers:", error);
+            this.driversList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
+        }
     }
-  }
 
     async renderHistory() {
         this.historyList.innerHTML = `<div class="text-center text-slate-500 py-8">Memuat riwayat...</div>`;
-        
+
         try {
             // 1. Ambil Nilai Filter
             const start = this.inpStartDate?.value || '';
             const end = this.inpEndDate?.value || '';
-            
+
             // 2. Buat URL dengan Query Params
             let url = '/cso/history';
             const params = new URLSearchParams();
-            
+
             if (start && end) {
                 params.append('start_date', start);
                 params.append('end_date', end);
             }
-            
+
             // Jika ada params, tambahkan ke URL (contoh: /cso/history?start_date=2024-01-01&end_date=...)
             if (params.toString()) {
                 url += `?${params.toString()}`;
@@ -429,27 +429,27 @@ class CsoApp {
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                         </div>
                         <p class="text-slate-500 dark:text-slate-400">Tidak ada transaksi ditemukan.</p>
-                        ${ (start && end) ? '<p class="text-xs text-slate-400 mt-1">Coba ubah filter tanggal.</p>' : '' }
+                        ${(start && end) ? '<p class="text-xs text-slate-400 mt-1">Coba ubah filter tanggal.</p>' : ''}
                     </div>`;
                 return;
             }
 
             this.historyList.innerHTML = transactions.map(tx => {
-                
+
                 const booking = tx.booking || {};
                 const driver = booking.driver || {};
                 const zoneTo = booking.zone_to || {};
                 const profile = driver.driver_profile || {};
-                
+
                 const passengerPhone = booking.passenger_phone || '-';
-                const rawStatus = (booking.status || 'Assigned'); 
+                const rawStatus = (booking.status || 'Assigned');
 
                 // --- FORMAT RUPIAH ---
                 // Mengubah angka (misal: 150000) menjadi "Rp 150.000"
                 const formattedPrice = Number(tx.amount).toLocaleString('id-ID', {
-                    style: 'currency', 
-                    currency: 'IDR', 
-                    minimumFractionDigits: 0 
+                    style: 'currency',
+                    currency: 'IDR',
+                    minimumFractionDigits: 0
                 });
 
                 // --- LOGIKA STATUS PERJALANAN (BARU) ---
@@ -457,7 +457,7 @@ class CsoApp {
                 let statusText = '';
                 let statusIcon = '';
 
-                switch(rawStatus) {
+                switch (rawStatus) {
                     case 'Assigned':
                         statusText = 'Sedang Menjemput';
                         statusBadge = 'bg-yellow-100 text-yellow-700 border-yellow-200';
@@ -479,7 +479,7 @@ class CsoApp {
                         break;
                     default:
                         // Fallback untuk data lama (Paid/CashDriver) dianggap Selesai/Arsip
-                        statusText = rawStatus; 
+                        statusText = rawStatus;
                         statusBadge = 'bg-gray-100 text-gray-600 border-gray-200';
                 }
 
@@ -524,7 +524,7 @@ class CsoApp {
 
                     <div class="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
                         <span class="text-[10px] px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 font-medium">
-                            Metode: ${tx.method}
+                            Metode: ${tx.method === 'CashDriver' ? 'Tunai (Supir)' : (tx.method === 'CashCSO' ? 'Tunai (Kasir)' : tx.method)}
                         </span>
                         <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
@@ -533,7 +533,7 @@ class CsoApp {
                     </div>
                 </div>`;
             }).join('');
-            
+
             // Re-bind listener tombol struk
             this.historyList.querySelectorAll('.btn-view-receipt').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -548,7 +548,7 @@ class CsoApp {
         }
     }
 
-  // --- LOGIC FUNCTIONS (ACTIONS) ---
+    // --- LOGIC FUNCTIONS (ACTIONS) ---
 
     updatePrice() {
         const zoneId = this.toSel.value;
@@ -565,21 +565,21 @@ class CsoApp {
 
         // Cek Logika
         if (!this.selectedDriverId || !this.toSel.value) {
-            
+
             // Pesan error lebih spesifik
             let msg = 'Data belum lengkap:\n';
             if (!this.toSel.value) msg += '- Tujuan belum dipilih\n';
             if (!this.selectedDriverId) msg += '- Supir belum dipilih';
-            
+
             alert(msg);
             return;
         }
 
-        
+
         // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
         const zoneId = this.toSel.value;
-        const zoneObj = this.zones.find(z => z.id == zoneId); 
-        
+        const zoneObj = this.zones.find(z => z.id == zoneId);
+
         this.selectedOrderData = {
             driver_id: this.selectedDriverId,
             zone_id: zoneId,
@@ -592,10 +592,10 @@ class CsoApp {
 
     openPayment() {
         if (!this.selectedOrderData) return;
-        
+
         // Reset UI Modal
         this.qrisBox.classList.add('hidden');
-        this.resetProof(); 
+        this.resetProof();
         this.inpPassengerPhone.value = ''; // Reset Phone Input
 
         // Tampilkan Info di Modal
@@ -604,19 +604,19 @@ class CsoApp {
             <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${this.selectedOrderData.zone_name}</span></div>
             <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${Utils.formatCurrency(this.selectedOrderData.price)}</span></div>
         </div>`;
-        
+
         this.modal.classList.add('flex');
         this.modal.classList.remove('hidden');
     }
 
     closePayment() {
         this.modal.classList.add('hidden');
-        this.modal.classList.remove('flex');    
+        this.modal.classList.remove('flex');
         // Tidak perlu cancelBooking ke API karena data belum masuk DB
-        this.selectedOrderData = null; 
+        this.selectedOrderData = null;
         this.resetProof();
     }
-    
+
     askCashConfirmation(method) {
         // 1. Validasi Nomor HP dulu (Supaya tidak muncul modal kalau nomor HP kosong)
         let phone = this.inpPassengerPhone.value.trim();
@@ -638,7 +638,7 @@ class CsoApp {
         this.cashConfirmModal.classList.add('flex');
     }
 
-  // --- LOGIKA PREVIEW FOTO ---
+    // --- LOGIKA PREVIEW FOTO ---
     handleProofSelect(e) {
         const file = e.target.files[0];
         if (file) {
@@ -674,7 +674,7 @@ class CsoApp {
 
         // 1. Ambil & Validasi Nomor HP
         let phone = this.inpPassengerPhone.value.trim();
-        
+
         if (!phone) {
             Utils.showToast('Nomor WhatsApp Penumpang WAJIB diisi!', 'error');
             this.inpPassengerPhone.focus();
@@ -725,7 +725,7 @@ class CsoApp {
             }
 
             const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            
+
             const response = await fetch('/api/cso/process-order', {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
@@ -736,15 +736,15 @@ class CsoApp {
                 const errData = await response.json();
                 throw new Error(errData.message || 'Gagal memproses order');
             }
-            
+
             const result = await response.json();
 
             Utils.showToast('Order Sukses! Notifikasi WA terkirim.', 'success');
-            
+
             // Tampilkan Struk (Hanya untuk preview, tombol cetak sudah dihapus)
-            this.lastReceiptData = result.data; 
+            this.lastReceiptData = result.data;
             this.showReceipt(this.lastReceiptData);
-            
+
             this.closePayment();
             this.renderDrivers();
             this.renderHistory();
@@ -769,7 +769,7 @@ class CsoApp {
         this.receiptModal.classList.add('flex');
         this.receiptModal.classList.remove('hidden');
     }
-    
+
     hideReceipt() {
         this.receiptModal.classList.add('hidden');
         this.receiptModal.classList.remove('flex');
@@ -788,18 +788,18 @@ class CsoApp {
         const isAndroid = /Android/i.test(navigator.userAgent);
 
         if (isAndroid) {
-             // --- KHUSUS ANDROID (RawBT) ---
-            
+            // --- KHUSUS ANDROID (RawBT) ---
+
             // Masalah Utama: RawBT tidak bisa baca src="/pos-assets/..."
             // Solusi: Kita HAPUS tag <img> untuk versi Bluetooth agar tidak error/blank
             // Atau ganti dengan Text Header Saja
-            
+
             // Kita buat HTML khusus RawBT yang lebih sederhana (Tanpa CSS eksternal/Gambar URL)
             let rawBtHTML = receiptHTML;
 
             // A. Hapus tag <img> (Penyebab utama Blank Page)
             // Regex ini akan menghapus semua tag <img ... >
-            rawBtHTML = rawBtHTML.replace(/<img[^>]*>/g, ''); 
+            rawBtHTML = rawBtHTML.replace(/<img[^>]*>/g, '');
 
             // B. Tambahkan Judul Teks Pengganti Logo (Opsional, agar tidak kosong melompong di atas)
             // Kita sisipkan teks sebelum "KOPERASI ANGKASA JAYA" jika logo dihapus
@@ -816,20 +816,20 @@ class CsoApp {
 
         } else {
             // --- METODE CETAK STANDARD (DESKTOP/LAPTOP) ---
-            
+
             const printWindow = window.open('', 'PRINT', 'height=600,width=400');
-            
+
             printWindow.document.write('<!doctype html><html><head><title>Struk</title>');
             // Sertakan CSS agar tampilan sama
-            printWindow.document.write('<link rel="stylesheet" href="/pos-assets/css/style.css">'); 
+            printWindow.document.write('<link rel="stylesheet" href="/pos-assets/css/style.css">');
             printWindow.document.write('<style>body { margin: 0; padding: 0; } @page { margin: 0; }</style>');
             printWindow.document.write('</head><body>');
             printWindow.document.write(receiptHTML);
             printWindow.document.write('</body></html>');
-            
+
             printWindow.document.close();
             printWindow.focus();
-            
+
             // Beri jeda sedikit agar style termuat
             setTimeout(() => {
                 printWindow.print();
@@ -838,7 +838,7 @@ class CsoApp {
         }
     }
 
-    
+
     async shareReceiptHandler() {
         if (!this.lastReceiptData) {
             Utils.showToast('Data struk tidak ditemukan.', 'error');
@@ -864,7 +864,7 @@ class CsoApp {
         try {
             // Ambil elemen struk yang sedang tampil di modal
             const element = document.getElementById('receiptArea');
-            
+
             // Kode Transaksi untuk nama file
             const code = this.lastReceiptData.id || 'TRX';
 
@@ -876,9 +876,9 @@ class CsoApp {
             // 4. Setup PDF (Ukuran kertas disesuaikan dengan struk)
             // 58mm = 58 unit di jsPDF (kurang lebih)
             // Kita pakai format custom width 58, height menyesuaikan panjang struk
-            const imgWidth = 58; 
+            const imgWidth = 58;
             const pageHeight = (canvas.height * imgWidth) / canvas.width;
-            
+
             // Akses jsPDF dari window (karena pakai CDN)
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', [imgWidth, pageHeight + 10]); // +10mm padding bawah
@@ -897,10 +897,10 @@ class CsoApp {
             setTimeout(() => {
                 const message = `Halo, berikut adalah struk pembayaran taksi Anda (Kode: #${code}). Silakan unduh file PDF di atas. Terima kasih.`;
                 const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-                
+
                 // Buka WA di tab baru
                 window.open(url, '_blank');
-                
+
                 // Beri instruksi ke CSO
                 alert(`File "${fileName}" telah didownload ke perangkat ini.\n\nWhatsApp akan terbuka sekarang. Silakan KLIK tombol lampiran (Paperclip) di WhatsApp dan kirim file PDF tersebut.`);
             }, 1000);
@@ -923,34 +923,34 @@ class CsoApp {
         // Ambil Data Driver & Profile
         const driverObj = isBooking ? tx.driver : booking?.driver;
         const profile = driverObj?.driver_profile || {};
-        
+
         // Logika Line Number
-        const lineNo = profile.line_number ? `#L${profile.line_number}` : ''; 
+        const lineNo = profile.line_number ? `#L${profile.line_number}` : '';
         const driverDisplayName = driverObj ? `${lineNo}` : 'N/A';
 
         // Logika Tanggal & Waktu
         const dateTime = new Date(tx.created_at || Date.now());
         const tanggal = dateTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
         const waktu = dateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-        
-        const zoneName = isBooking 
-            ? this.zones.find(z => z.id == tx.zone_id)?.name 
+
+        const zoneName = isBooking
+            ? this.zones.find(z => z.id == tx.zone_id)?.name
             : tx.booking?.zone_to?.name;
-        
+
         const price = tx.price || tx.amount;
         const amountStr = new Intl.NumberFormat('id-ID').format(price);
         // ID Transaksi untuk Link
-        const txId = tx.id || booking?.transaction?.id || booking?.id; 
+        const txId = tx.id || booking?.transaction?.id || booking?.id;
         const code = String(txId).toUpperCase();
 
         const csoObj = tx.cso || booking?.cso;
         const kasirName = csoObj?.name?.split(' ')[0] || 'Admin';
-        const methodDisplay = tx.method?.includes('Cash') ? "CASH" : "QRIS";
+        const methodDisplay = tx.method === 'CashDriver' ? 'TUNAI (SUPIR)' : (tx.method === 'CashCSO' ? 'TUNAI (KASIR)' : 'QRIS');
 
         // --- 2. LOGIKA QR CODE (BARU) ---
         // Membuat URL Lengkap ke halaman struk publik
         const publicUrl = `${window.location.origin}/receipt/${txId}`;
-        
+
         // Generate QR Code menggunakan API (Gratis & Cepat)
         // size=100x100 cukup untuk struk thermal
         const qrCodeImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=0&data=${encodeURIComponent(publicUrl)}`;
@@ -967,14 +967,14 @@ class CsoApp {
             line-height: 1.2;
             padding: 5px 0;
         `;
-        
+
         const center = `text-align: center;`;
         const bold = `font-weight: bold;`;
         const flexBetween = `display: flex; justify-content: space-between;`;
         const dashedLine = `border-bottom: 1px dashed #000; margin: 5px 0;`;
         const mb1 = `margin-bottom: 4px;`;
-        
-        const logoUrl = '/pos-assets/img/logo-apt.svg'; 
+
+        const logoUrl = '/pos-assets/img/logo-apt.svg';
 
         // Logo Header
         const logoHtml = `
@@ -1058,16 +1058,16 @@ class CsoApp {
     }
 
     async renderProfile() {
-      try {
-          const user = await fetchApi('/cso/profile'); // Endpoint baru di backend
-          
-          // Update Display
-          this.profileNameDisplay.textContent = user.name;
-          this.profileInitial.textContent = user.name.charAt(0).toUpperCase();
-          
-          // Isi Form Edit
-          this.inpEditName.value = user.name;
-          this.inpEditUsername.value = user.username;
+        try {
+            const user = await fetchApi('/cso/profile'); // Endpoint baru di backend
+
+            // Update Display
+            this.profileNameDisplay.textContent = user.name;
+            this.profileInitial.textContent = user.name.charAt(0).toUpperCase();
+
+            // Isi Form Edit
+            this.inpEditName.value = user.name;
+            this.inpEditUsername.value = user.username;
 
             // Render QRIS
             if (user.qris_path) {
@@ -1075,7 +1075,7 @@ class CsoApp {
                 this.profileQrisPreview.src = url;
                 this.profileQrisPreview.classList.remove('hidden');
                 this.profileQrisPlaceholder.classList.add('hidden');
-                
+
                 // Simpan ke variable global class agar bisa dipakai di modal pembayaran
                 this.currentUserQrisUrl = url;
             } else {
@@ -1083,42 +1083,42 @@ class CsoApp {
                 this.profileQrisPlaceholder.classList.remove('hidden');
                 this.currentUserQrisUrl = null;
             }
-          
-      } catch (error) {
-          console.error('Gagal memuat profil:', error);
-          Utils.showToast('Gagal memuat data profil', 'error');
-      }
-  }
 
-  async handleUpdateProfile(e) {
-      e.preventDefault();
-      
-      const payload = {
-          name: this.inpEditName.value,
-          username: this.inpEditUsername.value
-      };
+        } catch (error) {
+            console.error('Gagal memuat profil:', error);
+            Utils.showToast('Gagal memuat data profil', 'error');
+        }
+    }
 
-      const btn = this.formEditProfile.querySelector('button');
-      const originalText = btn.textContent;
-      btn.textContent = 'Menyimpan...';
-      btn.disabled = true;
+    async handleUpdateProfile(e) {
+        e.preventDefault();
 
-      try {
-          await fetchApi('/cso/profile/update', {
-              method: 'POST',
-              body: JSON.stringify(payload)
-          });
-          
-          Utils.showToast('Profil berhasil diperbarui', 'success');
-          this.renderProfile(); // Refresh tampilan
+        const payload = {
+            name: this.inpEditName.value,
+            username: this.inpEditUsername.value
+        };
 
-      } catch (error) {
-          Utils.showToast(error.message, 'error');
-      } finally {
-          btn.textContent = originalText;
-          btn.disabled = false;
-      }
-  }
+        const btn = this.formEditProfile.querySelector('button');
+        const originalText = btn.textContent;
+        btn.textContent = 'Menyimpan...';
+        btn.disabled = true;
+
+        try {
+            await fetchApi('/cso/profile/update', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            Utils.showToast('Profil berhasil diperbarui', 'success');
+            this.renderProfile(); // Refresh tampilan
+
+        } catch (error) {
+            Utils.showToast(error.message, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
 
     async handleChangePassword(e) {
         e.preventDefault();
@@ -1148,7 +1148,7 @@ class CsoApp {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
-            
+
             Utils.showToast('Password berhasil diubah!', 'success');
             this.formChangePassword.reset();
 
@@ -1186,11 +1186,11 @@ class CsoApp {
             });
 
             if (!res.ok) throw new Error('Gagal upload gambar');
-            
+
             const data = await res.json();
-            
+
             Utils.showToast('QRIS Berhasil Diupload!', 'success');
-            
+
             // Refresh Profile untuk menampilkan gambar baru
             this.renderProfile();
 
@@ -1214,7 +1214,7 @@ class CsoApp {
             this.paymentQrisImage.src = this.currentUserQrisUrl;
             this.paymentQrisImage.classList.remove('opacity-50', 'grayscale');
             this.paymentQrisError.classList.add('hidden');
-            
+
             // Aktifkan input bukti bayar
             this.proofInput.disabled = false;
         } else {
@@ -1222,7 +1222,7 @@ class CsoApp {
             this.paymentQrisImage.src = '/pos-assets/img/qris-placeholder.svg'; // Gambar default
             this.paymentQrisImage.classList.add('opacity-50', 'grayscale');
             this.paymentQrisError.classList.remove('hidden');
-            
+
             // Optional: Matikan input bukti bayar agar tidak bisa lanjut
             // this.proofInput.disabled = true; 
             Utils.showToast('Anda belum mengupload QRIS di menu Profil!', 'error');
@@ -1230,7 +1230,7 @@ class CsoApp {
     }
 
 
-  
+
 }
 
 const app = new CsoApp(); // 1. Buat instance aplikasi

@@ -1,113 +1,113 @@
 import { Utils } from './utils.js';
 
 window.openPayModal = (id) => {
-    document.getElementById('wdIdToPay').value = id;
-    document.getElementById('modalUploadProof').classList.remove('hidden');
-    document.getElementById('modalUploadProof').classList.add('flex');
+  document.getElementById('wdIdToPay').value = id;
+  document.getElementById('modalUploadProof').classList.remove('hidden');
+  document.getElementById('modalUploadProof').classList.add('flex');
 };
 
 document.getElementById('btnCancelProof')?.addEventListener('click', () => {
-    document.getElementById('modalUploadProof').classList.add('hidden');
-    document.getElementById('modalUploadProof').classList.remove('flex');
+  document.getElementById('modalUploadProof').classList.add('hidden');
+  document.getElementById('modalUploadProof').classList.remove('flex');
 });
 
 document.getElementById('formUploadProof')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const id = document.getElementById('wdIdToPay').value;
-    const fileInput = document.getElementById('fileProof');
-    
-    if (fileInput.files.length === 0) return alert('Wajib upload bukti transfer untuk menyetujui!');
+  e.preventDefault();
+  const id = document.getElementById('wdIdToPay').value;
+  const fileInput = document.getElementById('fileProof');
 
-    const formData = new FormData();
-    formData.append('proof_image', fileInput.files[0]);
+  if (fileInput.files.length === 0) return alert('Wajib upload bukti transfer untuk menyetujui!');
 
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    submitBtn.textContent = 'Memproses...';
-    submitBtn.disabled = true;
+  const formData = new FormData();
+  formData.append('proof_image', fileInput.files[0]);
 
-    try {
-        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        // Panggil endpoint APPROVE (bukan paid lagi)
-        const res = await fetch(`/api/admin/withdrawals/${id}/approve`, { 
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': token },
-            body: formData
-        });
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.textContent = 'Memproses...';
+  submitBtn.disabled = true;
 
-        if (!res.ok) throw new Error('Gagal memproses.');
+  try {
+    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-        alert('Berhasil Disetujui & Bukti Terkirim!');
-        document.getElementById('modalUploadProof').classList.add('hidden');
-        document.getElementById('modalUploadProof').classList.remove('flex');
-        
-        window.location.reload(); 
+    // Panggil endpoint APPROVE (bukan paid lagi)
+    const res = await fetch(`/api/admin/withdrawals/${id}/approve`, {
+      method: 'POST',
+      headers: { 'X-CSRF-TOKEN': token },
+      body: formData
+    });
 
-    } catch (err) {
-        alert('Terjadi kesalahan saat upload.');
-        console.error(err);
-    } finally {
-        submitBtn.textContent = 'Setujui & Kirim';
-        submitBtn.disabled = false;
-    }
+    if (!res.ok) throw new Error('Gagal memproses.');
+
+    alert('Berhasil Disetujui & Bukti Terkirim!');
+    document.getElementById('modalUploadProof').classList.add('hidden');
+    document.getElementById('modalUploadProof').classList.remove('flex');
+
+    window.location.reload();
+
+  } catch (err) {
+    alert('Terjadi kesalahan saat upload.');
+    console.error(err);
+  } finally {
+    submitBtn.textContent = 'Setujui & Kirim';
+    submitBtn.disabled = false;
+  }
 });
 
 // Helper function untuk memanggil API
 async function fetchApi(endpoint, options = {}) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        // Pastikan Anda memiliki meta tag CSRF di admin.blade.php jika menggunakan web routes
-        // 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-    };
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    // Pastikan Anda memiliki meta tag CSRF di admin.blade.php jika menggunakan web routes
+    // 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
+    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+  };
 
-    // Asumsi token disimpan di localStorage setelah login
-    const token = localStorage.getItem('authToken'); 
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
+  // Asumsi token disimpan di localStorage setelah login
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
-    try {
-        const response = await fetch(`/api${endpoint}`, { 
-          ...options, 
-          headers,
-          credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
-        });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Terjadi kesalahan pada server');
-        }
-        return response.json();
-    } catch (error) {
-        console.error(`API Error on ${endpoint}:`, error);
-        alert(`Gagal berkomunikasi dengan server: ${error.message}`);
-        throw error; // Lemparkan lagi agar bisa ditangkap oleh pemanggil
+  try {
+    const response = await fetch(`/api${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Terjadi kesalahan pada server');
     }
+    return response.json();
+  } catch (error) {
+    console.error(`API Error on ${endpoint}:`, error);
+    alert(`Gagal berkomunikasi dengan server: ${error.message}`);
+    throw error; // Lemparkan lagi agar bisa ditangkap oleh pemanggil
+  }
 }
 
-export class AdminApp{
-  constructor(){
-    this.views = ['dashboard','queue','zones','users','finance-log','withdrawals','report-revenue','report-driver','settings'];
+export class AdminApp {
+  constructor() {
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'settings'];
     this.charts = {};
   }
-  init(){
-    window.addEventListener('hashchange', ()=> this.route());
+  init() {
+    window.addEventListener('hashchange', () => this.route());
     this.route();
     // Panggil di sini agar dropdown terisi saat halaman dimuat
-    this.populateFilterDropdowns(); 
+    this.populateFilterDropdowns();
     this.initCommon();
   }
-  initCommon(){
+  initCommon() {
 
     // Settings form
     const formSettings = document.getElementById('formSettings');
     formSettings?.addEventListener('submit', async (e) => { // <-- Jadikan async
       e.preventDefault();
-      
+
       const rateValue = document.getElementById('commissionRate').value;
       const emailValue = document.getElementById('adminEmail').value.trim(); // Ambil value email
-      
+
       // Buat payload untuk dikirim ke API
       const payload = {
         commission_rate: parseFloat(rateValue),
@@ -137,7 +137,7 @@ export class AdminApp{
       if (!payload.admin_email) {
         alert('Email admin tidak boleh kosong.');
         return;
-    }
+      }
 
       try {
         // 2. Kirim data ke API untuk disimpan menggunakan POST
@@ -153,37 +153,37 @@ export class AdminApp{
 
     });
 
-    
 
-    
+
+
 
     // Zones & Tariff forms
     const formZone = document.getElementById('formZone');
     const zoneReset = document.getElementById('zoneReset');
 
 
-    formZone?.addEventListener('submit', async (e)=>{ // Tambahkan 'async'
+    formZone?.addEventListener('submit', async (e) => { // Tambahkan 'async'
       e.preventDefault();
       const id = document.getElementById('zoneId').value || null;
       const name = document.getElementById('zoneName').value.trim();
       const price = parseInt(document.getElementById('zonePrice').value, 10) || 0;
-      if(!name) return;
+      if (!name) return;
 
       const payload = { name, price };
 
       try {
         if (id) {
-            // Jika ada ID, ini adalah UPDATE (PUT)
-            await fetchApi(`/admin/zones/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify(payload)
-            });
+          // Jika ada ID, ini adalah UPDATE (PUT)
+          await fetchApi(`/admin/zones/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+          });
         } else {
-            // Jika tidak ada ID, ini adalah CREATE (POST)
-            await fetchApi('/admin/zones', {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+          // Jika tidak ada ID, ini adalah CREATE (POST)
+          await fetchApi('/admin/zones', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
         }
         alert('Zona berhasil disimpan!'); // Ganti Utils.showToast atau sesuaikan
         formZone.reset();
@@ -201,10 +201,10 @@ export class AdminApp{
     const userModalCancel = document.getElementById('userModalCancel');
     const userRole = document.getElementById('userRole');
 
-    function openModal(editing=false, data=null){
+    function openModal(editing = false, data = null) {
       userModal.classList.remove('hidden');
       document.getElementById('userModalTitle').textContent = editing ? 'Edit Pengguna' : 'Tambah Pengguna';
-      if(editing && data){
+      if (editing && data) {
         document.getElementById('userId').value = data.id;
         document.getElementById('userName').value = data.name || '';
         document.getElementById('userRole').value = data.role || 'cso';
@@ -212,32 +212,32 @@ export class AdminApp{
         document.getElementById('userPassword').value = data.password || '';
         document.getElementById('userCar').value = data.car || '';
         document.getElementById('userPlate').value = data.plate || '';
-      }else{
+      } else {
         document.getElementById('formUser').reset();
         document.getElementById('userId').value = '';
       }
       toggleDriverExtra();
     }
-    function closeModal(){ userModal.classList.add('hidden'); }
+    function closeModal() { userModal.classList.add('hidden'); }
 
-    function toggleDriverExtra(){
+    function toggleDriverExtra() {
       const role = userRole.value;
       const extra = document.getElementById('driverExtra');
-      extra.style.display = role==='driver' ? 'grid' : 'none';
+      extra.style.display = role === 'driver' ? 'grid' : 'none';
     }
 
     userRole?.addEventListener('change', toggleDriverExtra);
-    btnOpenCreateUser?.addEventListener('click', ()=> openModal(false));
+    btnOpenCreateUser?.addEventListener('click', () => openModal(false));
     userModalClose?.addEventListener('click', closeModal);
     userModalCancel?.addEventListener('click', closeModal);
-    userModal?.addEventListener('click', (e)=>{ if(e.target===userModal) closeModal(); });
+    userModal?.addEventListener('click', (e) => { if (e.target === userModal) closeModal(); });
     // Listener Refresh Queue
     document.getElementById('refreshQueue')?.addEventListener('click', () => this.renderQueue());
 
     // Ganti event listener yang lama dengan yang ini
     document.getElementById('formUser')?.addEventListener('submit', async (e) => { // <-- Jadikan async
       e.preventDefault();
-      
+
       const id = document.getElementById('userId').value || null;
       const password = document.getElementById('userPassword').value;
 
@@ -277,7 +277,7 @@ export class AdminApp{
         }
 
         alert('Data pengguna berhasil disimpan!');
-        
+
         // Panggil fungsi closeModal() yang sudah Anda miliki
         closeModal(); // Pastikan fungsi ini bisa diakses di sini
 
@@ -292,13 +292,13 @@ export class AdminApp{
     });
 
     // Finance filters
-    ['fltDateFrom','fltDateTo','fltDriver','fltCSO'].forEach(id=>{
-      document.getElementById(id)?.addEventListener('change', ()=> this.renderTxLog());
+    ['fltDateFrom', 'fltDateTo', 'fltDriver', 'fltCSO'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => this.renderTxLog());
     });
 
     // Revenue report range
-    document.getElementById('revRange')?.addEventListener('change', ()=> this.renderRevReport());
-    document.getElementById('driverRankBy')?.addEventListener('change', ()=> this.renderDriverReport());
+    document.getElementById('revRange')?.addEventListener('change', () => this.renderRevReport());
+    document.getElementById('driverRankBy')?.addEventListener('change', () => this.renderDriverReport());
 
     this.renderAll();
 
@@ -306,19 +306,19 @@ export class AdminApp{
     document.getElementById('btnCloseWdDetails')?.addEventListener('click', () => {
       document.getElementById('modalWdDetails').classList.add('hidden');
       document.getElementById('modalWdDetails').classList.remove('flex');
-  });
-  document.getElementById('btnExitWdDetails')?.addEventListener('click', () => {
+    });
+    document.getElementById('btnExitWdDetails')?.addEventListener('click', () => {
       document.getElementById('modalWdDetails').classList.add('hidden');
       document.getElementById('modalWdDetails').classList.remove('flex');
-  });
-  
-  // Agar fungsi openWdDetails bisa dipanggil dari onclick string HTML
+    });
 
-  window.app = this;
-  window.openWdDetails = (id) => this.openWdDetails(id);
+    // Agar fungsi openWdDetails bisa dipanggil dari onclick string HTML
+
+    window.app = this;
+    window.openWdDetails = (id) => this.openWdDetails(id);
   }
 
-  renderAll(){
+  renderAll() {
     this.renderDashboard();
     this.renderZones();
     this.renderUsers();
@@ -329,30 +329,30 @@ export class AdminApp{
     this.renderSettings();
   }
 
-  route(){
+  route() {
     const hash = (location.hash || '#dashboard').slice(1);
     this.views.forEach(v => {
-      const el = document.getElementById('view-'+v);
-      if(!el) return;
-      if(v===hash){ el.classList.remove('hidden'); document.getElementById('pageTitle').textContent = this.titleOf(v); }
+      const el = document.getElementById('view-' + v);
+      if (!el) return;
+      if (v === hash) { el.classList.remove('hidden'); document.getElementById('pageTitle').textContent = this.titleOf(v); }
       else el.classList.add('hidden');
     });
-    document.querySelectorAll('.nav-link').forEach(a=>{
-      const target = a.getAttribute('href').replace('#','');
-      if(target===hash) a.classList.add('bg-primary-50','text-primary-700');
-      else a.classList.remove('bg-primary-50','text-primary-700');
+    document.querySelectorAll('.nav-link').forEach(a => {
+      const target = a.getAttribute('href').replace('#', '');
+      if (target === hash) a.classList.add('bg-primary-50', 'text-primary-700');
+      else a.classList.remove('bg-primary-50', 'text-primary-700');
     });
   }
-  titleOf(v){
+  titleOf(v) {
     return {
-      'dashboard':'Dashboard',
+      'dashboard': 'Dashboard',
       'queue': 'Manajemen Antrian',
-      'zones':'Manajemen Zona & Tarif',
-      'users':'Manajemen Pengguna',
-      'finance-log':'Transaction Log',
-      'withdrawals':'Withdrawal Requests',
-      'report-revenue':'Laporan Pendapatan',
-      'report-driver':'Laporan Kinerja Supir',
+      'zones': 'Manajemen Zona & Tarif',
+      'users': 'Manajemen Pengguna',
+      'finance-log': 'Transaction Log',
+      'withdrawals': 'Withdrawal Requests',
+      'report-revenue': 'Laporan Pendapatan',
+      'report-driver': 'Laporan Kinerja Supir',
       'settings': 'Pengaturan'
     }[v] || 'Dashboard';
   }
@@ -384,22 +384,22 @@ export class AdminApp{
       document.getElementById('metricPendingWd').textContent = 'Error';
     }
   }
-  renderLineChart(id, labels, data){
+  renderLineChart(id, labels, data) {
     const ctx = document.getElementById(id);
-    if(this.charts[id]) this.charts[id].destroy();
+    if (this.charts[id]) this.charts[id].destroy();
     this.charts[id] = new Chart(ctx, {
       type: 'line',
-      data: { labels, datasets: [{ label:'Pendapatan', data, tension:.3 }]},
-      options:{ responsive:true, scales:{ y:{ beginAtZero:true } } }
+      data: { labels, datasets: [{ label: 'Pendapatan', data, tension: .3 }] },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
   }
-  renderBarChart(id, labels, data){
+  renderBarChart(id, labels, data) {
     const ctx = document.getElementById(id);
-    if(this.charts[id]) this.charts[id].destroy();
+    if (this.charts[id]) this.charts[id].destroy();
     this.charts[id] = new Chart(ctx, {
       type: 'bar',
-      data: { labels, datasets: [{ label:'Pendapatan', data }]},
-      options:{ responsive:true, scales:{ y:{ beginAtZero:true } } }
+      data: { labels, datasets: [{ label: 'Pendapatan', data }] },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
   }
 
@@ -433,12 +433,12 @@ export class AdminApp{
     }
   }
   // ----- Zones & Tariffs -----
-  async renderZones(){
-    try{
-      const zones = await fetchApi('/admin/zones'); 
+  async renderZones() {
+    try {
+      const zones = await fetchApi('/admin/zones');
       const tbody = document.getElementById('zonesTable');
-      if(!tbody) return;
-      tbody.innerHTML = zones.map(z=>`<tr class="border-t">
+      if (!tbody) return;
+      tbody.innerHTML = zones.map(z => `<tr class="border-t">
         <td class="py-2">${z.name}</td>
         <td class="py-2">${Utils.formatCurrency(z.price)}</td>
         <td class="py-2">
@@ -446,15 +446,15 @@ export class AdminApp{
           <button class="text-red-600 text-sm ml-2" data-del-zone="${z.id}">Hapus</button>
         </td>
       </tr>`).join('');
-      tbody.querySelectorAll('[data-edit-zone]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
+      tbody.querySelectorAll('[data-edit-zone]').forEach(btn => {
+        btn.addEventListener('click', () => {
           const z = JSON.parse(btn.dataset.editZone);
           document.getElementById('zoneId').value = z.id;
           document.getElementById('zoneName').value = z.name;
           document.getElementById('zonePrice').value = z.price;
         });
       });
-      tbody.querySelectorAll('[data-del-zone]').forEach(btn=>{
+      tbody.querySelectorAll('[data-del-zone]').forEach(btn => {
         btn.addEventListener('click', async () => { // <-- Jadikan callback ini 'async'
           if (confirm('Hapus zona tujuan ini?')) {
             try {
@@ -463,7 +463,7 @@ export class AdminApp{
               await fetchApi(`/admin/zones/${zoneId}`, {
                 method: 'DELETE'
               });
-              
+
               alert('Zona berhasil dihapus.');
               await this.renderZones(); // Panggil lagi untuk me-refresh tabel
             } catch (error) {
@@ -474,16 +474,16 @@ export class AdminApp{
         });
       });
     }
-    catch(err){
+    catch (err) {
       console.error("Gagal memuat data zona:", error);
       document.getElementById('zonesTable').innerHTML = '<tr><td colspan="3">Gagal memuat data.</td></tr>';
     }
-    
+
 
   }
-  
+
   // ----- Users -----
-  async renderUsers(){
+  async renderUsers() {
     try {
       // 1. GANTI DB.listUsers() DENGAN PANGGILAN API
       const users = await fetchApi('/admin/users');
@@ -524,7 +524,7 @@ export class AdminApp{
           this.openUserModal(userData);
         });
       });
-      
+
       // --- Event Listener untuk Tombol Toggle Status (SUDAH DIUBAH) ---
       tbody.querySelectorAll('[data-toggle-u]').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -560,13 +560,13 @@ export class AdminApp{
 
     document.getElementById('userModal').classList.remove('hidden');
     document.getElementById('userModalTitle').textContent = isEditing ? 'Edit Pengguna' : 'Tambah Pengguna';
-    
+
     // 4. SESUAIKAN PENGISIAN FORM DENGAN STRUKTUR DATA BARU
     document.getElementById('userId').value = isEditing ? data.id : '';
     document.getElementById('userName').value = isEditing ? data.name : '';
     document.getElementById('userRole').value = isEditing ? data.role : 'cso';
     document.getElementById('userUsername').value = isEditing ? data.username : '';
-    
+
     // Kosongkan password saat edit, minta pengguna mengisinya jika ingin mengubah
     document.getElementById('userPassword').value = '';
     document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
@@ -580,7 +580,7 @@ export class AdminApp{
     document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
   }
 
-  // ----- Finance: Transaction Log -----
+
   // ----- Finance: Transaction Log -----
   async renderTxLog() {
     const tbody = document.getElementById('txTable');
@@ -602,7 +602,7 @@ export class AdminApp{
 
       // 3. Panggil API
       const response = await fetchApi(`/admin/transactions?${params.toString()}`);
-      const transactions = response.data; 
+      const transactions = response.data;
 
       if (transactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-500">Tidak ada data transaksi yang cocok.</td></tr>';
@@ -612,27 +612,26 @@ export class AdminApp{
       // 4. Render HTML
       tbody.innerHTML = transactions.map(t => {
         // Ambil data dari t.booking, bukan langsung dari t
-        const booking = t.booking || {}; 
+        const booking = t.booking || {};
         const cso = booking.cso || {};
         const driver = booking.driver || {};
 
         const csoName = cso?.name || '<span class="text-slate-400 italic">Self/Driver</span>';
         const driverName = driver?.name || '-';
-        
+
         // --- LOGIKA BARU PENENTUAN TUJUAN ---
         let destName = '<span class="text-red-400">?</span>';
         let destBadge = '';
 
         if (t.booking?.zone_to) {
-            // Jika ada Zona (Order via CSO)
-            destName = t.booking.zone_to.name;
+          // Jika ada Zona (Order via CSO)
+          destName = t.booking.zone_to.name;
         } else if (t.booking?.manual_destination) {
-            // Jika Manual (Dapat Penumpang Sendiri)
-            destName = t.booking.manual_destination;
-            destBadge = '<span class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200">Manual</span>';
+          // Jika Manual (Dapat Penumpang Sendiri)
+          destName = t.booking.manual_destination;
+          destBadge = '<span class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200">Manual</span>';
         }
 
-        const route = `Bandara → ${destName} ${destBadge}`;
         // -------------------------------------
 
         // --- LOGIKA BARU STATUS PENCAIRAN ---
@@ -640,30 +639,30 @@ export class AdminApp{
         const pStatus = t.payout_status || 'Unpaid'; // Default Unpaid
 
         if (t.method === 'CashDriver') {
-            // Logika Hutang Driver
-            if (pStatus === 'Paid') {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">Lunas (Komisi Dibayar)</span>`;
-            } else if (pStatus === 'Processing') {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Proses Potong</span>`;
-            } else {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">Belum Lunas</span>`;
-            }
+          // Logika Hutang Driver
+          if (pStatus === 'Paid') {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">Lunas (Komisi Dibayar)</span>`;
+          } else if (pStatus === 'Processing') {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Proses Potong</span>`;
+          } else {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">Belum Lunas</span>`;
+          }
         } else {
-            // Logika Pemasukan (QRIS/CashCSO)
-            if (pStatus === 'Paid') {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">Sudah Cair</span>`;
-            } else if (pStatus === 'Processing') {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Sedang Diproses</span>`;
-            } else {
-                payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Belum Dicairkan</span>`;
-            }
+          // Logika Pemasukan (QRIS/CashCSO)
+          if (pStatus === 'Paid') {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">Sudah Cair</span>`;
+          } else if (pStatus === 'Processing') {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">Sedang Diproses</span>`;
+          } else {
+            payoutBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">Belum Dicairkan</span>`;
+          }
         }
         // --- FORMAT RUPIAH (FIX) ---
         // Pastikan t.amount dikonversi ke Number dulu agar tidak error jika data string
-        const formattedAmount = Number(t.amount).toLocaleString('id-ID', { 
-            style: 'currency', 
-            currency: 'IDR', 
-            minimumFractionDigits: 0 
+        const formattedAmount = Number(t.amount).toLocaleString('id-ID', {
+          style: 'currency',
+          currency: 'IDR',
+          minimumFractionDigits: 0
         });
         // ------------------------------------
 
@@ -671,10 +670,10 @@ export class AdminApp{
           <td class="py-3 px-2 text-slate-600 text-xs">${new Date(t.created_at).toLocaleString('id-ID')}</td>
           <td class="py-3 px-2 font-medium text-xs">${csoName}</td>
           <td class="py-3 px-2 text-xs">${driverName}</td>
-          <td class="py-3 px-2 text-slate-700 text-xs">${t.booking?.zone_to?.name || 'Manual'}</td>
+          <td class="py-3 px-2 text-slate-700 text-xs">${destName} ${destBadge}</td>
           <td class="py-3 px-2">
             <span class="px-2 py-1 rounded text-[10px] font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}">
-                ${t.method}
+                ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
             </span>
           </td>
           <td class="py-3 px-2">${payoutBadge}</td> <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700 text-xs">
@@ -702,66 +701,66 @@ export class AdminApp{
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Tidak ada permintaan penarikan dana.</td></tr>';
         return;
       }
-      
+
       // 2. HAPUS FUNGSI MANUAL LOOKUP 'byName'
       // Nama supir kini bisa diakses langsung via w.driver.name
       tbody.innerHTML = withdrawals.map(w => {
 
         // --- BAGIAN INI YANG HILANG SEBELUMNYA (Definisi bankInfo) ---
-        const bankInfo = w.driver && w.driver.driver_profile 
-            ? `<div class="text-xs font-bold text-slate-700">${w.driver.driver_profile.bank_name || '-'}</div>
+        const bankInfo = w.driver && w.driver.driver_profile
+          ? `<div class="text-xs font-bold text-slate-700">${w.driver.driver_profile.bank_name || '-'}</div>
                <div class="text-xs font-mono text-slate-500">${w.driver.driver_profile.account_number || '-'}</div>`
-            : '<span class="text-xs text-red-500 italic">Belum set rekening</span>';
+          : '<span class="text-xs text-red-500 italic">Belum set rekening</span>';
         // ---
-        console.log("driver:",w);
+        console.log("driver:", w);
         // Tampilkan Info Bank
-        const currentStatus = w.status.toLowerCase(); 
+        const currentStatus = w.status.toLowerCase();
         let actionButtons = '';
         // Tambahkan tombol DETAIL di semua status
         const btnDetail = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded mr-1" onclick="window.openWdDetails(${w.id})">Detail</button>`;
- 
-         if (w.status === 'Pending') {
-             actionButtons = `
+
+        if (w.status === 'Pending') {
+          actionButtons = `
                  <div class="flex items-center gap-1">
                      ${btnDetail}
                      <button class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow" onclick="window.openPayModal(${w.id})">Bayar</button>
                      <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-wd-act="reject" data-id="${w.id}">Tolak</button>
                  </div>
              `;
-         } else if (w.status === 'Approved') {
-              let proofBtn = w.proof_image 
-                 ? `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
-                 : '';
-              actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn}</div>`;
-         } else {
-              actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-red-500 italic ml-1">Ditolak</span></div>`;
-         }
-          return `<tr class="border-t hover:bg-slate-50">
+        } else if (w.status === 'Approved') {
+          let proofBtn = w.proof_image
+            ? `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
+            : '';
+          actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn}</div>`;
+        } else {
+          actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-red-500 italic ml-1">Ditolak</span></div>`;
+        }
+        return `<tr class="border-t hover:bg-slate-50">
               <td class="py-2 align-top">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
               <td class="py-2 align-top">
                   <div class="font-medium">${w.driver?.name || 'Supir Dihapus'}</div>
                   ${bankInfo}
               </td>
-              <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', {style:'currency', currency:'IDR'})}</td>
+              <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}</td>
               <td class="py-2 align-top">${this.wdBadge(w.status)}</td>
               <td class="py-2 align-top">${actionButtons}</td>
           </tr>`;
-        }).join('');
+      }).join('');
 
       tbody.querySelectorAll('[data-wd-act="reject"]').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if(!confirm('Yakin ingin MENOLAK pencairan ini?')) return;
-                try {
-                    const id = btn.dataset.id;
-                    await fetchApi(`/admin/withdrawals/${id}/reject`, { method: 'POST' });
-                    alert('Permintaan ditolak.');
-                    this.renderWithdrawals();
-                } catch(e) { console.error(e); }
-            });
+        btn.addEventListener('click', async () => {
+          if (!confirm('Yakin ingin MENOLAK pencairan ini?')) return;
+          try {
+            const id = btn.dataset.id;
+            await fetchApi(`/admin/withdrawals/${id}/reject`, { method: 'POST' });
+            alert('Permintaan ditolak.');
+            this.renderWithdrawals();
+          } catch (e) { console.error(e); }
         });
+      });
 
       // 3. UBAH EVENT LISTENER UNTUK MEMANGGIL API
-      
+
     } catch (error) {
       console.error("Gagal memuat data withdrawal:", error);
       tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Gagal memuat data.</td></tr>';
@@ -769,15 +768,15 @@ export class AdminApp{
   }
 
   // Fungsi wdBadge tidak perlu diubah, karena ini hanya helper untuk styling
- wdBadge(s) {
-        const status = s.toLowerCase();
-        let cls = 'bg-slate-100 text-slate-600';
-        if (status === 'pending') cls = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-        if (status === 'approved') cls = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
-        if (status === 'rejected') cls = 'bg-red-100 text-red-800 border border-red-200';
-        
-        return `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}">${s}</span>`;
-    }
+  wdBadge(s) {
+    const status = s.toLowerCase();
+    let cls = 'bg-slate-100 text-slate-600';
+    if (status === 'pending') cls = 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+    if (status === 'approved') cls = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+    if (status === 'rejected') cls = 'bg-red-100 text-red-800 border border-red-200';
+
+    return `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}">${s}</span>`;
+  }
   // ----- Reports -----
   async renderRevReport() { // <-- Jadikan async
     try {
@@ -825,27 +824,27 @@ export class AdminApp{
     }
   }
 
-// Fungsi getWeek() dan sumWeek() tidak lagi diperlukan dan bisa dihapus.
+  // Fungsi getWeek() dan sumWeek() tidak lagi diperlukan dan bisa dihapus.
 
   // ----- Reports: Driver Performance -----
-async renderDriverReport() { // <-- Jadikan async
-  const tbody = document.getElementById('driverPerfTable');
-  if (!tbody) return;
+  async renderDriverReport() { // <-- Jadikan async
+    const tbody = document.getElementById('driverPerfTable');
+    if (!tbody) return;
 
-  try {
-    const sortBy = document.getElementById('driverRankBy')?.value || 'trips';
+    try {
+      const sortBy = document.getElementById('driverRankBy')?.value || 'trips';
 
-    // 1. PANGGIL API UNTUK MENDAPATKAN LAPORAN KINERJA YANG SUDAH JADI DAN TERURUT
-    const reportData = await fetchApi(`/admin/reports/driver-performance?sort_by=${sortBy}`);
+      // 1. PANGGIL API UNTUK MENDAPATKAN LAPORAN KINERJA YANG SUDAH JADI DAN TERURUT
+      const reportData = await fetchApi(`/admin/reports/driver-performance?sort_by=${sortBy}`);
 
-    if (reportData.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
-      return;
-    }
+      if (reportData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
+        return;
+      }
 
-    // 2. SEMUA LOGIKA .map, .filter, .reduce, .sort DIHAPUS.
-    // Langsung render data yang sudah matang dari API.
-    tbody.innerHTML = reportData.map(driver => `
+      // 2. SEMUA LOGIKA .map, .filter, .reduce, .sort DIHAPUS.
+      // Langsung render data yang sudah matang dari API.
+      tbody.innerHTML = reportData.map(driver => `
       <tr class="border-t">
         <td class="py-2">${driver.name}</td>
         <td class="py-2">${driver.trips}</td>
@@ -853,109 +852,109 @@ async renderDriverReport() { // <-- Jadikan async
       </tr>
     `).join('');
 
-  } catch (error) {
-    console.error("Gagal memuat laporan kinerja supir:", error);
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Gagal memuat data.</td></tr>';
+    } catch (error) {
+      console.error("Gagal memuat laporan kinerja supir:", error);
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Gagal memuat data.</td></tr>';
+    }
   }
-}
 
   // ----- Settings -----
-// ----- Settings -----
-async renderSettings() { 
-  try {
-    const settings = await fetchApi('/admin/settings');
-    
-    // 1. Render Komisi
-    const rateInput = document.getElementById('commissionRate');
-    if (rateInput && settings.commission_rate !== undefined) {
-      const rate = parseFloat(settings.commission_rate);
-      rateInput.value = (rate * 100);
-    }
+  // ----- Settings -----
+  async renderSettings() {
+    try {
+      const settings = await fetchApi('/admin/settings');
 
-    // 2. Render Email (BARU)
-    const emailInput = document.getElementById('adminEmail');
-    if (emailInput && settings.admin_email) {
+      // 1. Render Komisi
+      const rateInput = document.getElementById('commissionRate');
+      if (rateInput && settings.commission_rate !== undefined) {
+        const rate = parseFloat(settings.commission_rate);
+        rateInput.value = (rate * 100);
+      }
+
+      // 2. Render Email (BARU)
+      const emailInput = document.getElementById('adminEmail');
+      if (emailInput && settings.admin_email) {
         emailInput.value = settings.admin_email;
-    } else if (emailInput) {
+      } else if (emailInput) {
         emailInput.value = ''; // Kosongkan jika belum diset
+      }
+
+      // 2. SMTP (BARU)
+      if (document.getElementById('mailHost')) document.getElementById('mailHost').value = settings.mail_host || '';
+      if (document.getElementById('mailPort')) document.getElementById('mailPort').value = settings.mail_port || '';
+      if (document.getElementById('mailUsername')) document.getElementById('mailUsername').value = settings.mail_username || '';
+      if (document.getElementById('mailPassword')) document.getElementById('mailPassword').value = settings.mail_password || ''; // Hati-hati menampilkan password
+      if (document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
+      if (document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
+      if (document.getElementById('waToken')) document.getElementById('waToken').value = settings.wa_token || '';
+      if (document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
+
+    } catch (error) {
+      console.error("Gagal memuat pengaturan:", error);
     }
-
-    // 2. SMTP (BARU)
-    if(document.getElementById('mailHost')) document.getElementById('mailHost').value = settings.mail_host || '';
-    if(document.getElementById('mailPort')) document.getElementById('mailPort').value = settings.mail_port || '';
-    if(document.getElementById('mailUsername')) document.getElementById('mailUsername').value = settings.mail_username || '';
-    if(document.getElementById('mailPassword')) document.getElementById('mailPassword').value = settings.mail_password || ''; // Hati-hati menampilkan password
-    if(document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
-    if(document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
-    if(document.getElementById('waToken')) document.getElementById('waToken').value = settings.wa_token || '';
-      if(document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
-
-  } catch (error) {
-    console.error("Gagal memuat pengaturan:", error);
   }
-}
 
-// --- FUNGSI BARU: Buka Modal Detail dengan Hitungan Komisi ---
-async openWdDetails(id) {
-  const modal = document.getElementById('modalWdDetails');
-  const list = document.getElementById('wdDetailsList');
-  const totalEl = document.getElementById('wdDetailsTotal');
-  
-  list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Memuat data dan menghitung komisi...</td></tr>';
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  // --- FUNGSI BARU: Buka Modal Detail dengan Hitungan Komisi ---
+  async openWdDetails(id) {
+    const modal = document.getElementById('modalWdDetails');
+    const list = document.getElementById('wdDetailsList');
+    const totalEl = document.getElementById('wdDetailsTotal');
 
-  try {
+    list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Memuat data dan menghitung komisi...</td></tr>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    try {
       // 1. Ambil Data Transaksi DAN Data Setting (Untuk tahu Rate Komisi) secara paralel
       const [transactions, settings] = await Promise.all([
-          fetchApi(`/admin/withdrawals/${id}/details`),
-          fetchApi('/admin/settings')
+        fetchApi(`/admin/withdrawals/${id}/details`),
+        fetchApi('/admin/settings')
       ]);
-      
+
       if (transactions.length === 0) {
-          list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Data tidak ditemukan.</td></tr>';
-          totalEl.textContent = 'Rp0';
-          return;
+        list.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Data tidak ditemukan.</td></tr>';
+        totalEl.textContent = 'Rp0';
+        return;
       }
 
       // Ambil rate komisi (default 0.2 atau 20% jika error)
-      const rate = parseFloat(settings.commission_rate) || 0.2; 
-      
+      const rate = parseFloat(settings.commission_rate) || 0.2;
+
       let totalNet = 0;
 
       list.innerHTML = transactions.map(t => {
-          const amount = t.amount;
-          let netAmount = 0;
-          let rowClass = '';
-          let netClass = '';
-          let calculationInfo = '';
+        const amount = t.amount;
+        let netAmount = 0;
+        let rowClass = '';
+        let netClass = '';
+        let calculationInfo = '';
 
-          // --- LOGIKA HITUNG NET ---
-          if (t.method === 'CashDriver') {
-              // Jika CashDriver: Driver BERHUTANG komisi ke admin
-              // Rumus: -(Amount * Rate)
-              // Contoh: 100.000 * 20% = -20.000
-              const debt = amount * rate;
-              netAmount = -debt;
-              
-              rowClass = 'bg-red-50/50';
-              netClass = 'text-red-600 font-bold';
-              calculationInfo = `<div class="text-[10px] text-red-400">Potongan Komisi ${(rate*100)}%</div>`;
-          } else {
-              // Jika QRIS/CashCSO: Driver MENERIMA sisa setelah komisi
-              // Rumus: Amount * (1 - Rate)
-              // Contoh: 100.000 * (1 - 0.2) = 80.000
-              netAmount = amount * (1 - rate);
-              
-              rowClass = '';
-              netClass = 'text-emerald-600 font-bold';
-              calculationInfo = `<div class="text-[10px] text-slate-400">Pendapatan Bersih</div>`;
-          }
+        // --- LOGIKA HITUNG NET ---
+        if (t.method === 'CashDriver') {
+          // Jika CashDriver: Driver BERHUTANG komisi ke admin
+          // Rumus: -(Amount * Rate)
+          // Contoh: 100.000 * 20% = -20.000
+          const debt = amount * rate;
+          netAmount = -debt;
 
-          // Akumulasi Total Akhir
-          totalNet += netAmount;
+          rowClass = 'bg-red-50/50';
+          netClass = 'text-red-600 font-bold';
+          calculationInfo = `<div class="text-[10px] text-red-400">Potongan Komisi ${(rate * 100)}%</div>`;
+        } else {
+          // Jika QRIS/CashCSO: Driver MENERIMA sisa setelah komisi
+          // Rumus: Amount * (1 - Rate)
+          // Contoh: 100.000 * (1 - 0.2) = 80.000
+          netAmount = amount * (1 - rate);
 
-          return `
+          rowClass = '';
+          netClass = 'text-emerald-600 font-bold';
+          calculationInfo = `<div class="text-[10px] text-slate-400">Pendapatan Bersih</div>`;
+        }
+
+        // Akumulasi Total Akhir
+        totalNet += netAmount;
+
+        return `
           <tr class="border-b border-slate-50 ${rowClass}">
               <td class="px-4 py-3 text-xs text-slate-500">${new Date(t.created_at).toLocaleString('id-ID')}</td>
               <td class="px-4 py-3 text-xs font-medium text-slate-700">
@@ -963,7 +962,7 @@ async openWdDetails(id) {
               </td>
               <td class="px-4 py-3 text-xs">
                   <span class="px-2 py-1 rounded-full border ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'} text-[10px] font-bold">
-                    ${t.method}
+                    ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
                   </span>
               </td>
               <td class="px-4 py-3 text-xs font-mono text-right text-slate-500">
@@ -981,33 +980,33 @@ async openWdDetails(id) {
       // Tampilkan Total Bersih (Harus sama dengan jumlah yang diajukan di Withdrawal)
       totalEl.textContent = Utils.formatCurrency(totalNet);
 
-  } catch (error) {
+    } catch (error) {
       console.error(error);
       list.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Gagal memuat detail.</td></tr>';
+    }
   }
-}
 
-// ----- Queue Management -----
-  
-async renderQueue() {
-  const tbody = document.getElementById('queueTableList');
-  if (!tbody) return;
+  // ----- Queue Management -----
 
-  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>';
+  async renderQueue() {
+    const tbody = document.getElementById('queueTableList');
+    if (!tbody) return;
 
-  try {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>';
+
+    try {
       const queue = await fetchApi('/admin/queue');
 
       if (queue.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">Antrian Kosong.</td></tr>';
-          return;
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400">Antrian Kosong.</td></tr>';
+        return;
       }
 
       tbody.innerHTML = queue.map((q, index) => {
-          const isFirst = index === 0;
-          const isLast = index === queue.length - 1;
+        const isFirst = index === 0;
+        const isLast = index === queue.length - 1;
 
-          return `
+        return `
           <tr class="hover:bg-slate-50 transition-colors group">
               <td class="py-3 px-4 font-bold text-slate-700">#${q.real_position}</td>
               <td class="py-3 px-4 font-medium text-slate-800">${q.name}</td>
@@ -1019,7 +1018,7 @@ async renderQueue() {
                       </button>
                   </div>
               </td>
-              <td class="py-3 px-4 text-xs text-slate-500">${new Date(q.joined_at).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</td>
+              <td class="py-3 px-4 text-xs text-slate-500">${new Date(q.joined_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
               <td class="py-3 px-4 text-center">
                   <div class="flex justify-center gap-1">
                       <button onclick="app.moveQueue(${q.user_id}, 'up')" class="p-1 rounded hover:bg-blue-100 text-blue-600 disabled:opacity-30" ${isFirst ? 'disabled' : ''}>
@@ -1039,75 +1038,75 @@ async renderQueue() {
           `;
       }).join('');
 
-  } catch (error) {
+    } catch (error) {
       console.error(error);
       tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">Gagal memuat antrian.</td></tr>';
+    }
   }
-}
 
-// Aksi: Naik/Turun Antrian
-async moveQueue(userId, direction) {
-  try {
+  // Aksi: Naik/Turun Antrian
+  async moveQueue(userId, direction) {
+    try {
       await fetchApi('/admin/queue/move', {
-          method: 'POST',
-          body: JSON.stringify({ user_id: userId, direction: direction })
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, direction: direction })
       });
       this.renderQueue(); // Refresh tabel
-  } catch (error) {
+    } catch (error) {
       alert('Gagal mengubah urutan.');
+    }
   }
-}
 
-// Aksi: Kick Driver
-async kickQueue(userId, name) {
-  if (!confirm(`Keluarkan ${name} dari antrian? Status driver akan menjadi Offline.`)) return;
-  
-  try {
+  // Aksi: Kick Driver
+  async kickQueue(userId, name) {
+    if (!confirm(`Keluarkan ${name} dari antrian? Status driver akan menjadi Offline.`)) return;
+
+    try {
       await fetchApi(`/admin/queue/${userId}`, { method: 'DELETE' });
       this.renderQueue(); // Refresh tabel
       // Update juga dashboard stats jika sedang tampil (opsional)
-  } catch (error) {
+    } catch (error) {
       alert('Gagal mengeluarkan driver.');
+    }
   }
-}
 
-// Aksi: Edit Line Number
-async editLineNumber(userId, currentVal) {
-  const newVal = prompt("Masukkan Line Number Baru:", currentVal);
-  if (newVal === null || newVal === currentVal) return;
+  // Aksi: Edit Line Number
+  async editLineNumber(userId, currentVal) {
+    const newVal = prompt("Masukkan Line Number Baru:", currentVal);
+    if (newVal === null || newVal === currentVal) return;
 
-  try {
+    try {
       await fetchApi('/admin/queue/line-number', {
-          method: 'POST',
-          body: JSON.stringify({ user_id: userId, line_number: newVal })
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId, line_number: newVal })
       });
       this.renderQueue(); // Refresh
-  } catch (error) {
+    } catch (error) {
       alert('Gagal update line number.');
+    }
   }
-}
 
-// Helper function openUserModal perlu disesuaikan sedikit untuk field car/plate
+  // Helper function openUserModal perlu disesuaikan sedikit untuk field car/plate
   openUserModal(data) {
-  const isEditing = data !== null;
-  document.getElementById('userModal').classList.remove('hidden');
-  document.getElementById('userModalTitle').textContent = isEditing ? 'Edit Pengguna' : 'Tambah Pengguna';
-  
-  document.getElementById('userId').value = isEditing ? data.id : '';
-  document.getElementById('userName').value = isEditing ? data.name : '';
-  document.getElementById('userRole').value = isEditing ? data.role : 'cso';
-  document.getElementById('userUsername').value = isEditing ? data.username : '';
-  
-  document.getElementById('userPassword').value = '';
-  document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+    const isEditing = data !== null;
+    document.getElementById('userModal').classList.remove('hidden');
+    document.getElementById('userModalTitle').textContent = isEditing ? 'Edit Pengguna' : 'Tambah Pengguna';
 
-  // Sesuaikan nama properti object data dari backend
-  document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
-  document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+    document.getElementById('userId').value = isEditing ? data.id : '';
+    document.getElementById('userName').value = isEditing ? data.name : '';
+    document.getElementById('userRole').value = isEditing ? data.role : 'cso';
+    document.getElementById('userUsername').value = isEditing ? data.username : '';
 
-  const role = document.getElementById('userRole').value;
-  document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
-}
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+
+    // Sesuaikan nama properti object data dari backend
+    document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
+    document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+
+    const role = document.getElementById('userRole').value;
+    document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
+  }
 
 
 }
