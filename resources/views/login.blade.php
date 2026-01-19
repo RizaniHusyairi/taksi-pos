@@ -39,14 +39,14 @@
       @csrf
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Username</label>
-        <input id="username" type="text" required name="username" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500">
+        <input id="username" type="text" required name="username" class="w-full rounded-lg border border-slate-300 focus:border-primary-500 focus:ring-primary-500">
         @error('username')
               <span class="text-red-600 text-sm">{{ $message }}</span>
           @enderror
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
-        <input id="password" type="password" required name="password" class="w-full rounded-lg border-slate-300 focus:border-primary-500 focus:ring-primary-500">
+        <input id="password" type="password" required name="password" class="w-full rounded-lg border border-slate-300 focus:border-primary-500 focus:ring-primary-500">
       </div>
       <button class="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 rounded-lg">Masuk</button>
     </form>

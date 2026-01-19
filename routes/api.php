@@ -38,6 +38,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/users', [ApiController::class, 'adminGetUsers']);
         Route::post('/users', [ApiController::class, 'adminStoreUser']);
         Route::put('/users/{user}', [ApiController::class, 'adminUpdateUser']);
+    Route::delete('/users/{user}', [ApiController::class, 'adminDestroyUser']);
         Route::post('/users/{user}/toggle-status', [ApiController::class, 'adminToggleUserStatus']); // Untuk aktivasi/deaktivasi
         Route::get('/users/role/{role}', [ApiController::class, 'adminGetUsersByRole']);
 

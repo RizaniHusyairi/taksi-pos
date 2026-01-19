@@ -97,10 +97,59 @@ export class AdminApp {
   init() {
     window.addEventListener('hashchange', () => this.route());
     this.route();
-    // Panggil di sini agar dropdown terisi saat halaman dimuat
     this.populateFilterDropdowns();
     this.initCommon();
+    this.initTheme(); // Initialize Theme
   }
+
+  // --- Theme Logic ---
+  initTheme() {
+    const themeBtn = document.getElementById('themeToggle');
+    const iconSun = document.getElementById('iconSun');
+    const iconMoon = document.getElementById('iconMoon');
+    const html = document.documentElement;
+
+    // Helper: Update Icons based on current state
+    const updateIcons = () => {
+      if (html.classList.contains('dark')) {
+        iconSun.classList.remove('hidden');
+        iconMoon.classList.add('hidden');
+      } else {
+        iconSun.classList.add('hidden');
+        iconMoon.classList.remove('hidden');
+      }
+    };
+
+    // 1. Cek Preference Awal
+    const isDark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    // Apply Class
+    if (isDark) {
+      html.classList.add('dark');
+    } else {
+      html.classList.remove('dark');
+    }
+    updateIcons();
+
+    // 2. Toggle Listener
+    console.log('Init Theme: ThemeBtn found?', !!themeBtn);
+    themeBtn?.addEventListener('click', () => {
+      console.log('Theme Toggle Clicked');
+      // Toggle Class
+      html.classList.toggle('dark');
+
+      // Simpan Preference & Update Icon
+      if (html.classList.contains('dark')) {
+        console.log('Switched to Dark');
+        localStorage.theme = 'dark';
+      } else {
+        console.log('Switched to Light');
+        localStorage.theme = 'light';
+      }
+      updateIcons();
+    });
+  }
+
   initCommon() {
 
     // Settings form
@@ -397,8 +446,8 @@ export class AdminApp {
     });
     document.querySelectorAll('.nav-link').forEach(a => {
       const target = a.getAttribute('href').replace('#', '');
-      if (target === hash) a.classList.add('bg-primary-50', 'text-primary-700');
-      else a.classList.remove('bg-primary-50', 'text-primary-700');
+      if (target === hash) a.classList.add('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
+      else a.classList.remove('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
     });
   }
   titleOf(v) {
@@ -553,23 +602,28 @@ export class AdminApp {
           ? `<div class="text-xs text-slate-500">${u.driver_profile?.car_model || '-'} • ${u.driver_profile?.plate_number || '-'}</div>`
           : '';
 
-        const statusBadge = u.active
-          ? '<span class="text-success font-medium">Aktif</span>'
-          : '<span class="text-slate-400">Nonaktif</span>';
+        // EDIT ICON (Pencil)
+        const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>`;
 
-        return `<tr class="border-t">
-          <td class="py-2">
-            <div class="font-medium">${u.name}</div>
-            ${carInfo}
+        // DELETE ICON (Trash)
+        const deleteIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
+
+        return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          <td class="py-3 px-3">
+            <div class="font-medium text-slate-900 dark:text-slate-100">${u.name}</div>
+            ${carInfo.replace('text-slate-500', 'text-slate-500 dark:text-slate-400')}
           </td>
-          <td class="py-2 capitalize">${u.role}</td>
-          <td class="py-2">${u.username}</td>
-          <td class="py-2">${statusBadge}</td>
-          <td class="py-2">
-            <button class="text-primary-700 text-sm" data-edit-u='${JSON.stringify(u)}'>Edit</button>
-            <button class="text-sm ml-2 ${u.active ? 'text-red-600' : 'text-green-600'}" data-toggle-u="${u.id}">
-              ${u.active ? 'Nonaktifkan' : 'Aktifkan'}
-            </button>
+          <td class="py-3 px-3 capitalize text-slate-600 dark:text-slate-300">${u.role}</td>
+          <td class="py-3 px-3 text-slate-600 dark:text-slate-300">${u.username}</td>
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-2">
+                <button class="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-600 rounded-lg transition-colors" title="Edit" data-edit-u='${JSON.stringify(u)}'>
+                    ${editIcon}
+                </button>
+                <button class="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-slate-600 rounded-lg transition-colors" title="Hapus" data-del-u="${u.id}" data-name="${u.name}">
+                    ${deleteIcon}
+                </button>
+            </div>
           </td>
         </tr>`;
       }).join('');
@@ -578,27 +632,79 @@ export class AdminApp {
       tbody.querySelectorAll('[data-edit-u]').forEach(btn => {
         btn.addEventListener('click', () => {
           const userData = JSON.parse(btn.dataset.editU);
-          // Panggil fungsi untuk membuka dan mengisi modal
           this.openUserModal(userData);
         });
       });
 
-      // --- Event Listener untuk Tombol Toggle Status (SUDAH DIUBAH) ---
-      tbody.querySelectorAll('[data-toggle-u]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const userId = btn.dataset.toggleU;
-          if (confirm('Anda yakin ingin mengubah status pengguna ini?')) {
-            try {
-              // 3. GANTI DB.setUserActive DENGAN PANGGILAN API
-              await fetchApi(`/admin/users/${userId}/toggle-status`, {
-                method: 'POST',
-              });
-              alert('Status pengguna berhasil diubah.');
-              await this.renderUsers(); // Refresh tabel
-            } catch (error) {
-              console.error('Gagal mengubah status pengguna:', error);
-              alert('Gagal mengubah status pengguna.');
-            }
+      // --- Event Listener untuk Tombol Delete (MODAL CUSTOM) ---
+      let deleteTargetId = null;
+      let deleteTargetName = null;
+
+      const modalConfirmDelete = document.getElementById('modalConfirmDelete');
+      const btnCancelDelete = document.getElementById('btnCancelDelete');
+      const btnConfirmDelete = document.getElementById('btnConfirmDelete');
+      const msgConfirmDelete = document.getElementById('msgConfirmDelete');
+
+      // Helper untuk menutup modal
+      const closeDeleteModal = () => {
+        modalConfirmDelete.classList.add('hidden');
+        modalConfirmDelete.classList.remove('flex');
+        deleteTargetId = null;
+      };
+
+      // Listener tombol 'Batal' di modal (Hanya pasang sekali, idealnya di initCommon, tapi di sini oke jika dicek duplikasi)
+      // Agar aman dari duplikasi listener jika renderUsers dipanggil berkali-kali, 
+      // kita gunakan 'onclick' property atau pastikan listener di-remove. 
+      // Cara paling aman dlm konteks ini: pasang ulang dengan replace elemen atau cek if listener exists (susah di JS native).
+      // KITA PINDAHKAN LISTENER MODAL KE LUAR LOOP renderUsers agar tidak double!
+
+      // HAPUS LISTENER LAMA (JIKA ADA) DENGAN CARA CLONE ATAU ASSIGN ONCLICK LANGSUNG
+      if (btnCancelDelete) btnCancelDelete.onclick = closeDeleteModal;
+
+      if (btnConfirmDelete) btnConfirmDelete.onclick = async () => {
+        if (!deleteTargetId) return;
+
+        // Efek Loading
+        btnConfirmDelete.textContent = 'Menghapus...';
+        btnConfirmDelete.disabled = true;
+
+        try {
+          // PANGGIL API DELETE
+          await fetchApi(`/admin/users/${deleteTargetId}`, {
+            method: 'DELETE',
+          });
+
+          // Tutup Modal & Refresh
+          closeDeleteModal();
+          alert(`Pengguna "${deleteTargetName}" berhasil dihapus.`);
+          await this.renderUsers();
+          await this.populateFilterDropdowns();
+
+        } catch (error) {
+          console.error('Gagal menghapus pengguna:', error);
+          alert(error.message || 'Gagal menghapus pengguna.');
+          closeDeleteModal();
+        } finally {
+          btnConfirmDelete.textContent = 'Ya, Hapus';
+          btnConfirmDelete.disabled = false;
+        }
+      };
+
+
+      tbody.querySelectorAll('[data-del-u]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          deleteTargetId = btn.dataset.delU;
+          deleteTargetName = btn.dataset.name;
+
+          // Set Pesan
+          if (msgConfirmDelete) {
+            msgConfirmDelete.innerHTML = `Anda yakin ingin menghapus pengguna <span class="font-bold text-slate-800">${deleteTargetName}</span>?<br>Tindakan ini permanen.`;
+          }
+
+          // Buka Modal
+          if (modalConfirmDelete) {
+            modalConfirmDelete.classList.remove('hidden');
+            modalConfirmDelete.classList.add('flex');
           }
         });
       });
@@ -674,7 +780,7 @@ export class AdminApp {
         const cso = booking.cso || {};
         const driver = booking.driver || {};
 
-        const csoName = cso?.name || '<span class="text-slate-400 italic">Self/Driver</span>';
+        const csoName = cso?.name || '<span class="text-slate-400 italic dark:text-slate-500">Self/Driver</span>';
         const driverName = driver?.name || '-';
 
         // --- LOGIKA BARU PENENTUAN TUJUAN ---
@@ -724,17 +830,17 @@ export class AdminApp {
         });
         // ------------------------------------
 
-        return `<tr class="border-t hover:bg-slate-50 transition-colors">
-          <td class="py-3 px-2 text-slate-600 text-xs">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-          <td class="py-3 px-2 font-medium text-xs">${csoName}</td>
-          <td class="py-3 px-2 text-xs">${driverName}</td>
-          <td class="py-3 px-2 text-slate-700 text-xs">${destName} ${destBadge}</td>
+        return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+          <td class="py-3 px-2 text-slate-600 dark:text-slate-300 text-xs">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+          <td class="py-3 px-2 font-medium text-xs dark:text-slate-200">${csoName}</td>
+          <td class="py-3 px-2 text-xs dark:text-slate-200">${driverName}</td>
+          <td class="py-3 px-2 text-slate-700 dark:text-slate-200 text-xs">${destName} ${destBadge}</td>
           <td class="py-3 px-2">
             <span class="px-2 py-1 rounded text-[10px] font-medium ${t.method === 'CashDriver' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800'}">
                 ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
             </span>
           </td>
-          <td class="py-3 px-2">${payoutBadge}</td> <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700 text-xs">
+          <td class="py-3 px-2">${payoutBadge}</td> <td class="py-3 px-2 font-mono text-right pr-4 font-bold text-slate-700 dark:text-slate-200 text-xs">
             ${formattedAmount}
           </td>
         </tr>`;
@@ -766,8 +872,8 @@ export class AdminApp {
 
         // --- BAGIAN INI YANG HILANG SEBELUMNYA (Definisi bankInfo) ---
         const bankInfo = w.driver && w.driver.driver_profile
-          ? `<div class="text-xs font-bold text-slate-700">${w.driver.driver_profile.bank_name || '-'}</div>
-               <div class="text-xs font-mono text-slate-500">${w.driver.driver_profile.account_number || '-'}</div>`
+          ? `<div class="text-xs font-bold text-slate-700 dark:text-slate-200">${w.driver.driver_profile.bank_name || '-'}</div>
+               <div class="text-xs font-mono text-slate-500 dark:text-slate-400">${w.driver.driver_profile.account_number || '-'}</div>`
           : '<span class="text-xs text-red-500 italic">Belum set rekening</span>';
         // ---
         console.log("driver:", w);
@@ -775,7 +881,7 @@ export class AdminApp {
         const currentStatus = w.status.toLowerCase();
         let actionButtons = '';
         // Tambahkan tombol DETAIL di semua status
-        const btnDetail = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded mr-1" onclick="window.openWdDetails(${w.id})">Detail</button>`;
+        const btnDetail = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500 px-2 py-1 rounded mr-1" onclick="window.openWdDetails(${w.id})">Detail</button>`;
 
         if (w.status === 'Pending') {
           actionButtons = `
@@ -787,19 +893,19 @@ export class AdminApp {
              `;
         } else if (w.status === 'Approved') {
           let proofBtn = w.proof_image
-            ? `<button class="text-xs text-blue-600 border border-blue-200 px-2 py-1 rounded hover:bg-blue-50" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
+            ? `<button class="text-xs text-blue-600 border border-blue-200 dark:text-blue-400 dark:border-blue-800 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-slate-700" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
             : '';
           actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn}</div>`;
         } else {
           actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-red-500 italic ml-1">Ditolak</span></div>`;
         }
-        return `<tr class="border-t hover:bg-slate-50">
-              <td class="py-2 align-top">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
+        return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700">
+              <td class="py-2 align-top dark:text-slate-300">${new Date(w.requested_at).toLocaleString('id-ID')}</td>
               <td class="py-2 align-top">
-                  <div class="font-medium">${w.driver?.name || 'Supir Dihapus'}</div>
+                  <div class="font-medium dark:text-slate-200">${w.driver?.name || 'Supir Dihapus'}</div>
                   ${bankInfo}
               </td>
-              <td class="py-2 align-top font-mono">${parseInt(w.amount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}</td>
+              <td class="py-2 align-top font-mono dark:text-slate-200">${parseInt(w.amount).toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}</td>
               <td class="py-2 align-top">${this.wdBadge(w.status)}</td>
               <td class="py-2 align-top">${actionButtons}</td>
           </tr>`;
@@ -1033,9 +1139,9 @@ export class AdminApp {
         const routeName = t.booking?.zone_to?.name || t.booking?.manual_destination || 'Manual';
 
         return `
-          <tr class="border-b border-slate-50 ${rowClass}">
-              <td class="px-4 py-3 text-xs text-slate-500">${new Date(t.created_at).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3 text-xs font-medium text-slate-700">
+          <tr class="border-b border-slate-50 dark:border-slate-700 ${rowClass}">
+              <td class="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-xs font-medium text-slate-700 dark:text-slate-300">
                   ${routeName}
               </td>
               <td class="px-4 py-3 text-xs">
@@ -1043,7 +1149,7 @@ export class AdminApp {
                     ${t.method === 'CashDriver' ? 'Tunai (Supir)' : (t.method === 'CashCSO' ? 'Tunai (Kasir)' : t.method)}
                   </span>
               </td>
-              <td class="px-4 py-3 text-xs font-mono text-right text-slate-500">
+              <td class="px-4 py-3 text-xs font-mono text-right text-slate-500 dark:text-slate-400">
                   ${Utils.formatCurrency(amount)}
               </td>
               <td class="px-4 py-3 text-right">
@@ -1084,35 +1190,36 @@ export class AdminApp {
         const isFirst = index === 0;
         const isLast = index === queue.length - 1;
 
+        
         return `
-          <tr class="hover:bg-slate-50 transition-colors group">
-              <td class="py-3 px-4 font-bold text-slate-700">#${q.real_position}</td>
-              <td class="py-3 px-4 font-medium text-slate-800">${q.name}</td>
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group" >
+              <td class="py-3 px-4 font-bold text-slate-700 dark:text-slate-200">#${q.real_position}</td>
+              <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-100">${q.name}</td>
               <td class="py-3 px-4">
                   <div class="flex items-center gap-2">
-                      <span class="font-mono bg-slate-100 px-2 py-1 rounded text-xs">L${q.line_number}</span>
-                      <button onclick="app.editLineNumber(${q.user_id}, '${q.line_number}')" class="text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span class="font-mono bg-slate-100 dark:bg-slate-600 dark:text-slate-200 px-2 py-1 rounded text-xs">L${q.line_number}</span>
+                      <button onclick="app.editLineNumber(${q.user_id}, '${q.line_number}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                       </button>
                   </div>
               </td>
-              <td class="py-3 px-4 text-xs text-slate-500">${new Date(q.joined_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
+              <td class="py-3 px-4 text-xs text-slate-500 dark:text-slate-400">${new Date(q.joined_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
               <td class="py-3 px-4 text-center">
                   <div class="flex justify-center gap-1">
-                      <button onclick="app.moveQueue(${q.user_id}, 'up')" class="p-1 rounded hover:bg-blue-100 text-blue-600 disabled:opacity-30" ${isFirst ? 'disabled' : ''}>
+                      <button onclick="app.moveQueue(${q.user_id}, 'up')" class="p-1 rounded hover:bg-blue-100 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 disabled:opacity-30" ${isFirst ? 'disabled' : ''}>
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
                       </button>
-                      <button onclick="app.moveQueue(${q.user_id}, 'down')" class="p-1 rounded hover:bg-blue-100 text-blue-600 disabled:opacity-30" ${isLast ? 'disabled' : ''}>
+                      <button onclick="app.moveQueue(${q.user_id}, 'down')" class="p-1 rounded hover:bg-blue-100 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 disabled:opacity-30" ${isLast ? 'disabled' : ''}>
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                       </button>
                   </div>
               </td>
               <td class="py-3 px-4 text-center">
-                  <button onclick="app.kickQueue(${q.user_id}, '${q.name}')" class="text-red-600 hover:bg-red-50 px-3 py-1 rounded text-xs font-bold border border-red-200">
+                  <button onclick="app.kickQueue(${q.user_id}, '${q.name}')" class="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-600 px-3 py-1 rounded text-xs font-bold border border-red-200 dark:border-red-900">
                       Kick
                   </button>
               </td>
-          </tr>
+          </tr >
           `;
       }).join('');
 
@@ -1137,10 +1244,10 @@ export class AdminApp {
 
   // Aksi: Kick Driver
   async kickQueue(userId, name) {
-    if (!confirm(`Keluarkan ${name} dari antrian? Status driver akan menjadi Offline.`)) return;
+    if (!confirm(`Keluarkan ${ name } dari antrian ? Status driver akan menjadi Offline.`)) return;
 
     try {
-      await fetchApi(`/admin/queue/${userId}`, { method: 'DELETE' });
+      await fetchApi(`/ admin / queue / ${ userId } `, { method: 'DELETE' });
       this.renderQueue(); // Refresh tabel
       // Update juga dashboard stats jika sedang tampil (opsional)
     } catch (error) {

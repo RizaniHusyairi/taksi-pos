@@ -139,10 +139,27 @@ class ApiController extends Controller
         ]);
 
         if ($validated['role'] === 'driver') {
+            // 1. Auto-generate Line Number
+            $maxLine = DriverProfile::max('line_number') ?? 0;
+            $newLine = $maxLine + 1;
+
             $user->driverProfile()->create([
-                'car' => $validated['car_model'],
-                'plate' => $validated['plate_number'],
+                'car_model' => $validated['car_model'], // Corrected key from 'car' to 'car_model' based on DB
+                'plate_number' => $validated['plate_number'], // Corrected key from 'plate' to 'plate_number' based on DB
+                'line_number' => $newLine
             ]);
+
+            // 2. Auto-add to Queue
+            // Cek jika belum ada di queue (meski ini baru create, safe check)
+            if (!DriverQueue::where('user_id', $user->id)->exists()) {
+                $maxSort = DriverQueue::max('sort_order') ?? 0;
+                DriverQueue::create([
+                    'user_id' => $user->id,
+                    'sort_order' => $maxSort + 1,
+                    'latitude' => 0,
+                    'longitude' => 0
+                ]);
+            }
         }
 
         return response()->json($user->load('driverProfile'), 201);
@@ -180,9 +197,21 @@ class ApiController extends Controller
         return response()->json($user->load('driverProfile'));
     }
 
-    public function adminToggleUserActive(User $user) {
-        $user->update(['active' => !$user->active]);
-        return response()->json(['message' => 'User status updated', 'active' => $user->active]);
+
+    public function adminDestroyUser(User $user) {
+        // Prevent deleting self
+        if ($user->id === Auth::id()) {
+            return response()->json(['message' => 'Cannot delete yourself'], 403);
+        }
+
+        DB::transaction(function() use ($user) {
+            // Delete related profiles
+            $user->driverProfile()->delete();
+            // Delete the user
+            $user->delete();
+        });
+
+        return response()->json(['message' => 'User deleted successfully']);
     }
 
 
