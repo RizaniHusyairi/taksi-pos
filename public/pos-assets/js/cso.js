@@ -142,7 +142,7 @@ class CsoApp {
     // --- HELPER BARU: Open Zoom Modal ---
     openZoomModal(imageUrl) {
         if (!imageUrl) return;
-        
+
         this.qrisZoomImage.src = imageUrl;
         this.qrisZoomModal.classList.remove('hidden');
         this.qrisZoomModal.classList.add('flex');
@@ -306,9 +306,12 @@ class CsoApp {
             }
 
             // --- RENDER HTML ---
+            let hasRejoinHeaderRendered = false;
+
             this.driversList.innerHTML = drivers.map((d, index) => {
                 const profile = d.driver_profile || {};
                 const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
+                const queueScore = profile.queue_score || 0; // Ambil nilai sort_order
 
                 // Hitung Nomor Urut Antrian (Index + 1)
                 const queueNumber = index + 1;
@@ -349,7 +352,25 @@ class CsoApp {
                     ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
                     : '';
 
+                // --- LOGIKA SEPARATOR REJOIN ---
+                let separatorHtml = '';
+                if (queueScore >= 1000 && !hasRejoinHeaderRendered) {
+                    hasRejoinHeaderRendered = true;
+                    separatorHtml = `
+                    <div class="relative py-4">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-slate-300 dark:border-slate-600 border-dashed"></div>
+                        </div>
+                        <div class="relative flex justify-center">
+                            <span class="bg-slate-100 dark:bg-slate-900 px-3 text-xs font-bold text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700 rounded-full">
+                                Antrian Rejoin
+                            </span>
+                        </div>
+                    </div>`;
+                }
+
                 return `
+            ${separatorHtml}
             <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
@@ -493,7 +514,7 @@ class CsoApp {
                 const lineDisplay = profile.line_number ? `<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded ml-1">#L${profile.line_number}</span>` : '';
 
                 // Tombol Lihat Bukti (Hanya jika QRIS & Ada Bukti)
-                
+
                 let btnProof = '';
                 if (tx.method === 'QRIS' && tx.payment_proof) {
                     const proofUrl = `/storage/${tx.payment_proof}`;
@@ -558,15 +579,15 @@ class CsoApp {
             // Re-bind listener tombol struk
             this.historyList.querySelectorAll('.btn-view-receipt').forEach(btn => {
                 btn.addEventListener('click', () => {
-                this.showReceipt(tx);
+                    this.showReceipt(tx);
                 });
             });
 
             // Re-bind listener tombol bukti
             this.historyList.querySelectorAll('.btn-view-proof').forEach(btn => {
                 btn.addEventListener('click', () => {
-                   const url = btn.dataset.proofUrl;
-                   this.openZoomModal(url);
+                    const url = btn.dataset.proofUrl;
+                    this.openZoomModal(url);
                 });
             });
 
