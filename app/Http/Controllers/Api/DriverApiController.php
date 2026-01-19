@@ -105,7 +105,7 @@ class DriverApiController extends Controller
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
 
             // Ganti 2.0 dengan 10000.0 untuk testing
-            if ($distance > config('taksi.driver_queue.max_radius_km')) { 
+            if ($distance > config('taksi.driver_queue.radius_km')) { 
                 return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
 
@@ -486,7 +486,7 @@ class DriverApiController extends Controller
         $airportLat = config('taksi.driver_queue.latitude');
         $airportLng = config('taksi.driver_queue.longitude');
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-        $radius = config('taksi.driver_queue.max_radius_km');
+        $radius = config('taksi.driver_queue.radius_km');
         $inArea = ($distance <= $radius);
         
         // 3. Logika Update Status

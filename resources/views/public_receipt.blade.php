@@ -21,7 +21,7 @@
     <div class="receipt">
         <div class="center mb">
             <img src="{{ asset('pos-assets/img/logo-apt.svg') }}" alt="Logo" class="logo-img">
-            <div class="bold" style="margin-top:5px;">KOPERASI ANG  KASA JAYA</div>
+            <div class="bold" style="margin-top:5px;">KOPERASI ANGKASA JAYA</div>
             <div style="font-size:10px;">Bandar Udara APT. Pranoto Samarinda</div>
         </div>
         <div class="divider"></div>
@@ -32,7 +32,7 @@
                 {{ $transaction->booking->driver->name ?? '-' }} 
                 {{-- LOGIKA TAMPILKAN LINE NUMBER --}}
                 @if(!empty($transaction->booking->driver->driverProfile->line_number))
-                    <span style="font-size: 11px; font-weight: normal; color: #555;">
+                    <span style="font-size: 12px; font-weight: normal; color: #555;">
                         (#L{{ $transaction->booking->driver->driverProfile->line_number }})
                     </span>
                 @endif

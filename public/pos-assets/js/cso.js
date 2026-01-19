@@ -132,7 +132,7 @@ class CsoApp {
 
 
         // State
-        this.currentUserQrisUrl = null;
+
         this.pendingCashMethod = null;
         this.zones = [];
         this.selectedDriverId = null;
@@ -156,7 +156,7 @@ class CsoApp {
         this.modal.addEventListener('click', (e) => { if (e.target === this.modal) this.closePayment(); });
 
         // Listener Upload QRIS
-        this.inpUploadQris?.addEventListener('change', (e) => this.handleQrisUpload(e));
+
         this.btnQRIS.addEventListener('click', () => {
             if (this.qrisBox.classList.contains('hidden')) {
                 this.showQrisBox(); // <-- Kita buat fungsi helper baru ini
@@ -377,7 +377,7 @@ class CsoApp {
             clickableCards.forEach(card => {
                 card.addEventListener('click', () => {
                     const id = card.dataset.driverId;
-
+                    console.log('Driver Card Clicked. ID:', id);
 
                     // Update State
                     this.selectedDriverId = id;
@@ -562,9 +562,13 @@ class CsoApp {
     }
 
     async processBooking() {
+        console.log('--- processBooking Triggered ---');
+        console.log('Current selectedDriverId:', this.selectedDriverId);
+        console.log('Current Zone Value:', this.toSel.value);
 
         // Cek Logika
         if (!this.selectedDriverId || !this.toSel.value) {
+            console.warn('Validation Failed: Driver or Zone missing');
 
             // Pesan error lebih spesifik
             let msg = 'Data belum lengkap:\n';
@@ -572,13 +576,20 @@ class CsoApp {
             if (!this.selectedDriverId) msg += '- Supir belum dipilih';
 
             alert(msg);
-            return;
+            console.log('Alert shown, returning now...');
+            return; // STOP EXECUTION
         }
 
+        console.log('Validation Passed. Proceeding to openPayment.');
 
         // 1. Simpan data pilihan ke memori sementara (Belum ke DB)
         const zoneId = this.toSel.value;
         const zoneObj = this.zones.find(z => z.id == zoneId);
+
+        if (!zoneObj) {
+            alert('Data zona tidak valid. Silakan refresh.');
+            return;
+        }
 
         this.selectedOrderData = {
             driver_id: this.selectedDriverId,
@@ -1059,7 +1070,7 @@ class CsoApp {
 
     async renderProfile() {
         try {
-            const user = await fetchApi('/cso/profile'); // Endpoint baru di backend
+            const user = await fetchApi('/cso/profile');
 
             // Update Display
             this.profileNameDisplay.textContent = user.name;
@@ -1068,21 +1079,6 @@ class CsoApp {
             // Isi Form Edit
             this.inpEditName.value = user.name;
             this.inpEditUsername.value = user.username;
-
-            // Render QRIS
-            if (user.qris_path) {
-                const url = `/storage/${user.qris_path}`;
-                this.profileQrisPreview.src = url;
-                this.profileQrisPreview.classList.remove('hidden');
-                this.profileQrisPlaceholder.classList.add('hidden');
-
-                // Simpan ke variable global class agar bisa dipakai di modal pembayaran
-                this.currentUserQrisUrl = url;
-            } else {
-                this.profileQrisPreview.classList.add('hidden');
-                this.profileQrisPlaceholder.classList.remove('hidden');
-                this.currentUserQrisUrl = null;
-            }
 
         } catch (error) {
             console.error('Gagal memuat profil:', error);
@@ -1160,72 +1156,22 @@ class CsoApp {
         }
     }
 
-    async handleQrisUpload(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        // Validasi ukuran (client side)
-        if (file.size > 2 * 1024 * 1024) {
-            Utils.showToast('Ukuran file maksimal 2MB', 'error');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('qris_image', file);
-
-        // UI Loading
-        this.qrisLoading.classList.remove('hidden');
-        this.qrisLoading.classList.add('flex');
-
-        try {
-            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            const res = await fetch('/api/cso/profile/qris', {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
-                body: formData
-            });
-
-            if (!res.ok) throw new Error('Gagal upload gambar');
-
-            const data = await res.json();
-
-            Utils.showToast('QRIS Berhasil Diupload!', 'success');
-
-            // Refresh Profile untuk menampilkan gambar baru
-            this.renderProfile();
-
-        } catch (error) {
-            console.error(error);
-            Utils.showToast('Terjadi kesalahan saat upload.', 'error');
-        } finally {
-            this.qrisLoading.classList.add('hidden');
-            this.qrisLoading.classList.remove('flex');
-            this.inpUploadQris.value = ''; // Reset input
-        }
-    }
-
     showQrisBox() {
         this.qrisBox.classList.remove('hidden');
         this.qrisBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        // Cek apakah user punya QRIS
-        if (this.currentUserQrisUrl) {
-            // Set gambar ke QRIS milik CSO
-            this.paymentQrisImage.src = this.currentUserQrisUrl;
+        // Cek Global QRIS URL
+        if (window.companyQrisUrl) {
+            this.paymentQrisImage.src = window.companyQrisUrl;
             this.paymentQrisImage.classList.remove('opacity-50', 'grayscale');
             this.paymentQrisError.classList.add('hidden');
-
-            // Aktifkan input bukti bayar
             this.proofInput.disabled = false;
         } else {
-            // Jika belum punya QRIS, tampilkan placeholder dan pesan error
-            this.paymentQrisImage.src = '/pos-assets/img/qris-placeholder.svg'; // Gambar default
+            this.paymentQrisImage.src = '/pos-assets/img/qris-placeholder.svg';
             this.paymentQrisImage.classList.add('opacity-50', 'grayscale');
             this.paymentQrisError.classList.remove('hidden');
-
-            // Optional: Matikan input bukti bayar agar tidak bisa lanjut
-            // this.proofInput.disabled = true; 
-            Utils.showToast('Anda belum mengupload QRIS di menu Profil!', 'error');
+            this.paymentQrisError.textContent = '⚠️ QRIS belum diatur oleh Admin';
+            Utils.showToast('Global QRIS belum diatur oleh Admin.', 'error');
         }
     }
 
@@ -1233,8 +1179,6 @@ class CsoApp {
 
 }
 
-const app = new CsoApp(); // 1. Buat instance aplikasi
-app.init();               // 2. Jalankan aplikasi
-window.csoApp = app;      // 3. Simpan ke Global Window agar bisa dipanggil onclick HTML
+
 
 export { CsoApp };

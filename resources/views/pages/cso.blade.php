@@ -185,33 +185,6 @@
         </div>
 
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
-            <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">QRIS Pembayaran</h3>
-            
-            <div class="text-center">
-                <div class="w-48 h-48 mx-auto bg-slate-100 dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl flex items-center justify-center overflow-hidden mb-4 relative group">
-                    <img id="profileQrisPreview" src="" class="w-full h-full object-contain hidden">
-                    <div id="profileQrisPlaceholder" class="text-slate-400 text-xs">
-                        Belum ada QRIS
-                    </div>
-                    
-                    <div id="qrisLoading" class="absolute inset-0 bg-black/50 hidden items-center justify-center text-white text-xs font-bold">
-                        Mengupload...
-                    </div>
-                </div>
-
-                <div class="flex justify-center">
-                    <label for="inpUploadQris" class="bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-colors flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        Upload QRIS Baru
-                    </label>
-                    <input type="file" id="inpUploadQris" accept="image/*" class="hidden">
-                </div>
-                <p class="text-[10px] text-slate-400 mt-2">Format: JPG/PNG. Max: 2MB. QRIS ini akan muncul saat penumpang memilih pembayaran QRIS.</p>
-            </div>
-        </div>
-
-      
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
             <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 border-slate-100 dark:border-slate-700">Ganti Password</h3>
             <form id="formChangePassword" class="space-y-4">
                 <div>
@@ -413,10 +386,15 @@
     </div>
   </div>
 
+  <script>
+    window.companyQrisUrl = "{{ $companyQrisUrl ?? '' }}";
+  </script>
   <script type="module">
     import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
     
-
+    // Inisialisasi App
+    const app = new CsoApp();
+    app.init();
 
 
 

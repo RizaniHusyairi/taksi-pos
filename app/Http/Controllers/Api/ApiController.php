@@ -413,21 +413,26 @@ class ApiController extends Controller
     }
     public function adminGetSettings()
     {
-        // Mengambil semua settings dan mengubahnya menjadi format key => value
-        // Contoh hasil: { "commission_rate": "0.20", "admin_email": "admin@example.com" }
+        // Mengambil semua settings
         $settings = Setting::all()->pluck('value', 'key');
+        
+        // Format URL untuk gambar
+        if (isset($settings['company_qris_path'])) {
+            $settings['company_qris_url'] = asset('storage/' . $settings['company_qris_path']);
+        }
+
         return response()->json($settings);
     }
     
     public function adminUpdateSettings(Request $request)
     {
-        // Validasi input jika perlu
-        $validated = $request->validate([
-            'commission_rate' => 'required|numeric|min:0|max:100',
-            'admin_email'     => 'required|email|max:255',
-            // Tambahkan validasi untuk setting lain jika ada
+        \Illuminate\Support\Facades\Log::info('adminUpdateSettings hit', $request->all());
 
-            // --- Validasi SMTP Baru ---
+        // Validasi input
+        $validated = $request->validate([
+            'commission_rate' => 'nullable|numeric|min:0|max:100',
+            'admin_email'     => 'nullable|email|max:255',
+            'company_qris'    => 'nullable|image|mimes:jpeg,png,jpg|max:2048', // Validasi File
             'mail_host'         => 'nullable|string',
             'mail_port'         => 'nullable|numeric',
             'mail_username'     => 'nullable|string',
@@ -435,26 +440,49 @@ class ApiController extends Controller
             'mail_encryption'   => 'nullable|string|in:tls,ssl,null',
             'mail_from_address' => 'nullable|email',
             'mail_from_name'    => 'nullable|string',
-
-            // Validasi WA Baru
             'wa_token'          => 'nullable|string',
             'admin_wa_number'   => 'nullable|string',
         ]);
     
-        // Loop melalui data yang dikirim dan update ke database
+        // 1. Handle File Upload (QRIS)
+        if ($request->hasFile('company_qris')) {
+            \Illuminate\Support\Facades\Log::info('File company_qris found');
+            try {
+                // Hapus file lama jika ada
+                $oldPath = Setting::where('key', 'company_qris_path')->value('value');
+                if ($oldPath && \Illuminate\Support\Facades\Storage::disk('public')->exists($oldPath)) {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+                }
+    
+                // Simpan file baru
+                $path = $request->file('company_qris')->store('qris_codes', 'public');
+                \Illuminate\Support\Facades\Log::info('File stored at: ' . $path);
+                
+                // Update DB
+                $setting = Setting::updateOrCreate(['key' => 'company_qris_path'], ['value' => $path]);
+                \Illuminate\Support\Facades\Log::info('DB Updated: ', $setting->toArray());
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Upload failed: ' . $e->getMessage());
+            }
+        } else {
+            \Illuminate\Support\Facades\Log::info('No file company_qris in request');
+        }
+
+        // 2. Loop data lain (kecuali file)
         foreach ($validated as $key => $value) {
-            // Konversi khusus untuk rate (persen ke desimal)
-            if ($key === 'commission_rate') {
+            if ($key === 'company_qris') continue; // Skip file object
+
+            // Konversi khusus untuk rate
+            if ($key === 'commission_rate' && !is_null($value)) {
                 $dbValue = $value / 100;
             } else {
-                // Untuk email dan setting lain, simpan apa adanya
                 $dbValue = $value;
             }
             
-            Setting::updateOrCreate(
-                ['key' => $key],
-                ['value' => $dbValue]
-            );
+            // Hanya update jika value tidak null (atau logic sesuai kebutuhan)
+            if (!is_null($dbValue)) {
+                Setting::updateOrCreate(['key' => $key], ['value' => $dbValue]);
+            }
         }
     
         return response()->json(['message' => 'Pengaturan berhasil disimpan.']);

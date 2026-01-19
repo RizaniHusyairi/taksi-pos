@@ -31,8 +31,11 @@ class PageController extends Controller
     */
     public function showCso(): View
     {
-        // Mengembalikan view 'cso.blade.php'
-        return view('pages.cso');
+        // Ambil Global QRIS
+        $qrisPath = \App\Models\Setting::where('key', 'company_qris_path')->value('value');
+        $qrisUrl = $qrisPath ? asset('storage/' . $qrisPath) : null;
+
+        return view('pages.cso', ['companyQrisUrl' => $qrisUrl]);
     }
 
     /**

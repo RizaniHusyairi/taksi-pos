@@ -55,12 +55,15 @@ document.getElementById('formUploadProof')?.addEventListener('submit', async (e)
 // Helper function untuk memanggil API
 async function fetchApi(endpoint, options = {}) {
   const headers = {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
-    // Pastikan Anda memiliki meta tag CSRF di admin.blade.php jika menggunakan web routes
-    // 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content') 
     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
   };
+
+  // Jika body bukan FormData, set Content-Type ke JSON
+  // (Jika FormData, jangan set Content-Type agar browser otomatis set multipart/form-data + boundary)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   // Asumsi token disimpan di localStorage setelah login
   const token = localStorage.getItem('authToken');
@@ -108,42 +111,67 @@ export class AdminApp {
       const rateValue = document.getElementById('commissionRate').value;
       const emailValue = document.getElementById('adminEmail').value.trim(); // Ambil value email
 
-      // Buat payload untuk dikirim ke API
-      const payload = {
-        commission_rate: parseFloat(rateValue),
-        admin_email: emailValue,
-        // tambahkan pengaturan lain di sini jika ada
+      // Gunakan FormData agar bisa kirim file
+      const formData = new FormData();
+      formData.append('commission_rate', parseFloat(rateValue));
+      formData.append('admin_email', emailValue);
 
-        // SMTP Payload
-        mail_host: document.getElementById('mailHost').value.trim(),
-        mail_port: document.getElementById('mailPort').value.trim(),
-        mail_username: document.getElementById('mailUsername').value.trim(),
-        mail_password: document.getElementById('mailPassword').value.trim(),
-        mail_encryption: document.getElementById('mailEncryption').value,
-        mail_from_address: document.getElementById('mailUsername').value.trim(), // Biasanya sama dengan username
-        mail_from_name: document.getElementById('mailFromName').value.trim(),
-        // Data WA Baru
-        wa_token: document.getElementById('waToken').value.trim(),
-        admin_wa_number: document.getElementById('adminWaNumber').value.trim(),
+      // Append field SMTP dkk
+      const fields = [
+        'mail_host', 'mail_port', 'mail_username', 'mail_password',
+        'mail_encryption', 'mail_from_name', 'wa_token', 'admin_wa_number'
+      ];
 
-      };
+      fields.forEach(id => {
+        const el = document.getElementById(id); // ID di HTML harus sesuai camelCase-nya dengan yang kita cari?
+        // Wait, di HTML id-nya camelCase (adminWaNumber), tapi key DB snake_case (admin_wa_number).
+        // Kita harus mapping.
 
-      // Validasi sederhana di frontend
-      if (isNaN(payload.commission_rate) || payload.commission_rate < 0 || payload.commission_rate > 100) {
+        // Mapping ID -> Key DB
+        // mailHost -> mail_host
+        // mailPort -> mail_port
+        // mailUsername -> mail_username
+        // mailPassword -> mail_password
+        // mailEncryption -> mail_encryption
+        // mailFromName -> mail_from_name
+        // waToken -> wa_token
+        // adminWaNumber -> admin_wa_number
+      });
+
+      // Manual Append untuk memastikan ID benar
+      formData.append('mail_host', document.getElementById('mailHost').value.trim());
+      formData.append('mail_port', document.getElementById('mailPort').value.trim());
+      formData.append('mail_username', document.getElementById('mailUsername').value.trim());
+      formData.append('mail_password', document.getElementById('mailPassword').value.trim());
+      formData.append('mail_encryption', document.getElementById('mailEncryption').value);
+      formData.append('mail_from_address', document.getElementById('mailUsername').value.trim()); // Fallback sender
+      formData.append('mail_from_name', document.getElementById('mailFromName').value.trim());
+      formData.append('wa_token', document.getElementById('waToken').value.trim());
+      formData.append('admin_wa_number', document.getElementById('adminWaNumber').value.trim());
+
+      // FILE UPLOAD
+      const fileInput = document.getElementById('companyQris');
+      if (fileInput && fileInput.files[0]) {
+        formData.append('company_qris', fileInput.files[0]);
+      }
+
+      // Validasi sederhana
+      if (isNaN(parseFloat(rateValue)) || parseFloat(rateValue) < 0 || parseFloat(rateValue) > 100) {
         alert('Masukkan nilai persentase antara 0 dan 100');
         return;
       }
 
-      if (!payload.admin_email) {
+      if (!emailValue) {
         alert('Email admin tidak boleh kosong.');
         return;
       }
 
       try {
-        // 2. Kirim data ke API untuk disimpan menggunakan POST
+        // 2. Kirim data ke API menggunakan POST via FormData
+        // fetchApi sudah dimodifikasi untuk tidak memaksa Content-Type JSON jika body adalah FormData
         await fetchApi('/admin/settings', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: formData
         });
         alert('Pengaturan berhasil disimpan!');
       } catch (error) {
@@ -888,6 +916,15 @@ export class AdminApp {
       if (document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
       if (document.getElementById('waToken')) document.getElementById('waToken').value = settings.wa_token || '';
       if (document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
+
+      // 3. QRIS Preview
+      const previewQris = document.getElementById('previewQris');
+      const placeholderQris = document.getElementById('placeholderQris');
+      if (settings.company_qris_url && previewQris) {
+        previewQris.src = settings.company_qris_url;
+        previewQris.classList.remove('hidden');
+        placeholderQris.classList.add('hidden');
+      }
 
     } catch (error) {
       console.error("Gagal memuat pengaturan:", error);

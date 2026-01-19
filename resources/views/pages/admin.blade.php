@@ -414,6 +414,22 @@
                   <label class="block text-sm font-medium text-slate-700">Komisi Koperasi (%)</label>
                   <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-lg border-slate-300">
               </div>
+              
+              <!-- QRIS Upload Section -->
+              <div class="pt-2">
+                  <label class="block text-sm font-medium text-slate-700 mb-1">QRIS Perusahaan</label>
+                  <p class="text-xs text-slate-500 mb-2">Gambar ini akan muncul di aplikasi CSO saat pembayaran via QRIS.</p>
+                  
+                  <div class="flex items-start gap-4">
+                      <div class="w-24 h-24 bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center overflow-hidden">
+                          <img id="previewQris" src="" class="w-full h-full object-cover hidden">
+                          <span id="placeholderQris" class="text-xs text-slate-400 text-center px-1">Belum ada QRIS</span>
+                      </div>
+                      <div class="flex-1">
+                          <input type="file" id="companyQris" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"/>
+                      </div>
+                  </div>
+              </div>
             </div>
 
             <div class="space-y-3">
