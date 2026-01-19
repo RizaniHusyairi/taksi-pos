@@ -139,6 +139,21 @@ class CsoApp {
         this.selectedOrderData = null;
     }
 
+    // --- HELPER BARU: Open Zoom Modal ---
+    openZoomModal(imageUrl) {
+        if (!imageUrl) return;
+        
+        this.qrisZoomImage.src = imageUrl;
+        this.qrisZoomModal.classList.remove('hidden');
+        this.qrisZoomModal.classList.add('flex');
+
+        // Efek animasi kecil agar terlihat smooth
+        setTimeout(() => {
+            this.qrisZoomImage.classList.remove('scale-95');
+            this.qrisZoomImage.classList.add('scale-100');
+        }, 10);
+    }
+
 
 
     bind() {
@@ -189,16 +204,7 @@ class CsoApp {
             // Hanya izinkan zoom jika gambar bukan placeholder (tidak grayscale)
             // Atau cek jika src valid
             if (this.paymentQrisImage.src && !this.paymentQrisImage.classList.contains('grayscale')) {
-                this.qrisZoomImage.src = this.paymentQrisImage.src;
-
-                this.qrisZoomModal.classList.remove('hidden');
-                this.qrisZoomModal.classList.add('flex');
-
-                // Efek animasi kecil agar terlihat smooth
-                setTimeout(() => {
-                    this.qrisZoomImage.classList.remove('scale-95');
-                    this.qrisZoomImage.classList.add('scale-100');
-                }, 10);
+                this.openZoomModal(this.paymentQrisImage.src);
             } else {
                 Utils.showToast('QRIS belum tersedia untuk diperbesar.', 'error');
             }
@@ -486,6 +492,18 @@ class CsoApp {
                 // Line Number Supir
                 const lineDisplay = profile.line_number ? `<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded ml-1">#L${profile.line_number}</span>` : '';
 
+                // Tombol Lihat Bukti (Hanya jika QRIS & Ada Bukti)
+                
+                let btnProof = '';
+                if (tx.method === 'QRIS' && tx.payment_proof) {
+                    const proofUrl = `/storage/${tx.payment_proof}`;
+                    btnProof = `
+                    <button class="btn-view-proof flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 transition-colors mr-3" data-proof-url="${proofUrl}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        Bukti
+                    </button>`;
+                }
+
                 return `
                 <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-3 transition-all hover:shadow-md">
                     
@@ -526,10 +544,13 @@ class CsoApp {
                         <span class="text-[10px] px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 font-medium">
                             Metode: ${tx.method === 'CashDriver' ? 'Tunai (Supir)' : (tx.method === 'CashCSO' ? 'Tunai (Kasir)' : tx.method)}
                         </span>
-                        <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
-                            Struk
-                        </button>
+                        <div class="flex items-center">
+                            ${btnProof}
+                            <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
+                                Struk
+                            </button>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
@@ -537,8 +558,15 @@ class CsoApp {
             // Re-bind listener tombol struk
             this.historyList.querySelectorAll('.btn-view-receipt').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const tx = JSON.parse(btn.dataset.txObject);
-                    this.showReceipt(tx);
+                this.showReceipt(tx);
+                });
+            });
+
+            // Re-bind listener tombol bukti
+            this.historyList.querySelectorAll('.btn-view-proof').forEach(btn => {
+                btn.addEventListener('click', () => {
+                   const url = btn.dataset.proofUrl;
+                   this.openZoomModal(url);
                 });
             });
 

@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function() {
         // Pengaturan
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
+        Route::post('/settings/password', [ApiController::class, 'adminChangePassword']);
 
         Route::get('/queue', [ApiController::class, 'adminGetQueue']);
         Route::post('/queue/remove', [ApiController::class, 'adminRemoveFromQueue']); // Post userId via body or url param logic

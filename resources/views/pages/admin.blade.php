@@ -403,6 +403,27 @@
         <div class="bg-white rounded-xl shadow-sm p-4 max-w-lg mx-auto">
           <h3 class="font-semibold mb-3">Pengaturan Umum</h3>
           
+          <form id="formAdminPassword" class="space-y-4 mb-8 border-b pb-8">
+            <h4 class="font-bold text-slate-700">Ganti Password Admin</h4>
+            <div class="space-y-3">
+              <div>
+                  <label class="block text-sm font-medium text-slate-700">Password Saat Ini</label>
+                  <input type="password" id="currentPassword" required class="w-full rounded-lg border-slate-300">
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Password Baru</label>
+                    <input type="password" id="newPassword" required minlength="6" class="w-full rounded-lg border-slate-300">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Konfirmasi Password Baru</label>
+                    <input type="password" id="confirmNewPassword" required minlength="6" class="w-full rounded-lg border-slate-300">
+                </div>
+              </div>
+              <button class="bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-4 py-2 text-sm font-medium">Update Password</button>
+            </div>
+          </form>
+
           <form id="formSettings" class="space-y-6"> 
             <div class="space-y-3 border-b pb-4">
               <h4 class="font-bold text-slate-700">Umum</h4>

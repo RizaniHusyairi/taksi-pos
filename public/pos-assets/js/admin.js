@@ -181,6 +181,36 @@ export class AdminApp {
 
     });
 
+    // Password form
+    const formAdminPassword = document.getElementById('formAdminPassword');
+    formAdminPassword?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+      if (newPassword !== confirmNewPassword) {
+        alert('Konfirmasi password tidak cocok');
+        return;
+      }
+
+      try {
+        await fetchApi('/admin/settings/password', {
+          method: 'POST',
+          body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+            new_password_confirmation: confirmNewPassword
+          })
+        });
+        alert('Password berhasil diperbarui.');
+        formAdminPassword.reset();
+      } catch (error) {
+        console.error("Gagal ganti password:", error);
+        alert('Gagal ganti password: ' + (error.message || 'Terjadi kesalahan'));
+      }
+    });
+
 
 
 

@@ -17,7 +17,7 @@ class AuthController extends Controller
         ]);
 
         // 2. Coba otentikasi pengguna dengan data yang diberikan
-        if (Auth::attempt($credentials)) {
+        if (Auth::attempt($credentials, true)) {
             // Jika berhasil, regenerate session untuk keamanan
             $request->session()->regenerate();
 

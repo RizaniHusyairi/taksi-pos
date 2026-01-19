@@ -603,5 +603,19 @@ class ApiController extends Controller
 
         return response()->json(['message' => 'Line Number diperbarui.']);
     }
+    public function adminChangePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|current_password',
+            'new_password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user = $request->user();
+        $user->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+
+        return response()->json(['message' => 'Password berhasil diperbarui.']);
+    }
 }
 
