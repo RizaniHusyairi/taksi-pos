@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Models\DriverQueue;
 use App\Models\DriverProfile;
 use App\Http\Controllers\PublicReceiptController;
+use App\Http\Controllers\ExportController;
 
 
 
@@ -52,4 +53,7 @@ Route::middleware('auth')->group(function () {
     
     // Halaman Admin (hanya bisa diakses oleh role 'admin')
     Route::get('/admin', [PageController::class, 'showAdmin'])->middleware('role:admin');
+    
+    // PDF Export Route (Admin Only)
+    Route::get('/admin/withdrawals/{id}/export', [ExportController::class, 'exportWithdrawalById'])->middleware('role:admin');
 });

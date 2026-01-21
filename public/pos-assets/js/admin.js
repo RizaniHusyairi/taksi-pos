@@ -434,6 +434,7 @@ export class AdminApp {
     this.renderRevReport();
     this.renderDriverReport();
     this.renderSettings();
+    this.renderQueue();
   }
 
   route() {
@@ -893,9 +894,17 @@ export class AdminApp {
              `;
         } else if (w.status === 'Approved') {
           let proofBtn = w.proof_image
-            ? `<button class="text-xs text-blue-600 border border-blue-200 dark:text-blue-400 dark:border-blue-800 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-slate-700" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
+            ? `<button class="text-xs text-blue-600 border border-blue-200 dark:text-blue-400 dark:border-blue-800 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-slate-700 mx-1" onclick="window.open('/storage/${w.proof_image}', '_blank')">Bukti</button>`
             : '';
-          actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn}</div>`;
+
+          let printBtn = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500 px-2 py-1 rounded" onclick="window.open('/admin/withdrawals/${w.id}/export', '_blank')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mb-0.5" viewBox="0 0 20 20" fill="currentColor">
+                 <path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clip-rule="evenodd" />
+                 PDF
+              </svg>
+          </button>`;
+
+          actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-emerald-600 font-bold ml-1">Selesai</span> ${proofBtn} ${printBtn}</div>`;
         } else {
           actionButtons = `<div class="flex items-center gap-1">${btnDetail} <span class="text-xs text-red-500 italic ml-1">Ditolak</span></div>`;
         }
@@ -1190,7 +1199,7 @@ export class AdminApp {
         const isFirst = index === 0;
         const isLast = index === queue.length - 1;
 
-        
+
         return `
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group" >
               <td class="py-3 px-4 font-bold text-slate-700 dark:text-slate-200">#${q.real_position}</td>
@@ -1244,10 +1253,10 @@ export class AdminApp {
 
   // Aksi: Kick Driver
   async kickQueue(userId, name) {
-    if (!confirm(`Keluarkan ${ name } dari antrian ? Status driver akan menjadi Offline.`)) return;
+    if (!confirm(`Keluarkan ${name} dari antrian ? Status driver akan menjadi Offline.`)) return;
 
     try {
-      await fetchApi(`/ admin / queue / ${ userId } `, { method: 'DELETE' });
+      await fetchApi(`/admin/queue/${userId}`, { method: 'DELETE' });
       this.renderQueue(); // Refresh tabel
       // Update juga dashboard stats jika sedang tampil (opsional)
     } catch (error) {

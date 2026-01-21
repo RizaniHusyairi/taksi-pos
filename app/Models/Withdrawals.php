@@ -32,4 +32,8 @@ class Withdrawals extends Model
         // 'driver_id' adalah foreign key di tabel withdrawals
         return $this->belongsTo(User::class, 'driver_id');
     }
+    public function transactions()
+    {
+        return $this->hasMany(\App\Models\Transaction::class, 'withdrawal_id');
+    }
 }

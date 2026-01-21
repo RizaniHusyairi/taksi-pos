@@ -477,50 +477,59 @@ class DriverApiController extends Controller
 
         // 1. Cek Antrian
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
-        if (!$isInQueue) {
-            return response()->json(['status' => $profile->status]);
-        }
-
+        
         // 2. Cek Jarak
-
         $airportLat = config('taksi.driver_queue.latitude');
         $airportLng = config('taksi.driver_queue.longitude');
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
         $radius = config('taksi.driver_queue.radius_km');
         $inArea = ($distance <= $radius);
+
+
         
-        // 3. Logika Update Status
+        // 3. Logika Auto-Join (Jika Offline & Masuk Area)
         if ($inArea && $profile->status === 'offline') {
             
-            // --- PERBAIKAN DI SINI ---
-            // Saat driver terdeteksi masuk area (dari offline -> standby),
-            // Kita catat bahwa dia SUDAH absen hari ini.
-            $profile->update([
-                'status' => 'standby',
-                'last_queue_date' => now()->toDateString() // <--- PENTING: KUNCI PERBAIKANNYA
-            ]);
-            
-            // Update koordinat
-            DriverQueue::where('user_id', $user->id)->update([
-                'latitude' => $request->latitude,
-                'longitude' => $request->longitude
-            ]);
-            
-            return response()->json(['status' => 'standby', 'message' => 'Anda memasuki area bandara.']);
+            if (!$isInQueue) {
+                // Skenario Normal: Masuk Antrian Baru
+                $maxSort = DriverQueue::max('sort_order') ?? 0;
+                DriverQueue::create([
+                    'user_id' => $user->id,
+                    'sort_order' => $maxSort + 1,
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude
+                ]);
+                
+                 // Update Status Profil
+                $profile->update([
+                    'status' => 'standby',
+                    'last_queue_date' => now()->toDateString() 
+                ]);
+
+                return response()->json(['status' => 'standby', 'message' => 'Anda memasuki area bandara (Auto-Queue).']);
+            } else {
+                // Skenario Repair: Sudah ada di queue, tapi status offline (Data tidak sinkron)
+                // Kita "bangunkan" kembali menjadi standby
+                 $profile->update([
+                    'status' => 'standby'
+                ]);
+                
+                return response()->json(['status' => 'standby', 'message' => 'Status antrian dipulihkan (Auto-Repair).']);
+            }
 
         } elseif (!$inArea && $profile->status === 'standby') {
-            // ... (Logika keluar area tetap sama) ...
-            $profile->update(['status' => 'offline']);
-            return response()->json(['status' => 'offline', 'message' => 'Anda keluar dari area bandara.']);
+             // Opsional: Jika keluar area saat standby?
+             // Saat ini biarkan saja
         }
 
-        // ... (Sisa kode tetap sama) ...
-        if ($profile->status === 'standby') {
+        // 4. Update Koordinat (Jika sudah di antrian)
+        if ($isInQueue) {
              DriverQueue::where('user_id', $user->id)->update([
                 'latitude' => $request->latitude,
                 'longitude' => $request->longitude
             ]);
         }
+        
         return response()->json(['status' => $profile->status]); 
     }
 
