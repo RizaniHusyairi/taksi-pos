@@ -434,6 +434,7 @@ export class AdminApp {
     this.renderRevReport();
     this.renderDriverReport();
     this.renderSettings();
+    this.renderQueue();
   }
 
   route() {
@@ -698,7 +699,7 @@ export class AdminApp {
 
           // Set Pesan
           if (msgConfirmDelete) {
-            msgConfirmDelete.innerHTML = `Anda yakin ingin menghapus pengguna <span class="font-bold text-slate-800">${deleteTargetName}</span>?<br>Tindakan ini permanen.`;
+            msgConfirmDelete.innerHTML = `Anda yakin ingin menghapus pengguna <span class="font-bold text-slate-800 dark:text-slate-100">${deleteTargetName}</span>?<br>Tindakan ini permanen.`;
           }
 
           // Buka Modal
@@ -1190,7 +1191,7 @@ export class AdminApp {
         const isFirst = index === 0;
         const isLast = index === queue.length - 1;
 
-        
+
         return `
           <tr class="hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group" >
               <td class="py-3 px-4 font-bold text-slate-700 dark:text-slate-200">#${q.real_position}</td>
@@ -1244,10 +1245,10 @@ export class AdminApp {
 
   // Aksi: Kick Driver
   async kickQueue(userId, name) {
-    if (!confirm(`Keluarkan ${ name } dari antrian ? Status driver akan menjadi Offline.`)) return;
+    if (!confirm(`Keluarkan ${name} dari antrian ? Status driver akan menjadi Offline.`)) return;
 
     try {
-      await fetchApi(`/ admin / queue / ${ userId } `, { method: 'DELETE' });
+      await fetchApi(`/ admin / queue / ${userId} `, { method: 'DELETE' });
       this.renderQueue(); // Refresh tabel
       // Update juga dashboard stats jika sedang tampil (opsional)
     } catch (error) {
