@@ -704,6 +704,11 @@ export class DriverApp {
                        <span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide ${badgeClass}">
                            ${w.status}
                        </span>
+                       ${w.proof_image ? `
+                       <button onclick="viewProof('${w.proof_image}')" class="block mt-2 text-[10px] bg-blue-100 text-blue-600 hover:bg-blue-200 px-2 py-1 rounded font-bold transition-colors">
+                           Lihat Bukti
+                       </button>
+                       ` : ''}
                    </td>
                </tr>`;
             }).join('');

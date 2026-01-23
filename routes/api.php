@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
+use App\Http\Controllers\Api\ApiAuthController; // <-- Arahkan ke ApiAuthController
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -12,11 +13,15 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 
 
+// Public Routes
+Route::post('/login', [ApiAuthController::class, 'login']);
+
 // === Rute API untuk Aplikasi POS Taksi ===
 Route::middleware('auth:sanctum')->group(function() {
 
     
     // Tambahkan rute untuk withdrawal, dll. di sini nanti
+    Route::post('/logout', [ApiAuthController::class, 'logout']);
 
 
      // =========================================================

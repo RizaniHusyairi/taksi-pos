@@ -30,7 +30,7 @@
     <div class="flex items-center gap-3 mb-6">
       <div class="w-10 h-10 rounded-lg bg-primary-600 text-white grid place-items-center font-semibold">KT</div>
       <div>
-        <h1 class="text-xl font-semibold text-slate-800">Taksi POS</h1>
+        <h1 class="text-xl font-semibold text-slate-800">POS Angkasa Jaya</h1>
         <p class="text-sm text-slate-500">Masuk untuk melanjutkan</p>
       </div>
     </div>
