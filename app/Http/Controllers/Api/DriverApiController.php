@@ -71,7 +71,7 @@ class DriverApiController extends Controller
             // Kita hanya ingin menyembunyikan order yang sudah Selesai (Completed) atau Dibatalkan (Cancelled)
             ->whereNotIn('status', ['Completed', 'Cancelled']) 
             ->latest()
-            ->with('zoneTo:id,name')
+            ->with(['zoneTo:id,name', 'cso:id,name', 'transaction:id,booking_id,method'])
             ->first();
         
 
