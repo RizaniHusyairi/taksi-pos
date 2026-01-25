@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class ApiService {
   // Use 10.0.2.2 for Android Emulator to access localhost
   // Use your machine's IP (e.g., 10.49.92.29) if testing on physical device
-  static const String baseUrl = 'http://192.168.1.25:8080/api';
+  static const String baseUrl = 'http://192.168.1.14:8000/api';
 
   late Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -91,5 +91,30 @@ class ApiService {
 
   Future<Response> completeBooking(int bookingId) async {
     return await _dio.post('/driver/bookings/$bookingId/complete');
+  }
+
+  Future<Response> updateBankDetails(String accountNumber) async {
+    return await _dio.post(
+      '/driver/bank-details',
+      data: {'account_number': accountNumber},
+    );
+  }
+
+  Future<Response> updateProfile(Map<String, dynamic> data) async {
+    return await _dio.post('/driver/profile/update', data: data);
+  }
+
+  Future<Response> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    return await _dio.post(
+      '/driver/change-password',
+      data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+        'new_password_confirmation': newPassword,
+      },
+    );
   }
 }

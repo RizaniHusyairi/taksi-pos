@@ -42,7 +42,7 @@ class ApiController extends Controller
 
         // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
         $weeklyChartData = Transaction::select(
-                DB::raw("DATE(created_at) as label"),
+                DB::raw($this->getSqlDate('created_at', 'date') . " as label"),
                 DB::raw('SUM(amount) as total')
             )
             ->whereBetween('created_at', [now()->subDays(6), now()])
@@ -52,7 +52,7 @@ class ApiController extends Controller
 
         // 3. Siapkan Data Grafik Bulanan (12 bulan terakhir)
         $monthlyChartData = Transaction::select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as label"),
+                DB::raw($this->getSqlDate('created_at', 'month') . " as label"),
                 DB::raw('SUM(amount) as total')
             )
             ->whereBetween('created_at', [now()->subMonths(11)->startOfMonth(), now()])
@@ -376,7 +376,7 @@ class ApiController extends Controller
                 // 8 minggu terakhir
                 $startDate = now()->subWeeks(8)->startOfWeek();
                 $data = Transaction::select(
-                        DB::raw("DATE_FORMAT(created_at, '%x-W%v') as label"), // Format: YYYY-WW (e.g., 2025-W36)
+                        DB::raw($this->getSqlDate('created_at', 'week') . " as label"), // Format: YYYY-WW
                         DB::raw('SUM(amount) as total')
                     )
                     ->whereBetween('created_at', [$startDate, $endDate])
@@ -389,7 +389,7 @@ class ApiController extends Controller
                 // 12 bulan terakhir
                 $startDate = now()->subMonths(12)->startOfMonth();
                 $data = Transaction::select(
-                        DB::raw("DATE_FORMAT(created_at, '%Y-%m') as label"), // Format: YYYY-MM
+                        DB::raw($this->getSqlDate('created_at', 'month') . " as label"), // Format: YYYY-MM
                         DB::raw('SUM(amount) as total')
                     )
                     ->whereBetween('created_at', [$startDate, $endDate])
@@ -403,7 +403,7 @@ class ApiController extends Controller
                 // 7 hari terakhir
                 $startDate = now()->subDays(7);
                 $data = Transaction::select(
-                        DB::raw("DATE(created_at) as label"),
+                        DB::raw($this->getSqlDate('created_at', 'date') . " as label"),
                         DB::raw('SUM(amount) as total')
                     )
                     ->whereBetween('created_at', [$startDate, $endDate])
@@ -645,6 +645,33 @@ class ApiController extends Controller
         ]);
 
         return response()->json(['message' => 'Password berhasil diperbarui.']);
+    }
+
+    /**
+     * Helper to return Date Format SQL compatible with SQLite and MySQL
+     */
+    private function getSqlDate($column, $type)
+    {
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'sqlite') {
+            switch ($type) {
+                // SQLite uses strftime. %Y-%m return YYYY-MM
+                case 'month': return "strftime('%Y-%m', $column)";
+                // %Y-%W return YYYY-WW (Week Number)
+                case 'week':  return "strftime('%Y-%W', $column)";
+                // date() returns YYYY-MM-DD
+                case 'date':  return "date($column)";
+                default:      return "date($column)";
+            }
+        } else {
+            // MySQL / MariaDB
+            switch ($type) {
+                case 'month': return "DATE_FORMAT($column, '%Y-%m')";
+                case 'week':  return "DATE_FORMAT($column, '%x-W%v')";
+                case 'date':  return "DATE($column)";
+                default:      return "DATE($column)";
+            }
+        }
     }
 }
 

@@ -15,6 +15,7 @@ class DriverProfile extends Model
         'status',
         'line_number',
         'last_queue_date',
+        'out_of_area_since',
     ];
 
     public function user()

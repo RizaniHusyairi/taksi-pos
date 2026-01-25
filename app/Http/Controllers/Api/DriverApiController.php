@@ -487,7 +487,46 @@ class DriverApiController extends Controller
 
 
         
-        // 3. Logika Auto-Join (Jika Offline & Masuk Area)
+        // 3. Logika Auto-Join & Grace Period
+        // Global Warning: Jika diluar area saat standby -> Cek Grace Period
+        $remainingTime = null;
+        
+        if ($profile->status === 'standby' && !$inArea) {
+             // Jika baru saja keluar area (out_of_area_since masih null)
+             if (!$profile->out_of_area_since) {
+                 $profile->update(['out_of_area_since' => now()]);
+                 $remainingTime = 3600; // Full 60 minutes
+             } else {
+                 // Cek durasi
+                 $outSince = \Carbon\Carbon::parse($profile->out_of_area_since);
+                 $diffInSeconds = now()->diffInSeconds($outSince);
+                 $gracePeriodSeconds = 3600; // 60 Menit * 60 Detik
+                 
+                 if ($diffInSeconds >= $gracePeriodSeconds) {
+                     // AUTO KICK
+                     DriverQueue::where('user_id', $user->id)->delete();
+                     $profile->update([
+                         'status' => 'offline',
+                         'out_of_area_since' => null
+                     ]);
+                     
+                     return response()->json([
+                         'status' => 'offline',
+                         'in_area' => false,
+                         'message' => 'Antrian hangus karena diluar area lebih dari 60 menit.'
+                     ]);
+                 }
+                 
+                 $remainingTime = $gracePeriodSeconds - $diffInSeconds;
+             }
+        } elseif ($profile->status === 'standby' && $inArea) {
+             // Jika kembali ke area -> Reset Grace Period
+             if ($profile->out_of_area_since) {
+                 $profile->update(['out_of_area_since' => null]);
+             }
+        }
+
+        // Logic Auto-Join (Jika Offline & Masuk Area) - Tetap sama
         if ($inArea && $profile->status === 'offline') {
             
             if (!$isInQueue) {
@@ -503,23 +542,29 @@ class DriverApiController extends Controller
                  // Update Status Profil
                 $profile->update([
                     'status' => 'standby',
-                    'last_queue_date' => now()->toDateString() 
+                    'last_queue_date' => now()->toDateString(),
+                    'out_of_area_since' => null // Pastikan bersih
                 ]);
 
-                return response()->json(['status' => 'standby', 'message' => 'Anda memasuki area bandara (Auto-Queue).']);
+                return response()->json([
+                    'status' => 'standby', 
+                    'message' => 'Anda memasuki area bandara (Auto-Queue).',
+                    'in_area' => true
+                ]);
             } else {
-                // Skenario Repair: Sudah ada di queue, tapi status offline (Data tidak sinkron)
-                // Kita "bangunkan" kembali menjadi standby
+                // Skenario Repair
                  $profile->update([
-                    'status' => 'standby'
+                    'status' => 'standby',
+                    'out_of_area_since' => null
                 ]);
                 
-                return response()->json(['status' => 'standby', 'message' => 'Status antrian dipulihkan (Auto-Repair).']);
+                return response()->json([
+                    'status' => 'standby', 
+                    'message' => 'Status antrian dipulihkan (Auto-Repair).',
+                    'in_area' => true
+                ]);
             }
 
-        } elseif (!$inArea && $profile->status === 'standby') {
-             // Opsional: Jika keluar area saat standby?
-             // Saat ini biarkan saja
         }
 
         // 4. Update Koordinat (Jika sudah di antrian)
@@ -530,7 +575,11 @@ class DriverApiController extends Controller
             ]);
         }
         
-        return response()->json(['status' => $profile->status]); 
+        return response()->json([
+            'status' => $profile->status,
+            'in_area' => $inArea,
+            'remaining_time' => $remainingTime
+        ]); 
     }
 
     

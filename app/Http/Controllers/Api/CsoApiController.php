@@ -101,6 +101,9 @@ class CsoApiController extends Controller
 
 
        $drivers = DriverQueue::with(['driver.driverProfile'])
+            ->whereHas('driver.driverProfile', function ($query) {
+                $query->whereNull('out_of_area_since');
+            })
             ->orderBy('sort_order', 'asc')
             ->orderBy('created_at', 'asc')
             ->get()

@@ -19,18 +19,35 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   Timer? _locationTimer;
+  Timer? _countdownTimer; // Local countdown timer
   String _locationStatus = "Menunggu GPS...";
+  bool _isInArea = false;
+  int? _remainingTimeSeconds; // In Seconds
 
   @override
   void initState() {
     super.initState();
     _startLocationService();
+    _startCountdownTimer();
   }
 
   @override
   void dispose() {
     _locationTimer?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  void _startCountdownTimer() {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingTimeSeconds != null && _remainingTimeSeconds! > 0) {
+        if (mounted) {
+          setState(() {
+            _remainingTimeSeconds = _remainingTimeSeconds! - 1;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _startLocationService() async {
@@ -59,18 +76,39 @@ class _HomeScreenState extends State<HomeScreen> {
         position.longitude,
       );
 
+      final inArea = response.data['in_area'] ?? false;
+      var remainingRaw = response.data['remaining_time'];
+      int? remaining;
+      if (remainingRaw != null) {
+        remaining = int.tryParse(remainingRaw.toString());
+      }
+
       if (mounted) {
         setState(() {
           _locationStatus = "GPS: ${TimeOfDay.now().format(context)}";
+          _isInArea = inArea;
+          _remainingTimeSeconds = remaining; // Sync with server
         });
 
-        // Auto-refresh profile if auto-joined (status changed to standby from offline)
+        // Auto-refresh profile if auto-joined
         if (response.data['status'] == 'standby' &&
             authProvider.user?['driver_profile']['status'] == 'offline') {
           authProvider.fetchProfile();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Anda memasuki area. Otomatis masuk antrian!"),
+            ),
+          );
+        }
+
+        // Auto-kick notification
+        if (response.data['status'] == 'offline' &&
+            authProvider.user?['driver_profile']['status'] == 'standby') {
+          authProvider.fetchProfile();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.data['message'] ?? "Antrian Hangus"),
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -84,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     try {
       await _apiService.startBooking(bookingId);
-      await auth.fetchProfile(); // Refresh to get 'ontrip' status
+      await auth.fetchProfile();
       if (mounted)
         ScaffoldMessenger.of(
           context,
@@ -101,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     try {
       await _apiService.completeBooking(bookingId);
-      await auth.fetchProfile(); // Refresh to clear order
+      await auth.fetchProfile();
       if (mounted)
         ScaffoldMessenger.of(
           context,
@@ -112,6 +150,13 @@ class _HomeScreenState extends State<HomeScreen> {
           const SnackBar(content: Text("Gagal menyelesaikan perjalanan")),
         );
     }
+  }
+
+  String _formatDuration(int totalSeconds) {
+    if (totalSeconds < 0) return "00:00";
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
   }
 
   @override
@@ -195,9 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // === LOGIC SWITCHER ===
-              // If Active Booking Exists -> Show Order Card
-              // Else -> Show Status/Queue Card
               if (activeBooking != null) ...[
                 _buildOrderCard(activeBooking, currencyFormat),
               ] else ...[
@@ -349,12 +391,24 @@ class _HomeScreenState extends State<HomeScreen> {
     Color color;
     String text;
 
+    // LOGIKA STATUS TEXT
     if (status == 'offline') {
-      color = Colors.red;
-      text = 'TIDAK AKTIF';
+      if (!_isInArea) {
+        color = Colors.orange;
+        text = 'DILUAR AREA';
+      } else {
+        color = Colors.red;
+        text = 'TIDAK AKTIF';
+      }
     } else if (status == 'standby') {
-      color = Colors.green;
-      text = 'MENUNGGU';
+      // Jika Standby tapi diluar area -> WARNING GRACE PERIOD
+      if (!_isInArea) {
+        color = Colors.deepOrange; // Lebih gelap
+        text = 'PERINGATAN';
+      } else {
+        color = Colors.green;
+        text = 'MENUNGGU';
+      }
     } else {
       color = Colors.blue;
       text = 'SIBUK';
@@ -378,8 +432,53 @@ class _HomeScreenState extends State<HomeScreen> {
               letterSpacing: 2,
             ),
           ),
-          if (status == 'standby') ...[
+
+          // Subtext Warning Grace Period + Live Countdown
+          if (status == 'standby' && !_isInArea) ...[
+            const SizedBox(height: 16),
+            Text(
+              "Kembali ke area dalam:",
+              style: GoogleFonts.outfit(fontSize: 14, color: Colors.white70),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(50),
+                border: Border.all(color: Colors.redAccent),
+              ),
+              child: Text(
+                _remainingTimeSeconds != null
+                    ? _formatDuration(_remainingTimeSeconds!)
+                    : "--:--",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.robotoMono(
+                  // Monospace biar angkanya diam
+                  fontSize: 32,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+          ] else if (status == 'standby' &&
+              !_isInArea &&
+              _remainingTimeSeconds == null) ...[
+            // Fallback if null
+            const SizedBox(height: 16),
+            const CircularProgressIndicator(color: Colors.white),
+          ] else if (status == 'offline' && !_isInArea) ...[
             const SizedBox(height: 8),
+            Text(
+              "Masuk area bandara untuk antri",
+              style: GoogleFonts.outfit(fontSize: 14, color: Colors.white70),
+            ),
+          ],
+
+          // Queue info
+          if (status == 'standby') ...[
+            const SizedBox(height: 16),
             Text(
               "Antrian #${profile?['line_number'] ?? '-'}",
               style: GoogleFonts.outfit(fontSize: 20, color: Colors.white),
@@ -392,26 +491,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildActionButtons(String status) {
     if (status == 'offline') {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFD4AF37),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+      if (!_isInArea) {
+        return ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white10,
+            foregroundColor: Colors.white30,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-        icon: const Icon(Icons.login, color: Colors.black),
-        label: Text(
-          "GABUNG ANTRIAN (MANUAL)",
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
+          onPressed: null,
+          child: Text(
+            "TIDAK BISA MASUK ANTRIAN",
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
           ),
-        ),
-        onPressed: () {
-          // TODO: Add Manual Join Logic / Dialog
-        },
-      );
+        );
+      } else {
+        return ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFD4AF37),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          icon: const Icon(Icons.login, color: Colors.black),
+          label: Text(
+            "GABUNG ANTRIAN (MANUAL)",
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          onPressed: () {
+            // TODO: Manual Join Logic
+          },
+        );
+      }
     } else if (status == 'standby') {
       return ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
@@ -430,7 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         onPressed: () {
-          // TODO: Add Leave Logic
+          // TODO: Leave Logic
         },
       );
     }
