@@ -22,7 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _countdownTimer; // Local countdown timer
   String _locationStatus = "Menunggu GPS...";
   bool _isInArea = false;
-  int? _remainingTimeSeconds; // In Seconds
+  int? _remainingTimeSeconds; // Grace Period Timer
+  int? _pickupTimeSeconds; // Pickup Timer
 
   @override
   void initState() {
@@ -40,12 +41,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _startCountdownTimer() {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingTimeSeconds != null && _remainingTimeSeconds! > 0) {
-        if (mounted) {
-          setState(() {
+      if (mounted) {
+        setState(() {
+          // 1. Grace Period Timer
+          if (_remainingTimeSeconds != null && _remainingTimeSeconds! > 0) {
             _remainingTimeSeconds = _remainingTimeSeconds! - 1;
-          });
-        }
+          }
+          // 2. Pickup Timer
+          if (_pickupTimeSeconds != null && _pickupTimeSeconds! > 0) {
+            _pickupTimeSeconds = _pickupTimeSeconds! - 1;
+          }
+        });
       }
     });
   }
@@ -166,6 +172,33 @@ class _HomeScreenState extends State<HomeScreen> {
     final profile = user?['driver_profile'];
     final status = profile?['status'] ?? 'offline';
     final activeBooking = user?['active_booking'];
+
+    // --- Parse Pickup Timer if Booking Exists ---
+    if (activeBooking != null && activeBooking['status'] == 'Assigned') {
+      if (_pickupTimeSeconds == null) {
+        // Only set once to avoid reset on refresh
+        final createdAtStr = activeBooking['created_at'];
+        if (createdAtStr != null) {
+          final created = DateTime.parse(createdAtStr); // UTC / Server Time
+          // Assuming Server Time is synced roughly, we calculate diff
+          // Better approach: Server sends 'seconds_left'. But here we calc manually.
+          // Note: DateTime.parse might parse as Local if no timezone info.
+          // Ideally backend sends 'expires_at'.
+          // Simple Fix: We assume created time is recent.
+
+          // If created is 10:00, now is 10:02. Diff is 2 mins. Remaining 8 mins (480s).
+          final now = DateTime.now();
+          // Adjust timezone if needed. For now assume same timezone.
+          final diff = now.difference(created).inSeconds;
+          final totalTimeout = 600; // 10 minutes
+
+          final left = totalTimeout - diff;
+          _pickupTimeSeconds = left > 0 ? left : 0;
+        }
+      }
+    } else {
+      _pickupTimeSeconds = null; // Reset if no assigned booking
+    }
 
     final currencyFormat = NumberFormat.currency(
       locale: 'id_ID',
@@ -307,6 +340,56 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const Divider(color: Colors.white24, height: 32),
+
+            if (!isOntrip && _pickupTimeSeconds != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (_pickupTimeSeconds! < 60)
+                      ? Colors.red.withOpacity(0.2)
+                      : Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: (_pickupTimeSeconds! < 60)
+                        ? Colors.red
+                        : Colors.orange.withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.timer,
+                      color: (_pickupTimeSeconds! < 60)
+                          ? Colors.red
+                          : Colors.orange,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Waktu Jemput",
+                            style: GoogleFonts.outfit(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            _formatDuration(_pickupTimeSeconds!),
+                            style: GoogleFonts.robotoMono(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             _orderRow("Tujuan", zoneName, isBold: true),
             _orderRow("Tarif", currency.format(price), isHighlight: true),

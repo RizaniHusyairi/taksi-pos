@@ -137,6 +137,11 @@ class CsoApp {
         this.zones = [];
         this.selectedDriverId = null;
         this.selectedOrderData = null;
+        this.selectedBookingIdForChange = null;
+
+        // Modal Ganti Supir
+        this.changeDriverModal = document.getElementById('changeDriverModal');
+        this.changeDriverList = document.getElementById('changeDriverList');
     }
 
     // --- HELPER BARU: Open Zoom Modal ---
@@ -238,6 +243,11 @@ class CsoApp {
         const today = new Date().toISOString().split('T')[0];
         if (this.inpStartDate) this.inpStartDate.value = today;
         if (this.inpEndDate) this.inpEndDate.value = today;
+
+        // Listener Modal Ganti Supir
+        document.getElementById('closeChangeDriver')?.addEventListener('click', () => {
+            this.changeDriverModal.classList.add('hidden');
+        });
     }
     route() {
         // Fungsi routing tidak berubah, sudah bagus
@@ -565,7 +575,8 @@ class CsoApp {
                         <span class="text-[10px] px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 font-medium">
                             Metode: ${tx.method === 'CashDriver' ? 'Tunai (Supir)' : (tx.method === 'CashCSO' ? 'Tunai (Kasir)' : tx.method)}
                         </span>
-                        <div class="flex items-center">
+                        <div class="flex items-center gap-2">
+                            ${this.renderChangeDriverButton(tx.booking, rawStatus)}
                             ${btnProof}
                             <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
@@ -579,7 +590,16 @@ class CsoApp {
             // Re-bind listener tombol struk
             this.historyList.querySelectorAll('.btn-view-receipt').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    this.showReceipt(tx);
+                    // Parse ulang data object dari string JSON
+                    const txData = JSON.parse(btn.dataset.txObject);
+                    this.showReceipt(txData);
+                });
+            });
+
+            // Re-bind listener tombol Ganti Supir
+            this.historyList.querySelectorAll('.btn-change-driver').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.openChangeDriverModal(btn.dataset.bookingId);
                 });
             });
 
@@ -1207,7 +1227,103 @@ class CsoApp {
 
     showQrisBox() {
         this.qrisBox.classList.remove('hidden');
-        this.qrisBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        this.qrisBox.scrollIntoView({
+            behavior: 'smooth', block: 'center'
+    // --- HELPER UNTUK GANTI SUPIR (CHANGE DRIVER) ---
+
+    renderChangeDriverButton(booking, status) {
+                // Hanya tampil jika status Assigned
+                if (status !== 'Assigned') return '';
+
+                // Hitung selisih waktu
+                const created = new Date(booking.created_at);
+                const now = new Date();
+                const diffMs = now - created;
+                const diffMins = Math.floor(diffMs / 60000);
+                const TIMEOUT_MINS = 10;
+
+                // Button State
+                let disabled = diffMins < TIMEOUT_MINS;
+                let btnClass = disabled
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+                    : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-200 shadow-sm';
+
+                let label = disabled
+                    ? `Tunggu ${TIMEOUT_MINS - diffMins}m`
+                    : 'Ganti Supir';
+
+                return `
+        <button class="btn-change-driver px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1 ${btnClass}" 
+            ${disabled ? 'disabled' : ''} 
+            data-booking-id="${booking.id}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+            </svg>
+            ${label}
+        </button>`;
+            }
+
+    async openChangeDriverModal(bookingId) {
+                this.selectedBookingIdForChange = bookingId;
+                this.changeDriverModal.classList.remove('hidden');
+                this.changeDriverList.innerHTML = '<div class="p-4 text-center text-slate-500">Memuat supir...</div>';
+
+                try {
+                    const drivers = await fetchApi('/cso/available-drivers');
+
+                    if (drivers.length === 0) {
+                        this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500">Tidak ada supir standby.</div>';
+                        return;
+                    }
+
+                    this.changeDriverList.innerHTML = drivers.map(d => {
+                        const profile = d.driver_profile || {};
+                        return `
+                <div class="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" onclick="app.doChangeDriver(${d.id})">
+                    <div>
+                        <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
+                        <div class="text-xs text-slate-500">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
+                    </div>
+                    <button class="text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg font-bold">Pilih</button>
+                </div>`;
+                    }).join('');
+
+                } catch (e) {
+                    this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500 error">Gagal memuat supir.</div>';
+                }
+            }
+
+    async doChangeDriver(newDriverId) {
+                if (!confirm('Yakin ingin mengalihkan order ke supir ini?')) return;
+
+                try {
+                    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    const res = await fetch(`/api/cso/bookings/${this.selectedBookingIdForChange}/change-driver`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': token
+                        },
+                        body: JSON.stringify({ new_driver_id: newDriverId })
+                    });
+
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.message || 'Gagal ganti supir');
+
+                    Utils.showToast('Supir berhasil diganti!', 'success');
+                    this.changeDriverModal.classList.add('hidden');
+                    this.renderHistory(); // Refresh list
+
+                } catch (e) {
+                    Utils.showToast(e.message, 'error');
+                }
+            }
+        }
+
+// Expose app instance globally so inline onclick works
+window.app = new CsoApp();
+        window.app.init(););
 
         // Cek Global QRIS URL
         if (window.companyQrisUrl) {

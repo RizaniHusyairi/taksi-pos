@@ -379,6 +379,19 @@
     </div>
   </div>
 
+  <!-- Modal Ganti Supir (BARU) -->
+  <div id="changeDriverModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-0 flex flex-col max-h-[80vh]">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Pilih Supir Pengganti</h3>
+              <button id="closeChangeDriver" class="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+          <div id="changeDriverList" class="overflow-y-auto flex-grow">
+              <!-- Driver list injected by JS -->
+          </div>
+      </div>
+  </div>
+
   <div id="qrisZoomModal" class="fixed inset-0 bg-black/95 hidden items-center justify-center p-4 z-[60] backdrop-blur-sm cursor-zoom-out transition-opacity duration-300">
     <img id="qrisZoomImage" src="" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl scale-95 transition-transform duration-300">
     <div class="absolute bottom-10 text-white/70 text-sm bg-black/50 px-4 py-2 rounded-full pointer-events-none">
@@ -393,8 +406,9 @@
     import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
     
     // Inisialisasi App
-    const app = new CsoApp();
-    app.init();
+    // Inisialisasi App via cso.js (sudah di expose window.app)
+    // const app = new CsoApp();
+    // app.init();
 
 
 

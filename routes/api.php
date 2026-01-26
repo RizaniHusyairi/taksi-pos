@@ -96,10 +96,10 @@ Route::middleware('auth:sanctum')->group(function() {
         // Route Profile CSO
         Route::get('/profile', [CsoApiController::class, 'getProfile']);
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
+        Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
 
-
-
+        Route::post('/bookings/{booking}/change-driver', [CsoApiController::class, 'changeDriver']);
     });
     
     
