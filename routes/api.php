@@ -128,5 +128,6 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);
 
         Route::post('/profile/update', [DriverApiController::class, 'updateProfile']);
+        Route::post('/update-fcm-token', [DriverApiController::class, 'updateFcmToken']);
     });
 });

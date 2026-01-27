@@ -38,6 +38,7 @@ class CsoApp {
         this.renderProfile();
         window.addEventListener('hashchange', () => this.route());
         this.route();
+        this.checkGlobalQris();
     }
 
     initTheme() {
@@ -142,6 +143,15 @@ class CsoApp {
         // Modal Ganti Supir
         this.changeDriverModal = document.getElementById('changeDriverModal');
         this.changeDriverList = document.getElementById('changeDriverList');
+
+        // Modal Pilih Supir (Driver Selection after Payment)
+        this.selectDriverModal = document.getElementById('selectDriverModal');
+        this.selectDriverList = document.getElementById('selectDriverList');
+        this.btnCloseSelectDriver = document.getElementById('closeSelectDriver');
+
+        // State Baru untuk Payment First
+        this.paymentVerified = false;
+        this.pendingPaymentPayload = null;
     }
 
     // --- HELPER BARU: Open Zoom Modal ---
@@ -166,7 +176,9 @@ class CsoApp {
 
         this.toSel.addEventListener('change', () => this.updatePrice());
         this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
-        this.btnConfirm.addEventListener('click', () => this.processBooking());
+
+        // Ganti Logic Tombol Confirm -> Jadi "Input Pembayaran"
+        this.btnConfirm.addEventListener('click', () => this.processBooking()); // Nama fx tetap processBooking tapi loginya berubah
 
         // Event listener pembayaran
 
@@ -248,6 +260,11 @@ class CsoApp {
         document.getElementById('closeChangeDriver')?.addEventListener('click', () => {
             this.changeDriverModal.classList.add('hidden');
         });
+
+        // Listener Modal Pilih Supir
+        this.btnCloseSelectDriver?.addEventListener('click', () => {
+            this.selectDriverModal.classList.add('hidden');
+        });
     }
     route() {
         // Fungsi routing tidak berubah, sudah bagus
@@ -294,68 +311,36 @@ class CsoApp {
     }
 
     async renderDrivers() {
-        this.driversList.innerHTML = `
-        <div class="p-8 text-center text-slate-400 flex flex-col items-center animate-pulse">
-            <svg class="w-8 h-8 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span class="text-sm">Memuat antrian driver...</span>
-        </div>`;
-
-        this.selectedDriverId = null;
-        this.updateConfirmButtonState();
+        this.driversList.innerHTML = `<div class="text-center text-slate-500 py-4">Memuat data supir...</div>`;
 
         try {
             const drivers = await fetchApi('/cso/available-drivers');
 
             if (drivers.length === 0) {
-                this.driversList.innerHTML = `
-            <div class="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700">
-                <p class="text-slate-500 font-medium">Antrian Kosong</p>
-                <p class="text-xs text-slate-400 mt-1">Belum ada supir yang terdaftar dalam antrian hari ini.</p>
-            </div>`;
+                this.driversList.innerHTML = `<div class="text-center p-4 text-slate-500">Tidak ada supir standby.</div>`;
                 return;
             }
 
-            // --- RENDER HTML ---
             let hasRejoinHeaderRendered = false;
 
             this.driversList.innerHTML = drivers.map((d, index) => {
                 const profile = d.driver_profile || {};
-                const rawStatus = (profile.status || '').toLowerCase(); // Ubah ke huruf kecil
-                const queueScore = profile.queue_score || 0; // Ambil nilai sort_order
+                const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
+                const queueScore = d.queue_score || 0;
 
-                // Hitung Nomor Urut Antrian (Index + 1)
-                const queueNumber = index + 1;
+                let badgeHtml = '';
+                // Hapus logic btnHtml untuk dashboard utama (READ ONLY)
+                let wrapperClass = '';
 
-
-                // Kita terima status 'standby' ATAU 'available' agar aman
-                const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
-
-                // Debugging Status Driver
-
-                let wrapperClass, badgeHtml, btnHtml, clickAttribute;
-
-                if (isStandby) {
-                    // STATUS OK: BISA DIKLIK
-                    wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-blue-400 cursor-pointer group';
-
-                    // Badge Hijau
-                    badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Standby</span>`;
-
-                    btnHtml = `<div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">Pilih</div>`;
-
-                    // PENTING: ID dipasang di sini
-                    clickAttribute = `data-driver-id="${d.id}"`;
-
+                // LOGIKA TAMPILAN BERDASARKAN STATUS
+                if (profile.status === 'standby' || profile.status === 'available') {
+                    // STATUS READY
+                    wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'; // Hapus cursor-pointer & hover effect berlebih
+                    badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Ready</span>`;
                 } else {
-                    // STATUS OFFLINE: TIDAK BISA DIKLIK
-                    wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60 cursor-not-allowed';
-
+                    // STATUS OFFLINE
+                    wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60';
                     badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
-
-                    btnHtml = `<div class="text-xs font-medium text-slate-400">Menunggu...</div>`;
-
-                    // PENTING: Tidak ada ID, jadi tidak bisa diklik
-                    clickAttribute = '';
                 }
 
                 const lineNumber = profile.line_number
@@ -381,7 +366,7 @@ class CsoApp {
 
                 return `
             ${separatorHtml}
-            <div ${clickAttribute} class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
+            <div class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
                     <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-lg font-bold text-slate-700 dark:text-slate-200">
@@ -401,37 +386,110 @@ class CsoApp {
                     </div>
                     <div class="flex flex-col items-end gap-2 pl-2">
                         ${badgeHtml}
-                        ${btnHtml}
+                        <!-- Tombol Pilih Dihapus untuk Main View -->
                     </div>
                 </div>
-                <div class="absolute inset-0 border-2 border-blue-600 rounded-xl opacity-0 pointer-events-none transition-opacity selection-ring"></div>
             </div>`;
             }).join('');
-
-            // --- PASANG LISTENER CLICK ---
-            const clickableCards = this.driversList.querySelectorAll('[data-driver-id]');
-
-            clickableCards.forEach(card => {
-                card.addEventListener('click', () => {
-                    const id = card.dataset.driverId;
-                    console.log('Driver Card Clicked. ID:', id);
-
-                    // Update State
-                    this.selectedDriverId = id;
-
-                    // Visual Feedback
-                    this.driversList.querySelectorAll('.selection-ring').forEach(el => el.classList.remove('opacity-100'));
-                    const ring = card.querySelector('.selection-ring');
-                    if (ring) ring.classList.add('opacity-100');
-
-                    this.updateConfirmButtonState();
-                });
-            });
 
         } catch (error) {
             console.error("Error render drivers:", error);
             this.driversList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
         }
+    }
+
+    // --- NEW: RENDER DRIVERS FOR SELECTION MODAL ---
+    async renderDriversForSelection() {
+        this.selectDriverList.innerHTML = `<div class="text-center text-slate-500 py-4">Memuat data supir...</div>`;
+
+        try {
+            const drivers = await fetchApi('/cso/available-drivers');
+
+            if (drivers.length === 0) {
+                this.selectDriverList.innerHTML = `<div class="text-center p-4 text-slate-500">Tidak ada supir standby saat ini.</div>`;
+                return;
+            }
+
+            let hasRejoinHeaderRendered = false;
+
+            this.selectDriverList.innerHTML = drivers.map((d, index) => {
+                const profile = d.driver_profile || {};
+
+                // Filter hanya yang Available/Standby untuk dipilih
+                const rawStatus = (profile.status || '').toLowerCase();
+                const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
+
+                if (!isStandby) return ''; // Skip offline drivers in selection modal
+
+                const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
+                const queueScore = d.queue_score || 0;
+
+                const lineNumber = profile.line_number
+                    ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
+                    : '';
+
+                // --- LOGIKA SEPARATOR REJOIN ---
+                let separatorHtml = '';
+                if (queueScore >= 1000 && !hasRejoinHeaderRendered) {
+                    hasRejoinHeaderRendered = true;
+                    separatorHtml = `
+                     <div class="relative py-4">
+                         <div class="absolute inset-0 flex items-center">
+                             <div class="w-full border-t border-slate-300 dark:border-slate-600 border-dashed"></div>
+                         </div>
+                         <div class="relative flex justify-center">
+                             <span class="bg-slate-100 dark:bg-slate-900 px-3 text-xs font-bold text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700 rounded-full">
+                                 Antrian Rejoin
+                             </span>
+                         </div>
+                     </div>`;
+                }
+
+                return `
+                ${separatorHtml}
+                <div class="relative w-full border border-emerald-100 dark:border-emerald-900 bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all mb-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3 overflow-hidden">
+                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">
+                                ${queueNumber}
+                            </div>
+                            <div class="min-w-0">
+                                <div class="flex items-center">
+                                    ${lineNumber}
+                                    <div class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${d.name}</div>
+                                </div>
+                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                                    <span>${profile.car_model || '-'}</span>
+                                    <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                                    <span class="font-mono">${profile.plate_number || '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="btn-select-final bg-primary-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-primary-700 active:scale-95 transition-transform" data-driver-id="${d.id}">
+                            PILIH
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            // Bind Click Events
+            this.selectDriverList.querySelectorAll('.btn-select-final').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const driverId = btn.dataset.driverId;
+                    this.finalizeOrder(driverId);
+                });
+            });
+
+        } catch (error) {
+            console.error("Error render selection drivers:", error);
+            this.selectDriverList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
+        }
+    }
+
+    openSelectDriverModal() {
+        this.selectDriverModal.classList.remove('hidden');
+        this.selectDriverModal.classList.add('flex');
+        this.renderDriversForSelection();
     }
 
     async renderHistory() {
@@ -453,7 +511,7 @@ class CsoApp {
 
             // Jika ada params, tambahkan ke URL (contoh: /cso/history?start_date=2024-01-01&end_date=...)
             if (params.toString()) {
-                url += `?${params.toString()}`;
+                url += `? ${params.toString()}`;
             }
 
             // 3. Panggil API
@@ -461,7 +519,7 @@ class CsoApp {
 
             if (transactions.length === 0) {
                 this.historyList.innerHTML = `
-                    <div class="text-center py-10">
+            <div class="text-center py-10">
                         <div class="bg-slate-50 dark:bg-slate-800/50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                         </div>
@@ -498,17 +556,17 @@ class CsoApp {
                     case 'Assigned':
                         statusText = 'Sedang Menjemput';
                         statusBadge = 'bg-yellow-100 text-yellow-700 border-yellow-200';
-                        statusIcon = `<svg class="w-3 h-3 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                        statusIcon = `<svg class="w-3 h-3 animate-bounce" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg > `;
                         break;
                     case 'OnTrip': // Perlu update di sisi Driver App nanti
                         statusText = 'Dalam Perjalanan';
                         statusBadge = 'bg-blue-100 text-blue-700 border-blue-200';
-                        statusIcon = `<svg class="w-3 h-3 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>`;
+                        statusIcon = `<svg class="w-3 h-3 animate-pulse" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg > `;
                         break;
                     case 'Completed': // Perlu update di sisi Driver App nanti
                         statusText = 'Selesai';
                         statusBadge = 'bg-emerald-100 text-emerald-700 border-emerald-200';
-                        statusIcon = `<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`;
+                        statusIcon = `<svg class="w-3 h-3" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg > `;
                         break;
                     case 'Cancelled':
                         statusText = 'Dibatalkan';
@@ -521,22 +579,22 @@ class CsoApp {
                 }
 
                 // Line Number Supir
-                const lineDisplay = profile.line_number ? `<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded ml-1">#L${profile.line_number}</span>` : '';
+                const lineDisplay = profile.line_number ? `<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded ml-1" > #L${profile.line_number}</span > ` : '';
 
                 // Tombol Lihat Bukti (Hanya jika QRIS & Ada Bukti)
 
                 let btnProof = '';
                 if (tx.method === 'QRIS' && tx.payment_proof) {
-                    const proofUrl = `/storage/${tx.payment_proof}`;
+                    const proofUrl = `/ storage / ${tx.payment_proof} `;
                     btnProof = `
-                    <button class="btn-view-proof flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 transition-colors mr-3" data-proof-url="${proofUrl}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                        Bukti
-                    </button>`;
+            <button class="btn-view-proof flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 transition-colors mr-3" data - proof - url="${proofUrl}" >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg>
+        Bukti
+                    </button > `;
                 }
 
                 return `
-                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-3 transition-all hover:shadow-md">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-3 transition-all hover:shadow-md" >
                     
                     <div class="flex justify-between items-start mb-3">
                         <div>
@@ -584,7 +642,7 @@ class CsoApp {
                             </button>
                         </div>
                     </div>
-                </div>`;
+                </div > `;
             }).join('');
 
             // Re-bind listener tombol struk
@@ -613,7 +671,7 @@ class CsoApp {
 
         } catch (error) {
             console.error(error);
-            this.historyList.innerHTML = `<div class="text-center text-red-500 p-8">Gagal memuat riwayat.</div>`;
+            this.historyList.innerHTML = `< div class="text-center text-red-500 p-8" > Gagal memuat riwayat.</div > `;
         }
     }
 
@@ -622,31 +680,38 @@ class CsoApp {
     updatePrice() {
         const zoneId = this.toSel.value;
         const zone = this.zones.find(z => z.id == zoneId);
-        this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-'; // <-- Gunakan Utils
+        this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-';
+
+        // RESET PAYMENT jika ganti tujuan
+        this.paymentVerified = false;
+        this.pendingPaymentPayload = null;
+        // Tidak perlu re-render drivers karena Dashboard hanya Read-Only sekarang
+        // this.renderDrivers(); 
+
         this.updateConfirmButtonState();
     }
     updateConfirmButtonState() {
         const zoneId = this.toSel.value;
-        this.btnConfirm.disabled = !zoneId || !this.selectedDriverId;
+        // Tombol hanya butuh Zone ID, tidak butuh Driver ID lagi
+        this.btnConfirm.disabled = !zoneId;
+        this.btnConfirm.textContent = this.paymentVerified ? 'Pembayaran Selesai' : 'Input Pembayaran';
+
+        if (this.paymentVerified) {
+            this.btnConfirm.classList.add('bg-green-600', 'text-white');
+            this.btnConfirm.disabled = true; // Disable jika sudah bayar
+        } else {
+            this.btnConfirm.classList.remove('bg-green-600', 'text-white');
+        }
     }
 
     async processBooking() {
-        console.log('--- processBooking Triggered ---');
-        console.log('Current selectedDriverId:', this.selectedDriverId);
+        console.log('--- processBooking (Payment Phase) Triggered ---');
         console.log('Current Zone Value:', this.toSel.value);
 
-        // Cek Logika
-        if (!this.selectedDriverId || !this.toSel.value) {
-            console.warn('Validation Failed: Driver or Zone missing');
-
-            // Pesan error lebih spesifik
-            let msg = 'Data belum lengkap:\n';
-            if (!this.toSel.value) msg += '- Tujuan belum dipilih\n';
-            if (!this.selectedDriverId) msg += '- Supir belum dipilih';
-
-            alert(msg);
-            console.log('Alert shown, returning now...');
-            return; // STOP EXECUTION
+        // Cek Logika: HANYA BUTUH ZONE
+        if (!this.toSel.value) {
+            alert('Tujuan belum dipilih');
+            return;
         }
 
         console.log('Validation Passed. Proceeding to openPayment.');
@@ -661,7 +726,7 @@ class CsoApp {
         }
 
         this.selectedOrderData = {
-            driver_id: this.selectedDriverId,
+            // driver_id: this.selectedDriverId, // <-- SKIP DRIVER
             zone_id: zoneId,
             price: zoneObj.price,
             zone_name: zoneObj.name
@@ -680,7 +745,7 @@ class CsoApp {
 
         // Tampilkan Info di Modal
         this.payInfo.innerHTML = `
-        <div class="space-y-1">
+            <div class="space-y-1">
             <div class="flex justify-between"><span>Rute:</span> <span class="font-semibold text-right">Bandara → ${this.selectedOrderData.zone_name}</span></div>
             <div class="flex justify-between"><span>Tarif:</span> <span class="font-semibold">${Utils.formatCurrency(this.selectedOrderData.price)}</span></div>
         </div>`;
@@ -761,50 +826,74 @@ class CsoApp {
             return;
         }
 
-        // Format HP (08xx -> 628xx)
-        phone = phone.replace(/\D/g, ''); // Hapus karakter non-angka
-        // if (phone.startsWith('0')) {
-        //     phone = '62' + phone.substring(1);
-        // }
+        phone = phone.replace(/\D/g, '');
         if (phone.length < 10) {
             Utils.showToast('Nomor HP tidak valid.', 'error');
             return;
         }
-        console.log(phone)
 
-        // Setup Loading UI
-        let originalBtnText = '';
-        let btnElement = null;
-
-        // Tentukan tombol mana yang sedang loading
-        if (method === 'QRIS') {
-            btnElement = this.btnConfirmQR;
-        } else if (method === 'CashCSO') {
-            btnElement = this.btnCashCSO;
-        } else if (method === 'CashDriver') {
-            btnElement = this.btnCashDriver;
-        }
-
-        if (btnElement) {
-            originalBtnText = btnElement.innerHTML; // Simpan HTML asli (termasuk icon)
-            btnElement.textContent = 'Memproses...';
-            btnElement.disabled = true;
-        }
+        // --- NEW FLOW: JANGAN KIRIM KE API DULU ---
+        // Simpan data pembayaran ke state
 
         try {
-            const formData = new FormData();
-            formData.append('driver_id', this.selectedOrderData.driver_id);
-            formData.append('zone_id', this.selectedOrderData.zone_id);
-            formData.append('method', method);
-            formData.append('passenger_phone', phone); // <--- KIRIM NO HP
-
+            // Validasi Khusus QRIS
+            let proofFile = null;
             if (method === 'QRIS') {
                 const file = this.proofInput.files[0];
                 if (!file) throw new Error("Wajib foto bukti transfer QRIS.");
-                formData.append('payment_proof', file);
+                proofFile = file;
+            }
+
+            // Simpan State
+            this.pendingPaymentPayload = {
+                zone_id: this.selectedOrderData.zone_id,
+                method: method,
+                passenger_phone: phone,
+                payment_proof: proofFile
+            };
+
+            this.paymentVerified = true;
+            this.closePayment();
+
+            Utils.showToast('Pembayaran OK. Silakan pilih supir.', 'success');
+
+            // BUKA MODAL PILIH SUPIR
+            this.openSelectDriverModal();
+
+            this.updateConfirmButtonState(); // Disable tombol pembayaran
+
+        } catch (error) {
+            console.error(error);
+            Utils.showToast(error.message, 'error');
+        }
+    }
+
+    // --- FINALISASI ORDER (DIPANGGIL SAAT PILIH SUPIR) ---
+    async finalizeOrder(driverId) {
+        if (!this.paymentVerified || !this.pendingPaymentPayload) {
+            Utils.showToast('Selesaikan pembayaran terlebih dahulu!', 'error');
+            return;
+        }
+
+        if (!confirm('Assign order ke supir ini?')) return;
+
+        const payload = this.pendingPaymentPayload;
+
+        try {
+            const formData = new FormData();
+            formData.append('driver_id', driverId);
+            formData.append('zone_id', payload.zone_id);
+            formData.append('method', payload.method);
+            formData.append('passenger_phone', payload.passenger_phone);
+
+            if (payload.payment_proof) {
+                formData.append('payment_proof', payload.payment_proof);
             }
 
             const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            // Show Loading Indicator (Global or Toast)
+            Utils.showToast('Memproses Order...', 'info');
 
             const response = await fetch('/api/cso/process-order', {
                 method: 'POST',
@@ -819,24 +908,33 @@ class CsoApp {
 
             const result = await response.json();
 
-            Utils.showToast('Order Sukses! Notifikasi WA terkirim.', 'success');
+            Utils.showToast('Order berhasil dibuat!', 'success');
 
-            // Tampilkan Struk (Hanya untuk preview, tombol cetak sudah dihapus)
-            this.lastReceiptData = result.data;
-            this.showReceipt(this.lastReceiptData);
+            // Tutup Modal Select Driver
+            this.selectDriverModal.classList.add('hidden');
 
-            this.closePayment();
-            this.renderDrivers();
+            // Reset
+            this.paymentVerified = false;
+            this.pendingPaymentPayload = null;
+            this.selectedDriverId = null;
+            this.toSel.value = ''; // Reset pilihan zona
+            this.priceBox.textContent = '-';
+            this.inpPassengerPhone.value = '';
+
+            // Render Ulang
             this.renderHistory();
+            this.renderDrivers(); // Refresh antrian di dashboard
+
+            // Tampilkan Struk
+            // Pastikan result.data berisi objek yang sesuai untuk struk
+            if (result.data) {
+                this.lastReceiptData = result.data;
+                this.showReceipt(this.lastReceiptData);
+            }
 
         } catch (error) {
             console.error(error);
             Utils.showToast(error.message, 'error');
-        } finally {
-            if (btnElement) {
-                btnElement.innerHTML = originalBtnText;
-                btnElement.disabled = false;
-            }
         }
     }
     showReceipt(txOrBookingObject) {
@@ -890,7 +988,7 @@ class CsoApp {
 
             // D. Gunakan Skema 'intent:' (Lebih stabil daripada 'rawbt:')
             // Format: intent:base64,{DATA}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;
-            const intentUrl = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.browser_fallback_url=${window.location.href};end;`;
+            const intentUrl = `intent: base64, ${base64Data} #Intent; scheme = rawbt; package = ru.a402d.rawbtprinter; S.browser_fallback_url = ${window.location.href}; end; `;
 
             window.location.href = intentUrl;
 
@@ -975,7 +1073,7 @@ class CsoApp {
             // 6. Buka WhatsApp
             // Beri jeda sedikit agar download selesai dulu
             setTimeout(() => {
-                const message = `Halo, berikut adalah struk pembayaran taksi Anda (Kode: #${code}). Silakan unduh file PDF di atas. Terima kasih.`;
+                const message = `Halo, berikut adalah struk pembayaran taksi Anda(Kode: #${code}).Silakan unduh file PDF di atas.Terima kasih.`;
                 const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
                 // Buka WA di tab baru
@@ -1229,30 +1327,33 @@ class CsoApp {
         this.qrisBox.classList.remove('hidden');
         this.qrisBox.scrollIntoView({
             behavior: 'smooth', block: 'center'
+        });
+    }
+
     // --- HELPER UNTUK GANTI SUPIR (CHANGE DRIVER) ---
 
     renderChangeDriverButton(booking, status) {
-                // Hanya tampil jika status Assigned
-                if (status !== 'Assigned') return '';
+        // Hanya tampil jika status Assigned
+        if (status !== 'Assigned') return '';
 
-                // Hitung selisih waktu
-                const created = new Date(booking.created_at);
-                const now = new Date();
-                const diffMs = now - created;
-                const diffMins = Math.floor(diffMs / 60000);
-                const TIMEOUT_MINS = 10;
+        // Hitung selisih waktu
+        const created = new Date(booking.created_at);
+        const now = new Date();
+        const diffMs = now - created;
+        const diffMins = Math.floor(diffMs / 60000);
+        const TIMEOUT_MINS = 10;
 
-                // Button State
-                let disabled = diffMins < TIMEOUT_MINS;
-                let btnClass = disabled
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
-                    : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-200 shadow-sm';
+        // Button State
+        let disabled = diffMins < TIMEOUT_MINS;
+        let btnClass = disabled
+            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+            : 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-200 shadow-sm';
 
-                let label = disabled
-                    ? `Tunggu ${TIMEOUT_MINS - diffMins}m`
-                    : 'Ganti Supir';
+        let label = disabled
+            ? `Tunggu ${TIMEOUT_MINS - diffMins}m`
+            : 'Ganti Supir';
 
-                return `
+        return `
         <button class="btn-change-driver px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1 ${btnClass}" 
             ${disabled ? 'disabled' : ''} 
             data-booking-id="${booking.id}">
@@ -1261,70 +1362,68 @@ class CsoApp {
             </svg>
             ${label}
         </button>`;
-            }
+    }
 
     async openChangeDriverModal(bookingId) {
-                this.selectedBookingIdForChange = bookingId;
-                this.changeDriverModal.classList.remove('hidden');
-                this.changeDriverList.innerHTML = '<div class="p-4 text-center text-slate-500">Memuat supir...</div>';
+        this.selectedBookingIdForChange = bookingId;
+        this.changeDriverModal.classList.remove('hidden');
+        this.changeDriverModal.classList.add('flex');
+        this.changeDriverList.innerHTML = '<div class="p-4 text-center text-slate-500">Memuat supir...</div>';
 
-                try {
-                    const drivers = await fetchApi('/cso/available-drivers');
+        try {
+            const drivers = await fetchApi('/cso/available-drivers');
 
-                    if (drivers.length === 0) {
-                        this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500">Tidak ada supir standby.</div>';
-                        return;
-                    }
+            if (drivers.length === 0) {
+                this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500">Tidak ada supir standby.</div>';
+                return;
+            }
 
-                    this.changeDriverList.innerHTML = drivers.map(d => {
-                        const profile = d.driver_profile || {};
-                        return `
-                <div class="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" onclick="app.doChangeDriver(${d.id})">
+            this.changeDriverList.innerHTML = drivers.map(d => {
+                const profile = d.driver_profile || {};
+                return `
+                <div class="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" onclick="window.app.doChangeDriver(${d.id})">
                     <div>
                         <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
                         <div class="text-xs text-slate-500">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
                     </div>
                     <button class="text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg font-bold">Pilih</button>
                 </div>`;
-                    }).join('');
+            }).join('');
 
-                } catch (e) {
-                    this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500 error">Gagal memuat supir.</div>';
-                }
-            }
+        } catch (e) {
+            this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500 error">Gagal memuat supir.</div>';
+        }
+    }
 
     async doChangeDriver(newDriverId) {
-                if (!confirm('Yakin ingin mengalihkan order ke supir ini?')) return;
+        if (!confirm('Yakin ingin mengalihkan order ke supir ini?')) return;
 
-                try {
-                    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                    const res = await fetch(`/api/cso/bookings/${this.selectedBookingIdForChange}/change-driver`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': token
-                        },
-                        body: JSON.stringify({ new_driver_id: newDriverId })
-                    });
+        try {
+            const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const res = await fetch(`/api/cso/bookings/${this.selectedBookingIdForChange}/change-driver`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': token
+                },
+                body: JSON.stringify({ new_driver_id: newDriverId })
+            });
 
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.message || 'Gagal ganti supir');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Gagal ganti supir');
 
-                    Utils.showToast('Supir berhasil diganti!', 'success');
-                    this.changeDriverModal.classList.add('hidden');
-                    this.renderHistory(); // Refresh list
+            Utils.showToast('Supir berhasil diganti!', 'success');
+            this.changeDriverModal.classList.add('hidden');
+            this.changeDriverModal.classList.remove('flex');
+            this.renderHistory(); // Refresh list
 
-                } catch (e) {
-                    Utils.showToast(e.message, 'error');
-                }
-            }
+        } catch (e) {
+            Utils.showToast(e.message, 'error');
         }
+    }
 
-// Expose app instance globally so inline onclick works
-window.app = new CsoApp();
-        window.app.init(););
-
+    checkGlobalQris() {
         // Cek Global QRIS URL
         if (window.companyQrisUrl) {
             this.paymentQrisImage.src = window.companyQrisUrl;
@@ -1339,11 +1438,10 @@ window.app = new CsoApp();
             Utils.showToast('Global QRIS belum diatur oleh Admin.', 'error');
         }
     }
-
-
-
 }
 
-
+// Expose app instance globally so inline onclick works
+window.app = new CsoApp();
+window.app.init();
 
 export { CsoApp };

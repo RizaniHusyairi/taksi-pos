@@ -302,8 +302,7 @@ class CsoApiController extends Controller
                     . "Lihat struk digital Anda di sini:\n"
                     . "$receiptUrl\n\n"
                     . "Selamat menikmati perjalanan!";
-                
-                WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
+            WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
             }
 
             // --- B. KIRIM WA KE DRIVER ---
@@ -327,6 +326,38 @@ class CsoApiController extends Controller
                 Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
             }
 
+            // --- D. NOTIFIKASI FCM KE DRIVER APP ---
+            if ($driver->fcm_token) {
+                try {
+                    // Gunakan FCM Legacy API atau HTTP v1 jika sudah dikonfigurasi
+                    // Di sini kita gunakan Legacy API untuk kemudahan implementasi cepat
+                    // Pastikan key ada di .env: FCM_SERVER_KEY
+                    $fcmKey = env('FCM_SERVER_KEY');
+                    
+                    if ($fcmKey) {
+                        \Illuminate\Support\Facades\Http::withHeaders([
+                            'Authorization' => 'key=' . $fcmKey,
+                            'Content-Type'  => 'application/json',
+                        ])->post('https://fcm.googleapis.com/fcm/send', [
+                            'to' => $driver->fcm_token,
+                            'notification' => [
+                                'title' => 'Order Baru Masuk! 🚖',
+                                'body' => "Tujuan: $zoneName - Penumpang menunggu.",
+                                'sound' => 'default',
+                                'priority' => 'high',
+                            ],
+                            'data' => [
+                                'type' => 'new_order',
+                                'booking_id' => (string) $result->id,
+                                'zone_price' => (string) $result->price,
+                                'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+                            ]
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error("FCM Error: " . $e->getMessage());
+                }
+            }
         } catch (\Exception $e) {
             Log::error("Notifikasi Gagal: " . $e->getMessage());
         }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "261045277933",
+    "project_id": "taksi-pos",
+    "storage_bucket": "taksi-pos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:261045277933:android:04f3697eeb7a35330268e4",
+        "android_client_info": {
+          "package_name": "com.example.driver_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSqEpfcn4yOhIR3zh3dk6mtbsv2N9t7Rg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

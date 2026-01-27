@@ -3,11 +3,25 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
-import 'providers/auth_provider.dart';
-import 'screens/login_screen.dart';
-import 'screens/main_screen.dart'; // Import MainScreen
+import 'screens/main_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/notification_service.dart';
+import 'services/api_service.dart';
 
-void main() {
+// Key Global untuk Navigasi tanpa Context
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp(); // Init Firebase
+    print("Firebase Initialized Successfully");
+  } catch (e) {
+    print("Firebase Initialization Failed: $e");
+    // Lanjutkan loading app meski Firebase gagal, agar tidak stuck black screen
+  }
+
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
@@ -23,6 +37,7 @@ class DriverApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Taksi POS Driver',
+      navigatorKey: navigatorKey, // Pasang navigatorKey
       theme: ThemeData(
         brightness: Brightness.dark,
         primaryColor: const Color(0xFF1A1A1A),
@@ -52,7 +67,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Check login status on app start
+
+    // 1. Init Notification Service
+    NotificationService().initialize(ApiService(), (payload) {
+      // Handle Navigation on Tap
+      print("Navigate by Notification payload: $payload");
+      if (payload == 'new_order') {
+        // Navigasi ke MainScreen (Home)
+        // Karena kita pakai Global Key, kita bisa navigasi dari mana saja
+        navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+          (route) => false, // Hapus stack lama
+        );
+      }
+    });
+
+    // 2. Check login status
     Future.microtask(
       () =>
           Provider.of<AuthProvider>(context, listen: false).checkLoginStatus(),

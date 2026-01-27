@@ -33,6 +33,7 @@ class User extends Authenticatable
         'phone_number',
         'qris_path',
         'password',
+        'fcm_token',
     ];
 
     /**
