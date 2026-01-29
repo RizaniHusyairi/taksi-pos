@@ -484,8 +484,6 @@ class DriverApiController extends Controller
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
         $radius = config('taksi.driver_queue.radius_km');
         $inArea = ($distance <= $radius);
-
-
         
         // 3. Logika Auto-Join & Grace Period
         // Global Warning: Jika diluar area saat standby -> Cek Grace Period
@@ -499,8 +497,10 @@ class DriverApiController extends Controller
              } else {
                  // Cek durasi
                  $outSince = \Carbon\Carbon::parse($profile->out_of_area_since);
-                 $diffInSeconds = now()->diffInSeconds($outSince);
-                 $gracePeriodSeconds = 3600; // 60 Menit * 60 Detik
+                 
+                 // Gunakan timestamp agar hasil pasti integer dan positif
+                 $diffInSeconds = now()->timestamp - $outSince->timestamp;
+                 $gracePeriodSeconds = 3600; 
                  
                  if ($diffInSeconds >= $gracePeriodSeconds) {
                      // AUTO KICK
@@ -517,7 +517,7 @@ class DriverApiController extends Controller
                      ]);
                  }
                  
-                 $remainingTime = $gracePeriodSeconds - $diffInSeconds;
+                 $remainingTime = (int) ($gracePeriodSeconds - $diffInSeconds);
              }
         } elseif ($profile->status === 'standby' && $inArea) {
              // Jika kembali ke area -> Reset Grace Period
