@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class ApiService {
   // Use 10.0.2.2 for Android Emulator to access localhost
   // Use your machine's IP (e.g., 10.49.92.29) if testing on physical device
-  static const String baseUrl = 'http://192.168.1.13:8000/api';
+  static const String baseUrl = 'http://10.157.190.17:8000/api';
 
   late Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
