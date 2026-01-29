@@ -516,14 +516,37 @@ class _WalletScreenState extends State<WalletScreen> {
                           ),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              DateFormat(
-                                'dd MMM yyyy, HH:mm',
-                              ).format(DateTime.parse(item['requested_at'])),
-                              style: GoogleFonts.outfit(
-                                color: Colors.white38,
-                                fontSize: 12,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  DateFormat('dd MMM yyyy, HH:mm').format(
+                                    DateTime.parse(item['requested_at']),
+                                  ),
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white38,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (item['proof_image_url'] != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: InkWell(
+                                      onTap: () => _showProofDialog(
+                                        context,
+                                        item['proof_image_url'],
+                                      ),
+                                      child: Text(
+                                        "Lihat Bukti Transfer",
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.blueAccent,
+                                          fontSize: 12,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           trailing: Container(
@@ -555,6 +578,60 @@ class _WalletScreenState extends State<WalletScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  void _showProofDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      height: 200,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      child: const CircularProgressIndicator(),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 100,
+                    width: double.infinity,
+                    color: Colors.grey[200],
+                    alignment: Alignment.center,
+                    child: const Text(
+                      "Gagal memuat gambar",
+                      style: TextStyle(color: Colors.black),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            CircleAvatar(
+              backgroundColor: Colors.white24,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

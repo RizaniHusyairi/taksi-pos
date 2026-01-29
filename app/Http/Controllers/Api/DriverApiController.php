@@ -253,7 +253,8 @@ class DriverApiController extends Controller
 
         // 1. Hitung Pemasukan (Uang di Sistem) - QRIS & CashCSO yang statusnya 'Unpaid'
         $pendingIncome = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id);
+                $q->where('driver_id', $driver->id)
+                  ->where('status', 'Completed');
             })
             ->whereIn('method', ['QRIS', 'CashCSO'])
             ->where('payout_status', 'Unpaid')
@@ -267,6 +268,7 @@ class DriverApiController extends Controller
         // A. Booking via Sistem (Ada Zone ID) -> Kena Rate Komisi
         $standardDebt = Transaction::whereHas('booking', function ($q) use ($driver) {
                 $q->where('driver_id', $driver->id)
+                  ->where('status', 'Completed')
                   ->whereNotNull('zone_id'); // Syarat: Ada Zona
             })
             ->where('method', 'CashDriver')
@@ -278,6 +280,7 @@ class DriverApiController extends Controller
         // B. Booking Manual (Penumpang Sendiri / Zone ID Null) -> Flat Fee 10.000
         $manualCount = Transaction::whereHas('booking', function ($q) use ($driver) {
                 $q->where('driver_id', $driver->id)
+                  ->where('status', 'Completed')
                   ->whereNull('zone_id'); // Syarat: Tidak Ada Zona (Manual)
             })
             ->where('method', 'CashDriver')
@@ -414,7 +417,15 @@ class DriverApiController extends Controller
     {
         $withdrawals = $request->user()->withdrawals()
             ->orderBy('requested_at', 'desc')
-            ->get();
+            ->get()
+            ->map(function ($withdrawal) {
+                 if ($withdrawal->proof_image) {
+                     $withdrawal->proof_image_url = asset('storage/' . $withdrawal->proof_image);
+                 } else {
+                     $withdrawal->proof_image_url = null;
+                 }
+                 return $withdrawal;
+            });
         return response()->json($withdrawals);
     }
 
