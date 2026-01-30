@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/notification_service.dart';
 import '../services/api_service.dart';
 import 'package:dio/dio.dart';
 
@@ -21,6 +22,9 @@ class AuthProvider with ChangeNotifier {
       try {
         await fetchProfile();
         _isAuthenticated = true;
+
+        // Sync FCM Token
+        _updateFcmToken();
       } catch (e) {
         // Token might be invalid
         await logout();
@@ -45,6 +49,9 @@ class AuthProvider with ChangeNotifier {
 
       // Initial Fetch Profile to get Status etc
       await fetchProfile();
+
+      // Sync FCM
+      await _updateFcmToken();
 
       _isLoading = false;
       notifyListeners();
@@ -81,5 +88,17 @@ class AuthProvider with ChangeNotifier {
     _isAuthenticated = false;
     _user = null;
     notifyListeners();
+  }
+
+  Future<void> _updateFcmToken() async {
+    try {
+      final token = await NotificationService().getFcmToken();
+      if (token != null) {
+        await _apiService.updateFcmToken(token);
+        print("FCM Token synced with backend");
+      }
+    } catch (e) {
+      print("Failed to sync FCM Token: $e");
+    }
   }
 }

@@ -65,6 +65,21 @@ class NotificationService {
       },
     );
 
+    // Create High Importance Channel explicitly
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel', // id
+      'High Importance Notifications', // title
+      description: 'This channel is used for important notifications.',
+      importance: Importance.max,
+      playSound: true,
+    );
+
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(channel);
+
     // 3. Register Background Handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -77,7 +92,8 @@ class NotificationService {
       AndroidNotification? android = message.notification?.android;
 
       // Show Local Notification
-      if (notification != null && android != null) {
+      if (notification != null) {
+        print("Displaying local notification: ${notification.title}");
         _localNotifications.show(
           notification.hashCode,
           notification.title,
@@ -89,11 +105,14 @@ class NotificationService {
               importance: Importance.max,
               priority: Priority.high,
               playSound: true,
+              icon: '@mipmap/ic_launcher',
             ),
           ),
           payload:
               message.data['type'] ?? 'default', // Pass payload for navigation
         );
+      } else {
+        print("Notification content is null");
       }
     });
 
@@ -117,25 +136,23 @@ class NotificationService {
       onNavigate(message.data['type'] ?? 'default');
     });
 
-    // 6. Get Token & Update Backend
+    // 6. Get Token (Don't send yet, AuthProvider will do it)
     String? token = await _firebaseMessaging.getToken();
     print("FCM Token: $token");
-    if (token != null) {
-      try {
-        await apiService.updateFcmToken(token);
-        print("FCM Token sent to backend");
-      } catch (e) {
-        print("Failed to send FCM Token: $e");
-      }
-    }
 
     // Listen for Token Refresh
     _firebaseMessaging.onTokenRefresh.listen((newToken) async {
       try {
+        // Only update if we can (ApiService interceptor handles Auth header)
+        // If 401, it means not logged in, which is fine.
         await apiService.updateFcmToken(newToken);
       } catch (err) {
         print("Error updating token: $err");
       }
     });
+  }
+
+  Future<String?> getFcmToken() async {
+    return await _firebaseMessaging.getToken();
   }
 }

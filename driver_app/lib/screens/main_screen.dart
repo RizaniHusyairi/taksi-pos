@@ -27,7 +27,7 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
-      body: _screens[_currentIndex],
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.black,
         selectedItemColor: const Color(0xFFD4AF37),

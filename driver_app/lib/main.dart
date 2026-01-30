@@ -7,6 +7,7 @@ import 'screens/main_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'services/api_service.dart';
+import 'services/background_service.dart';
 
 // Key Global untuk Navigasi tanpa Context
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -21,6 +22,9 @@ void main() async {
     print("Firebase Initialization Failed: $e");
     // Lanjutkan loading app meski Firebase gagal, agar tidak stuck black screen
   }
+
+  // Init Background Service
+  await initializeBackgroundService();
 
   runApp(
     MultiProvider(

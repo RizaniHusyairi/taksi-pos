@@ -2,12 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:geolocator/geolocator.dart';
+
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
-import 'package:dio/dio.dart';
+
+import 'package:flutter_background_service/flutter_background_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _locationTimer?.cancel();
     _countdownTimer?.cancel();
+    _serviceSubscription?.cancel();
     super.dispose();
   }
 
@@ -56,71 +58,74 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // Listen to background service
+  StreamSubscription? _serviceSubscription;
+
   Future<void> _startLocationService() async {
     var status = await Permission.location.request();
     if (status.isGranted) {
-      _locationTimer = Timer.periodic(const Duration(seconds: 30), (
-        timer,
-      ) async {
-        await _sendLocationUpdate();
+      final service = FlutterBackgroundService();
+
+      // Ensure service is running
+      if (!await service.isRunning()) {
+        service.startService();
+      }
+
+      // Trigger start tracking (in case it paused)
+      service.invoke('startTracking');
+
+      // Listen for updates
+      _serviceSubscription = service.on('update').listen((data) {
+        if (data != null) {
+          _processLocationUpdate(data);
+        }
       });
-      _sendLocationUpdate();
     } else {
       if (mounted) setState(() => _locationStatus = "Izin GPS Ditolak");
     }
   }
 
-  Future<void> _sendLocationUpdate() async {
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  void _processLocationUpdate(Map<String, dynamic> data) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      final response = await _apiService.updateLocation(
-        position.latitude,
-        position.longitude,
-      );
+    final inArea = data['in_area'] ?? false;
+    var remainingRaw = data['remaining_time'];
+    int? remaining;
+    if (remainingRaw != null) {
+      remaining = int.tryParse(remainingRaw.toString());
+    }
+    final statusResp = data['status'];
 
-      final inArea = response.data['in_area'] ?? false;
-      var remainingRaw = response.data['remaining_time'];
-      int? remaining;
-      if (remainingRaw != null) {
-        remaining = int.tryParse(remainingRaw.toString());
+    if (mounted) {
+      setState(() {
+        _locationStatus =
+            "GPS: ${TimeOfDay.now().format(context)} (Background)";
+        _isInArea = inArea;
+        _remainingTimeSeconds = remaining; // Sync with server
+      });
+
+      // Auto-refresh profile if auto-joined
+      if (statusResp == 'standby' &&
+          authProvider.user?['driver_profile']['status'] == 'offline') {
+        authProvider.fetchProfile();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Anda memasuki area. Otomatis masuk antrian!"),
+          ),
+        );
       }
 
-      if (mounted) {
-        setState(() {
-          _locationStatus = "GPS: ${TimeOfDay.now().format(context)}";
-          _isInArea = inArea;
-          _remainingTimeSeconds = remaining; // Sync with server
-        });
-
-        // Auto-refresh profile if auto-joined
-        if (response.data['status'] == 'standby' &&
-            authProvider.user?['driver_profile']['status'] == 'offline') {
-          authProvider.fetchProfile();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Anda memasuki area. Otomatis masuk antrian!"),
-            ),
-          );
-        }
-
-        // Auto-kick notification
-        if (response.data['status'] == 'offline' &&
-            authProvider.user?['driver_profile']['status'] == 'standby') {
-          authProvider.fetchProfile();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response.data['message'] ?? "Antrian Hangus"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      // Auto-kick notification
+      if (statusResp == 'offline' &&
+          authProvider.user?['driver_profile']['status'] == 'standby') {
+        authProvider.fetchProfile();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data['message'] ?? "Antrian Hangus"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-    } catch (e) {
-      // Silent error
     }
   }
 
@@ -255,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user?['name'] ?? 'Driver',
+                            "${user?['name'] ?? 'Driver'} (ID: ${user?['id']})",
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
                               color: Colors.white,

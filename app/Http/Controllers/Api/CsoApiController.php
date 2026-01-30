@@ -326,36 +326,62 @@ class CsoApiController extends Controller
                 Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
             }
 
-            // --- D. NOTIFIKASI FCM KE DRIVER APP ---
+            // --- D. NOTIFIKASI FCM KE DRIVER APP (HTTP v1) ---
             if ($driver->fcm_token) {
                 try {
-                    // Gunakan FCM Legacy API atau HTTP v1 jika sudah dikonfigurasi
-                    // Di sini kita gunakan Legacy API untuk kemudahan implementasi cepat
-                    // Pastikan key ada di .env: FCM_SERVER_KEY
-                    $fcmKey = env('FCM_SERVER_KEY');
+                    $credentialsPath = storage_path('app/firebase_credentials.json');
                     
-                    if ($fcmKey) {
-                        \Illuminate\Support\Facades\Http::withHeaders([
-                            'Authorization' => 'key=' . $fcmKey,
+                    if (!file_exists($credentialsPath)) {
+                        Log::error("FCM Error: Credentials file not found at $credentialsPath");
+                    } else {
+                        // 1. Get Access Token
+                        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
+                        $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials(
+                            $scopes,
+                            $credentialsPath
+                        );
+                        $token = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build());
+                        $accessToken = $token['access_token'];
+
+                        // 2. Get Project ID
+                        $json = json_decode(file_get_contents($credentialsPath), true);
+                        $projectId = $json['project_id'];
+
+                        // 3. Send Notification (v1 syntax)
+                        Log::info("Sending FCM v1 to Driver: {$driver->id}");
+
+                        $response = \Illuminate\Support\Facades\Http::withHeaders([
+                            'Authorization' => 'Bearer ' . $accessToken,
                             'Content-Type'  => 'application/json',
-                        ])->post('https://fcm.googleapis.com/fcm/send', [
-                            'to' => $driver->fcm_token,
-                            'notification' => [
-                                'title' => 'Order Baru Masuk! 🚖',
-                                'body' => "Tujuan: $zoneName - Penumpang menunggu.",
-                                'sound' => 'default',
-                                'priority' => 'high',
-                            ],
-                            'data' => [
-                                'type' => 'new_order',
-                                'booking_id' => (string) $result->id,
-                                'zone_price' => (string) $result->price,
-                                'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+                        ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
+                            'message' => [
+                                'token' => $driver->fcm_token,
+                                'notification' => [
+                                    'title' => 'Order Baru Masuk! 🚖',
+                                    'body' => "Tujuan: $zoneName - Penumpang menunggu.",
+                                ],
+                                'data' => [
+                                    'type' => 'new_order',
+                                    'booking_id' => (string)$booking->id,
+                                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                ],
+                                'android' => [
+                                    'priority' => 'HIGH',
+                                    'notification' => [
+                                        'channel_id' => 'high_importance_channel',
+                                        // 'sound' => 'default', // default_sound: true takes care of this
+                                        'default_sound' => true,
+                                        'default_vibrate_timings' => true,
+                                    ]
+                                ]
                             ]
                         ]);
+
+                        Log::info("FCM v1 Response: " . $response->status() . " | " . $response->body());
                     }
+
                 } catch (\Exception $e) {
-                    Log::error("FCM Error: " . $e->getMessage());
+                    Log::error("FCM v1 Error: " . $e->getMessage());
                 }
             }
         } catch (\Exception $e) {
