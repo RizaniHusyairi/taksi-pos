@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::delete('/users/{user}', [ApiController::class, 'adminDestroyUser']);
         Route::post('/users/{user}/toggle-status', [ApiController::class, 'adminToggleUserStatus']); // Untuk aktivasi/deaktivasi
         Route::get('/users/role/{role}', [ApiController::class, 'adminGetUsersByRole']);
+        Route::get('/drivers/{user}/activity', [ApiController::class, 'adminGetDriverActivity']);
 
         // Manajemen Keuangan
         Route::get('/transactions', [ApiController::class, 'adminGetTransactions']);

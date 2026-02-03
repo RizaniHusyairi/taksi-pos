@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class ApiService {
   // Use 10.0.2.2 for Android Emulator to access localhost
   // Use your machine's IP (e.g., 10.49.92.29) if testing on physical device
-  static const String baseUrl = 'http://192.168.1.23:8000/api';
+  static const String baseUrl = 'http://192.168.1.20:8000/api';
 
   late Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -67,6 +67,21 @@ class ApiService {
       '/driver/location',
       data: {'latitude': lat, 'longitude': lng},
     );
+  }
+
+  Future<Response> setStatus(
+    String action, {
+    String? reason,
+    String? manualDestination,
+    int? manualPrice,
+  }) async {
+    final Map<String, dynamic> data = {'action': action};
+    if (reason != null) data['reason'] = reason;
+    if (manualDestination != null)
+      data['manual_destination'] = manualDestination;
+    if (manualPrice != null) data['manual_price'] = manualPrice;
+
+    return await _dio.post('/driver/status', data: data);
   }
 
   Future<Response> getBalance() async {

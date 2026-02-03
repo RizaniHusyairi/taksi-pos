@@ -164,6 +164,12 @@ class CsoApiController extends Controller
             // 2. HAPUS DARI ANTRIAN (Kick from queue)
             DriverQueue::where('user_id', $validated['driver_id'])->delete();
 
+            // 3. LOG ACTIVITY (Supir)
+            $this->logDriverActivity($validated['driver_id'], 'ORDER_RECEIVED', 'Dapat Order dari CSO: ' . $cso->name . ' -> ' . $zone->name);
+            
+            // 4. LOG ACTIVITY (Keluar Antrian karena Order)
+            $this->logDriverActivity($validated['driver_id'], 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Dapat Order)');
+
             return $newBooking;
         });
 
@@ -433,4 +439,16 @@ class CsoApiController extends Controller
     }
 
 
+    private function logDriverActivity($userId, $type, $desc)
+    {
+        try {
+            \App\Models\DriverActivity::create([
+                'user_id' => $userId,
+                'activity_type' => $type,
+                'description' => $desc
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Driver Activity Log Error: ' . $e->getMessage());
+        }
+    }
 }

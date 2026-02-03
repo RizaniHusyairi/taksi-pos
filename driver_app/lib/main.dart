@@ -28,7 +28,10 @@ void main() async {
 
   runApp(
     MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
+      providers: [
+        Provider(create: (_) => ApiService()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ],
       child: const DriverApp(),
     ),
   );

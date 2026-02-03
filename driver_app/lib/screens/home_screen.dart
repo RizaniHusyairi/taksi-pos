@@ -167,6 +167,104 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _showSelfPassengerDialog() async {
+    final destController = TextEditingController();
+    final priceController = TextEditingController();
+    bool isLoading = false;
+
+    // Capture Providers from the parent context (HomeScreen)
+    final api = Provider.of<ApiService>(context, listen: false);
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (stfContext, setState) {
+          return AlertDialog(
+            title: Text(
+              "Dapat Penumpang Sendiri",
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: destController,
+                  decoration: const InputDecoration(
+                    labelText: "Tujuan",
+                    hintText: "Misal: Hotel A",
+                  ),
+                ),
+                TextField(
+                  controller: priceController,
+                  decoration: const InputDecoration(
+                    labelText: "Harga (Rp)",
+                    hintText: "100000",
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Biaya admin Rp 10.000 akan dicatat sebagai hutang.",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading
+                    ? null
+                    : () => Navigator.pop(dialogContext),
+                child: const Text("Batal"),
+              ),
+              ElevatedButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        if (destController.text.isEmpty ||
+                            priceController.text.isEmpty) {
+                          return;
+                        }
+                        setState(() => isLoading = true);
+                        try {
+                          await api.setStatus(
+                            'leave',
+                            reason: 'self',
+                            manualDestination: destController.text,
+                            manualPrice:
+                                int.tryParse(priceController.text) ?? 0,
+                          );
+                          if (mounted) {
+                            Navigator.pop(
+                              dialogContext,
+                            ); // Close using dialogContext
+                            await auth.fetchProfile();
+                          }
+                        } catch (e) {
+                          setState(() => isLoading = false);
+                          if (mounted) {
+                            // Use PARENT context for SnackBar (dialog context might be tricky)
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text("Error: $e")),
+                            );
+                          }
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text("Mulai Jalan"),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   String _formatDuration(int totalSeconds) {
     if (totalSeconds < 0) return "00:00";
     final minutes = totalSeconds ~/ 60;
@@ -264,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "${user?['name'] ?? 'Driver'} (ID: ${user?['id']})",
+                            "${user?['name'] ?? 'Driver'}",
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
@@ -285,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (activeBooking != null) ...[
                 _buildOrderCard(activeBooking, currencyFormat),
               ] else ...[
-                _buildStatusCard(status, profile),
+                _buildStatusCard(status, profile, user?['queue_position']),
                 const SizedBox(height: 24),
                 _buildActionButtons(status),
               ],
@@ -479,7 +577,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatusCard(String status, Map<String, dynamic>? profile) {
+  Widget _buildStatusCard(
+    String status,
+    Map<String, dynamic>? profile,
+    dynamic queuePosition,
+  ) {
     Color color;
     String text;
 
@@ -572,7 +674,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (status == 'standby') ...[
             const SizedBox(height: 16),
             Text(
-              "Antrian #${profile?['line_number'] ?? '-'}",
+              "Antrian #${queuePosition ?? profile?['line_number'] ?? '-'}",
               style: GoogleFonts.outfit(fontSize: 20, color: Colors.white),
             ),
           ],
@@ -624,22 +726,22 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (status == 'standby') {
       return ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: Colors.blueAccent, // Change to Blue to distinguish
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        icon: const Icon(Icons.logout, color: Colors.white),
+        icon: const Icon(Icons.person_add, color: Colors.white),
         label: Text(
-          "KELUAR ANTRIAN",
+          "DAPAT PENUMPANG SENDIRI",
           style: GoogleFonts.outfit(
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
         ),
         onPressed: () {
-          // TODO: Leave Logic
+          _showSelfPassengerDialog();
         },
       );
     }

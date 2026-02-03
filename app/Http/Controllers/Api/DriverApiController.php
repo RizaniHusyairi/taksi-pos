@@ -75,6 +75,20 @@ class DriverApiController extends Controller
             ->first();
         
 
+        // Hitung Posisi Antrian (Jika standby)
+        if ($driver->driverProfile->status === 'standby') {
+            $myQueue = DriverQueue::where('user_id', $driver->id)->first();
+            if ($myQueue) {
+                // Posisi = Jumlah antrian dengan sort_order lebih kecil + 1
+                $position = DriverQueue::where('sort_order', '<', $myQueue->sort_order)->count() + 1;
+                $driver->queue_position = $position;
+            } else {
+                $driver->queue_position = null;
+            }
+        } else {
+            $driver->queue_position = null;
+        }
+
         $driver->active_booking = $ongoingBooking;
         
         return response()->json($driver);
@@ -135,18 +149,26 @@ class DriverApiController extends Controller
                 }
             }
 
-            DriverQueue::firstOrCreate(
+            // Find the maximum sort_order in the queue
+            $maxOrder = DriverQueue::max('sort_order') ?? 0;
+
+            DriverQueue::updateOrCreate(
                 ['user_id' => $user->id],
                 [
-                    'latitude' => $request->latitude, 
-                'longitude' => $request->longitude, 
-                'sort_order' => $sortOrder]
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'sort_order' => $maxOrder + 1,
+                    'joined_at' => now(), // Reset waktu join
+                ]
             );
 
             $profile->update([
                 'last_queue_date' => $today,
                 'status' => 'standby' // Update status jadi standby
             ]);
+            
+            // LOG ACTIVITY
+            $this->logActivity($user->id, 'QUEUE_JOIN', 'Masuk Antrian');
 
             $msg = 'Berhasil masuk antrian';
 
@@ -161,32 +183,36 @@ class DriverApiController extends Controller
                 // 2. Jika alasan "Dapat Penumpang Sendiri"
                 if ($request->reason === 'self') {
                     
-                    // A. Buat Booking (Simpan ke variabel $booking agar bisa ambil ID-nya)
-                    $booking = Booking::create([
-                        'cso_id'             => $user->id, // Driver dianggap sebagai pembuat order
+                    // A. Buat Booking Start OnTrip
+                    Booking::create([
+                        'cso_id'             => $user->id, 
                         'driver_id'          => $user->id,
-                        'zone_id'            => null, // Tidak pakai zona sistem
+                        'zone_id'            => null,
                         'manual_destination' => $request->manual_destination,
                         'price'              => $request->manual_price,
-                        'status'             => 'Completed', 
+                        'status'             => 'OnTrip',
                     ]);
 
-                    // B. [BARU] Buat Transaksi (Agar masuk History)
-                    // Kita set method 'CashDriver' karena uang diterima driver
-                    Transaction::create([
-                        'booking_id' => $booking->id,
-                        'method'     => 'CashDriver', 
-                        'amount'     => $request->manual_price,
-                    ]);
+                    // B. Update Status Profil jadi 'ontrip'
+                    $user->driverProfile()->update(['status' => 'ontrip']);
 
-                    // C. (Update Plan: JANGAN Potong Saldo Sekarang)
-                    // Biarkan status Unpaid, nanti dihitung sebagai hutang saat getBalance/withdrawal
-                    // Withdrawals::create([...]); <-- DIHAPUS
+                    // LOG ACTIVITY
+                    $this->logActivity($user->id, 'TRIP_START_SELF', 'Mulai Trip Mandiri: ' . $request->manual_destination);
+
+                } else {
+                    // Keluar Biasa / Off
+                    $user->driverProfile()->update(['status' => 'offline']);
+                    
+                    // LOG ACTIVITY
+                    $this->logActivity($user->id, 'QUEUE_LEAVE', 'Keluar Antrian (Istirahat/Lainnya)');
                 }
             });
 
             $msg = 'Berhasil keluar antrian';
+            if($request->reason === 'self') $msg .= ' (Self Passenger)';
         }
+
+
 
         $user->load('driverProfile');
         $userWithStatus = $this->attachVirtualStatus($user);
@@ -228,6 +254,19 @@ class DriverApiController extends Controller
         // Update status booking saja. 
         // Tidak perlu update status driver_profile (karena kolomnya sudah dihapus).
         // Driver otomatis jadi 'offline' (tidak di queue) setelah trip selesai.
+
+        // --- NEW LOGIC FOR SELF PASSENGER ---
+        // Jika ini adalah Self Order (CSO = Driver, Zone = Null)
+        if ($booking->cso_id == $request->user()->id && is_null($booking->zone_id)) {
+            // Catat sebagai Hutang (Unpaid Transaction)
+            Transaction::create([
+                'booking_id'    => $booking->id,
+                'method'        => 'CashDriver', // Uang di driver
+                'amount'        => $booking->price, // Nominal tarif yang diinput
+                'payout_status' => 'Unpaid', // Belum disetor
+            ]);
+        }
+        
         $booking->update(['status' => 'Completed']);
 
         // 2. PERBAIKAN PENTING DI SINI
@@ -235,6 +274,9 @@ class DriverApiController extends Controller
         // Agar UI kembali ke mode awal (tombol "Masuk Antrian" muncul)
         $request->user()->driverProfile()->update(['status' => 'offline']);
         
+        // LOG ACTIVITY
+        $this->logActivity($request->user()->id, 'TRIP_FINISH', 'Selesai Trip No. ' . $booking->id);
+
         // Panggil getProfile untuk mengembalikan data terbaru ke frontend
         return $this->getProfile($request);
         
@@ -504,6 +546,8 @@ class DriverApiController extends Controller
              // Jika baru saja keluar area (out_of_area_since masih null)
              if (!$profile->out_of_area_since) {
                  $profile->update(['out_of_area_since' => now()]);
+                 // LOG ACTIVITY
+                 $this->logActivity($user->id, 'AREA_LEAVE_WARNING', 'Keluar Area (Peringatan dimulai)');
                  $remainingTime = 3600; // Full 60 minutes
              } else {
                  // Cek durasi
@@ -520,6 +564,9 @@ class DriverApiController extends Controller
                          'status' => 'offline',
                          'out_of_area_since' => null
                      ]);
+
+                     // LOG ACTIVITY
+                     $this->logActivity($user->id, 'QUEUE_LEAVE_AUTO', 'Keluar Antrian Otomatis (Timeout Area)');
                      
                      return response()->json([
                          'status' => 'offline',
@@ -534,6 +581,8 @@ class DriverApiController extends Controller
              // Jika kembali ke area -> Reset Grace Period
              if ($profile->out_of_area_since) {
                  $profile->update(['out_of_area_since' => null]);
+                 // LOG ACTIVITY
+                 $this->logActivity($user->id, 'AREA_RETURN', 'Kembali ke Area (Peringatan dihapus)');
              }
         }
 
@@ -550,12 +599,15 @@ class DriverApiController extends Controller
                     'longitude' => $request->longitude
                 ]);
                 
-                 // Update Status Profil
+                // Update Status Profil
                 $profile->update([
                     'status' => 'standby',
                     'last_queue_date' => now()->toDateString(),
                     'out_of_area_since' => null // Pastikan bersih
                 ]);
+
+                // LOG ACTIVITY
+                $this->logActivity($user->id, 'QUEUE_JOIN_AUTO', 'Masuk Antrian Otomatis (Masuk Area)');
 
                 return response()->json([
                     'status' => 'standby', 
@@ -569,6 +621,9 @@ class DriverApiController extends Controller
                     'out_of_area_since' => null
                 ]);
                 
+                // LOG ACTIVITY
+                $this->logActivity($user->id, 'QUEUE_JOIN_REPAIR', 'Masuk Antrian (Repair/Recovery)');
+
                 return response()->json([
                     'status' => 'standby', 
                     'message' => 'Status antrian dipulihkan (Auto-Repair).',
@@ -690,5 +745,17 @@ class DriverApiController extends Controller
         ]);
 
         return response()->json(['message' => 'FCM Token updated successfully']);
+    }
+    private function logActivity($userId, $type, $desc)
+    {
+        try {
+            \App\Models\DriverActivity::create([
+                'user_id' => $userId,
+                'activity_type' => $type,
+                'description' => $desc
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Activiy Log Error: ' . $e->getMessage());
+        }
     }
 }

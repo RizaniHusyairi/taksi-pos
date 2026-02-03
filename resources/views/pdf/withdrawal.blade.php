@@ -25,7 +25,7 @@
         .grand-total { font-weight: bold; font-size: 16px; border-top: 2px solid #333; margin-top: 5px; padding-top: 5px; }
         
         .footer { position: fixed; bottom: 0; width: 100%; text-align: center; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 10px; }
-        .status-paid { color: #27ae60; font-weight: bold; border: 1px solid #27ae60; padding: 2px 8px; border-radius: 4px; display: inline-block;}
+        .status-paid { font-size:10px; color: #27ae60; font-weight: bold; border: 1px solid #27ae60; padding: 2px 5px; border-radius: 4px; display: inline-block; position: relative; top:5px; }
     </style>
 </head>
 <body>

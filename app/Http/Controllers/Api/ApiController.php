@@ -602,19 +602,27 @@ class ApiController extends Controller
         }
 
         if ($neighbor) {
-            // Lakukan Swap (Tukar Nilai)
-            $tempOrder = $current->sort_order;
-            
-            // Jika nilai sort_order kebetulan sama (konflik), kita buat selisih manual
-            if ($tempOrder == $neighbor->sort_order) {
-                $tempOrder = $request->direction === 'up' ? $neighbor->sort_order + 1 : $neighbor->sort_order - 1;
-            }
-
-            $current->update(['sort_order' => $neighbor->sort_order]);
-            $neighbor->update(['sort_order' => $tempOrder]);
+            DB::transaction(function() use ($current, $neighbor) {
+                $temp = $current->sort_order;
+                $current->update(['sort_order' => $neighbor->sort_order]);
+                $neighbor->update(['sort_order' => $temp]);
+            });
         }
 
-        return response()->json(['message' => 'Urutan diperbarui.']);
+        return response()->json(['message' => 'Urutan berhasil diubah.']);
+    }
+
+    /**
+     * Ambil Log Aktivitas Driver
+     */
+    public function adminGetDriverActivity($userId)
+    {
+        $logs = \App\Models\DriverActivity::where('user_id', $userId)
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
+            ->get();
+
+        return response()->json($logs);
     }
 
     /**

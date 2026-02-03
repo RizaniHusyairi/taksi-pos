@@ -72,7 +72,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               itemBuilder: (context, index) {
                 final trip = _history[index];
                 final booking = trip['booking'];
-                final zone = booking['zone_to']?['name'] ?? 'Manual / Charter';
+                final zone =
+                    booking['zone_to']?['name'] ??
+                    (booking['manual_destination'] != null
+                        ? 'Self: ${booking['manual_destination']}'
+                        : 'Manual / Charter');
 
                 return Card(
                   color: Colors.white10,
@@ -127,24 +131,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ),
                             ),
                             const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                "SELESAI",
-                                style: GoogleFonts.outfit(
-                                  color: Colors.green,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
+                            _buildStatusBadge(trip),
                           ],
                         ),
                       ],
@@ -153,6 +140,48 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildStatusBadge(Map<String, dynamic> trip) {
+    final status = trip['payout_status'];
+    final method = trip['method'];
+
+    Color color;
+    String text;
+
+    switch (status) {
+      case 'Paid':
+        color = Colors.green;
+        // Jika metode 'CashDriver' (Hutang), istilahnya LUNAS
+        text = (method == 'CashDriver') ? 'SUDAH LUNAS' : 'SUDAH CAIR';
+        break;
+      case 'Processing':
+        color = Colors.orange;
+        text = 'DIPROSES';
+        break;
+      case 'Unpaid':
+      default:
+        color = Colors.red;
+        // Jika metode 'CashDriver' (Hutang), istilahnya BELUM LUNAS
+        text = (method == 'CashDriver') ? 'BELUM LUNAS' : 'BELUM CAIR';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }
