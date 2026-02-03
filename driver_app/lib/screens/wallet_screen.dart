@@ -59,11 +59,12 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = 'Failed to load data';
           _isLoading = false;
         });
+      }
     }
   }
 
@@ -104,18 +105,20 @@ class _WalletScreenState extends State<WalletScreen> {
 
     try {
       await _apiService.requestWithdrawal();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Permintaan penarikan berhasil dikirim!'),
           ),
         );
+      }
       _fetchData();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Gagal mengajukan penarikan')),
         );
+      }
     }
   }
 
@@ -215,19 +218,21 @@ class _WalletScreenState extends State<WalletScreen> {
                     );
                     await _apiService.updateBankDetails(accController.text);
                     await _fetchData(); // Refresh UI
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Rekening berhasil disimpan!'),
                         ),
                       );
+                    }
                   } catch (e) {
-                    if (mounted)
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Gagal menyimpan rekening'),
                         ),
                       );
+                    }
                   }
                 },
                 child: Text(
@@ -572,7 +577,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
 
                   const SizedBox(height: 32),
                 ],

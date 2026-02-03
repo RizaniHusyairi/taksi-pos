@@ -134,15 +134,17 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await _apiService.startBooking(bookingId);
       await auth.fetchProfile();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Perjalanan Dimulai!")));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Gagal memulai perjalanan")),
         );
+      }
     }
   }
 
@@ -151,15 +153,17 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await _apiService.completeBooking(bookingId);
       await auth.fetchProfile();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Perjalanan Selesai!")));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Gagal menyelesaikan perjalanan")),
         );
+      }
     }
   }
 

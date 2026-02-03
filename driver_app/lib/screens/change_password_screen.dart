@@ -99,8 +99,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 obscure: _obscureNew,
                 onToggle: () => setState(() => _obscureNew = !_obscureNew),
                 validator: (val) {
-                  if (val == null || val.length < 6)
+                  if (val == null || val.length < 6) {
                     return 'Minimal 6 karakter';
+                  }
                   return null;
                 },
               ),

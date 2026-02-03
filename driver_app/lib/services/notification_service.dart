@@ -45,7 +45,7 @@ class NotificationService {
       return;
     }
 
-    this.onOrderReceived = onNavigate;
+    onOrderReceived = onNavigate;
 
     // 2. Initialize Local Notifications (For Foreground)
     const AndroidInitializationSettings initializationSettingsAndroid =

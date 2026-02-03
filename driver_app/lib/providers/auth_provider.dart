@@ -56,7 +56,7 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on DioException catch (e) {
+    } on DioException {
       _isLoading = false;
       notifyListeners();
       // You can handle specific errors here
