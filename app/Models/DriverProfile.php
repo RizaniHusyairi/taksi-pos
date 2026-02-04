@@ -15,6 +15,8 @@ class DriverProfile extends Model
         'status',
         'line_number',
         'last_queue_date',
+        'out_of_area_since',
+        'auto_join_blocked',
     ];
 
     public function user()

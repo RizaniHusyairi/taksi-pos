@@ -101,6 +101,9 @@ class CsoApiController extends Controller
 
 
        $drivers = DriverQueue::with(['driver.driverProfile'])
+            ->whereHas('driver.driverProfile', function ($query) {
+                $query->whereNull('out_of_area_since');
+            })
             ->orderBy('sort_order', 'asc')
             ->orderBy('created_at', 'asc')
             ->get()
@@ -160,6 +163,12 @@ class CsoApiController extends Controller
 
             // 2. HAPUS DARI ANTRIAN (Kick from queue)
             DriverQueue::where('user_id', $validated['driver_id'])->delete();
+
+            // 3. LOG ACTIVITY (Supir)
+            $this->logDriverActivity($validated['driver_id'], 'ORDER_RECEIVED', 'Dapat Order dari CSO: ' . $cso->name . ' -> ' . $zone->name);
+            
+            // 4. LOG ACTIVITY (Keluar Antrian karena Order)
+            $this->logDriverActivity($validated['driver_id'], 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Dapat Order)');
 
             return $newBooking;
         });
@@ -299,8 +308,7 @@ class CsoApiController extends Controller
                     . "Lihat struk digital Anda di sini:\n"
                     . "$receiptUrl\n\n"
                     . "Selamat menikmati perjalanan!";
-                
-                WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
+            WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
             }
 
             // --- B. KIRIM WA KE DRIVER ---
@@ -324,6 +332,64 @@ class CsoApiController extends Controller
                 Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
             }
 
+            // --- D. NOTIFIKASI FCM KE DRIVER APP (HTTP v1) ---
+            if ($driver->fcm_token) {
+                try {
+                    $credentialsPath = storage_path('app/firebase_credentials.json');
+                    
+                    if (!file_exists($credentialsPath)) {
+                        Log::error("FCM Error: Credentials file not found at $credentialsPath");
+                    } else {
+                        // 1. Get Access Token
+                        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
+                        $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials(
+                            $scopes,
+                            $credentialsPath
+                        );
+                        $token = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build());
+                        $accessToken = $token['access_token'];
+
+                        // 2. Get Project ID
+                        $json = json_decode(file_get_contents($credentialsPath), true);
+                        $projectId = $json['project_id'];
+
+                        // 3. Send Notification (v1 syntax)
+                        Log::info("Sending FCM v1 to Driver: {$driver->id}");
+
+                        $response = \Illuminate\Support\Facades\Http::withHeaders([
+                            'Authorization' => 'Bearer ' . $accessToken,
+                            'Content-Type'  => 'application/json',
+                        ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
+                            'message' => [
+                                'token' => $driver->fcm_token,
+                                'notification' => [
+                                    'title' => 'Order Baru Masuk! 🚖',
+                                    'body' => "Tujuan: $zoneName - Penumpang menunggu.",
+                                ],
+                                'data' => [
+                                    'type' => 'new_order',
+                                    'booking_id' => (string)$booking->id,
+                                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+                                ],
+                                'android' => [
+                                    'priority' => 'HIGH',
+                                    'notification' => [
+                                        'channel_id' => 'high_importance_channel',
+                                        // 'sound' => 'default', // default_sound: true takes care of this
+                                        'default_sound' => true,
+                                        'default_vibrate_timings' => true,
+                                    ]
+                                ]
+                            ]
+                        ]);
+
+                        Log::info("FCM v1 Response: " . $response->status() . " | " . $response->body());
+                    }
+
+                } catch (\Exception $e) {
+                    Log::error("FCM v1 Error: " . $e->getMessage());
+                }
+            }
         } catch (\Exception $e) {
             Log::error("Notifikasi Gagal: " . $e->getMessage());
         }
@@ -373,4 +439,16 @@ class CsoApiController extends Controller
     }
 
 
+    private function logDriverActivity($userId, $type, $desc)
+    {
+        try {
+            \App\Models\DriverActivity::create([
+                'user_id' => $userId,
+                'activity_type' => $type,
+                'description' => $desc
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Driver Activity Log Error: ' . $e->getMessage());
+        }
+    }
 }

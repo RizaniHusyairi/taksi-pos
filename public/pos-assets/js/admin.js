@@ -423,6 +423,17 @@ export class AdminApp {
 
     window.app = this;
     window.openWdDetails = (id) => this.openWdDetails(id);
+    window.openActivityModal = (id) => this.openActivityModal(id);
+
+    // Listeners Modal Activity
+    document.getElementById('btnCloseActivity')?.addEventListener('click', () => {
+      document.getElementById('modalActivity').classList.add('hidden');
+      document.getElementById('modalActivity').classList.remove('flex');
+    });
+    document.getElementById('btnExitActivity')?.addEventListener('click', () => {
+      document.getElementById('modalActivity').classList.add('hidden');
+      document.getElementById('modalActivity').classList.remove('flex');
+    });
   }
 
   renderAll() {
@@ -1224,9 +1235,14 @@ export class AdminApp {
                   </div>
               </td>
               <td class="py-3 px-4 text-center">
-                  <button onclick="app.kickQueue(${q.user_id}, '${q.name}')" class="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-600 px-3 py-1 rounded text-xs font-bold border border-red-200 dark:border-red-900">
-                      Kick
-                  </button>
+                  <div class="flex items-center justify-center gap-2">
+                        <button onclick="window.openActivityModal(${q.user_id})" class="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-600 px-3 py-1 rounded text-xs font-bold border border-indigo-200 dark:border-indigo-900">
+                             Log
+                        </button>
+                        <button onclick="app.kickQueue(${q.user_id}, '${q.name}')" class="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-slate-600 px-3 py-1 rounded text-xs font-bold border border-red-200 dark:border-red-900">
+                             Kick
+                        </button>
+                    </div>
               </td>
           </tr >
           `;
@@ -1277,6 +1293,62 @@ export class AdminApp {
       this.renderQueue(); // Refresh
     } catch (error) {
       alert('Gagal update line number.');
+    }
+  }
+
+  // --- FUNGSI BARU: Modal Activity ---
+  async openActivityModal(userId) {
+    const modal = document.getElementById('modalActivity');
+    const list = document.getElementById('activityList');
+
+    list.innerHTML = '<tr><td colspan="3" class="p-4 text-center">Memuat log aktivitas...</td></tr>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    try {
+      const logs = await fetchApi(`/admin/drivers/${userId}/activity`);
+
+      if (logs.length === 0) {
+        list.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-500">Belum ada aktivitas tercatat.</td></tr>';
+        return;
+      }
+
+      const typeMap = {
+        'QUEUE_JOIN': 'Masuk Antrian',
+        'QUEUE_JOIN_AUTO': 'Masuk Antrian (Otomatis)',
+        'QUEUE_JOIN_REPAIR': 'Masuk Antrian (Sistem)',
+        'QUEUE_LEAVE': 'Keluar Antrian',
+        'QUEUE_LEAVE_AUTO': 'Keluar Antrian (Timeout)',
+        'TRIP_START_SELF': 'Mulai Trip',
+        'TRIP_FINISH': 'Selesai Mengantar',
+        'AREA_LEAVE_WARNING': 'Peringatan: Keluar Area',
+        'AREA_RETURN': 'Kembali ke Area',
+        'ORDER_RECEIVED': 'Dapat Order (CSO)',
+        'QUEUE_LEAVE_ORDER': 'Keluar Antrian (Order)'
+      };
+
+      list.innerHTML = logs.map(log => {
+        const typeLabel = typeMap[log.activity_type] || log.activity_type;
+        return `
+            <tr class="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">
+                <td class="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    ${new Date(log.created_at).toLocaleString('id-ID')}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold border border-indigo-100 dark:bg-indigo-900 dark:text-indigo-200 dark:border-indigo-800">
+                        ${typeLabel}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                    ${log.description || '-'}
+                </td>
+            </tr>
+        `;
+      }).join('');
+
+    } catch (error) {
+      console.error(error);
+      list.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-red-500">Gagal memuat log.</td></tr>';
     }
   }
 

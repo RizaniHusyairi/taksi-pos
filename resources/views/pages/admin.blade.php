@@ -403,6 +403,36 @@
         </div>
       </div>
 
+      <div id="modalActivity" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-700 dark:border-slate-600 rounded-t-xl">
+                <div>
+                    <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Log Aktivitas Supir</h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Riwayat aktivitas driver terpilih.</p>
+                </div>
+                <button id="btnCloseActivity" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 text-2xl">&times;</button>
+            </div>
+            
+            <div class="p-0 overflow-y-auto flex-1">
+                <table class="w-full text-sm text-left">
+                  <thead class="text-slate-500 dark:text-slate-400 sticky top-0 bg-white dark:bg-slate-800">
+                    <tr>
+                        <th class="px-4 py-3">Waktu</th>
+                        <th class="px-4 py-3">Jenis Aktivitas</th>
+                        <th class="px-4 py-3">Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody id="activityList" class="divide-y divide-slate-100 dark:divide-slate-700">
+                </tbody>
+                </table>
+            </div>
+            
+            <div class="p-4 border-t dark:border-slate-600 flex justify-end">
+                <button id="btnExitActivity" class="bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium">Tutup</button>
+            </div>
+        </div>
+      </div>
+
       <section id="view-report-revenue" class="p-4 hidden">
         <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-sm p-4">
           <div class="flex items-center gap-2 mb-3">

@@ -106,7 +106,7 @@
 
       <!-- Driver Selection Card -->
       <div>
-        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">2. Pilih Supir (Antrian)</h2>
+        <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Antrian Supir</h2>
         
         <div class="flex justify-between text-xs text-slate-400 px-2 mb-1">
             <span>Urutan</span>
@@ -379,6 +379,38 @@
     </div>
   </div>
 
+  <!-- Modal Ganti Supir (BARU) -->
+  <div id="changeDriverModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-sm w-full p-0 flex flex-col max-h-[80vh]">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Pilih Supir Pengganti</h3>
+              <button id="closeChangeDriver" class="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+          <div id="changeDriverList" class="overflow-y-auto flex-grow">
+              <!-- Driver list injected by JS -->
+          </div>
+      </div>
+  </div>
+
+  <!-- Modal Pilih Supir (NEW: For Initial Booking) -->
+  <div id="selectDriverModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl max-w-md w-full p-0 flex flex-col max-h-[85vh] view-section">
+          <div class="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-emerald-50 dark:bg-slate-700 rounded-t-xl">
+              <div>
+                  <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Pilih Supir</h3>
+                  <p class="text-xs text-emerald-600 dark:text-emerald-400 font-bold">Pembayaran Dikonfirmasi ✓</p>
+              </div>
+              <button id="closeSelectDriver" class="p-2 bg-white dark:bg-slate-600 rounded-full text-slate-400 hover:text-slate-600 shadow-sm">✕</button>
+          </div>
+          <div class="p-3 bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-500 text-center">
+              Silakan pilih supir dari antrian di bawah ini untuk menyelesaikan order.
+          </div>
+          <div id="selectDriverList" class="overflow-y-auto flex-grow p-4 space-y-3 bg-slate-100 dark:bg-slate-800/50">
+              <!-- Driver list injected by JS -->
+          </div>
+      </div>
+  </div>
+
   <div id="qrisZoomModal" class="fixed inset-0 bg-black/95 hidden items-center justify-center p-4 z-[60] backdrop-blur-sm cursor-zoom-out transition-opacity duration-300">
     <img id="qrisZoomImage" src="" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl scale-95 transition-transform duration-300">
     <div class="absolute bottom-10 text-white/70 text-sm bg-black/50 px-4 py-2 rounded-full pointer-events-none">
@@ -393,8 +425,9 @@
     import { CsoApp } from '{{ asset("pos-assets/js/cso.js") }}';
     
     // Inisialisasi App
-    const app = new CsoApp();
-    app.init();
+    // Inisialisasi App via cso.js (sudah di expose window.app)
+    // const app = new CsoApp();
+    // app.init();
 
 
 

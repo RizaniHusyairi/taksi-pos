@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::delete('/users/{user}', [ApiController::class, 'adminDestroyUser']);
         Route::post('/users/{user}/toggle-status', [ApiController::class, 'adminToggleUserStatus']); // Untuk aktivasi/deaktivasi
         Route::get('/users/role/{role}', [ApiController::class, 'adminGetUsersByRole']);
+        Route::get('/drivers/{user}/activity', [ApiController::class, 'adminGetDriverActivity']);
 
         // Manajemen Keuangan
         Route::get('/transactions', [ApiController::class, 'adminGetTransactions']);
@@ -96,10 +97,10 @@ Route::middleware('auth:sanctum')->group(function() {
         // Route Profile CSO
         Route::get('/profile', [CsoApiController::class, 'getProfile']);
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
+        Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
 
-
-
+        Route::post('/bookings/{booking}/change-driver', [CsoApiController::class, 'changeDriver']);
     });
     
     
@@ -128,5 +129,6 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);
 
         Route::post('/profile/update', [DriverApiController::class, 'updateProfile']);
+        Route::post('/update-fcm-token', [DriverApiController::class, 'updateFcmToken']);
     });
 });
