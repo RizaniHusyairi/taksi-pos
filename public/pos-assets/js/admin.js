@@ -1318,7 +1318,7 @@ export class AdminApp {
         'QUEUE_JOIN_AUTO': 'Masuk Antrian (Otomatis)',
         'QUEUE_JOIN_REPAIR': 'Masuk Antrian (Sistem)',
         'QUEUE_LEAVE': 'Keluar Antrian',
-        'QUEUE_LEAVE_AUTO': 'Keluar Antrian (Otomatis)',
+        'QUEUE_LEAVE_AUTO': 'Keluar Antrian (Timeout)',
         'TRIP_START_SELF': 'Mulai Trip',
         'TRIP_FINISH': 'Selesai Mengantar',
         'AREA_LEAVE_WARNING': 'Peringatan: Keluar Area',

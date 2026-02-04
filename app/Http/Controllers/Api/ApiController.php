@@ -569,8 +569,11 @@ class ApiController extends Controller
             // 1. Hapus dari tabel queue
             DriverQueue::where('user_id', $userId)->delete();
 
-            // 2. Update status profil jadi offline
-            DriverProfile::where('user_id', $userId)->update(['status' => 'offline']);
+            // 2. Update status profil jadi offline & BLOKIR AUTO JOIN
+            DriverProfile::where('user_id', $userId)->update([
+                'status' => 'offline',
+                'auto_join_blocked' => true
+            ]);
         });
 
         return response()->json(['message' => 'Driver berhasil dikeluarkan dari antrian.']);

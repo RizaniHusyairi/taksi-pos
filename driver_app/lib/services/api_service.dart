@@ -74,12 +74,16 @@ class ApiService {
     String? reason,
     String? manualDestination,
     int? manualPrice,
+    double? latitude,
+    double? longitude,
   }) async {
     final Map<String, dynamic> data = {'action': action};
     if (reason != null) data['reason'] = reason;
     if (manualDestination != null)
       data['manual_destination'] = manualDestination;
     if (manualPrice != null) data['manual_price'] = manualPrice;
+    if (latitude != null) data['latitude'] = latitude;
+    if (longitude != null) data['longitude'] = longitude;
 
     return await _dio.post('/driver/status', data: data);
   }

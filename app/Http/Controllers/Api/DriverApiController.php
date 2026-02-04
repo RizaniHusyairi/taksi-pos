@@ -117,6 +117,9 @@ class DriverApiController extends Controller
             $airportLat = config('taksi.driver_queue.latitude');
             $airportLng = config('taksi.driver_queue.longitude');
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
+            
+            // RESET BLOCKED STATUS
+            $profile->update(['auto_join_blocked' => false]);
 
             // Ganti 2.0 dengan 10000.0 untuk testing
             if ($distance > config('taksi.driver_queue.radius_km')) { 
@@ -562,11 +565,12 @@ class DriverApiController extends Controller
                      DriverQueue::where('user_id', $user->id)->delete();
                      $profile->update([
                          'status' => 'offline',
-                         'out_of_area_since' => null
+                         'out_of_area_since' => null,
+                         'auto_join_blocked' => true // BLOCK AUTO JOIN
                      ]);
 
                      // LOG ACTIVITY
-                     $this->logActivity($user->id, 'QUEUE_LEAVE_AUTO', 'Keluar Antrian Otomatis (Timeout Area)');
+                     $this->logActivity($user->id, 'QUEUE_LEAVE_AUTO', 'Dikeluarkan dari antrian (Timeout: >1 Jam diluar area)');
                      
                      return response()->json([
                          'status' => 'offline',
@@ -589,6 +593,15 @@ class DriverApiController extends Controller
         // Logic Auto-Join (Jika Offline & Masuk Area) - Tetap sama
         if ($inArea && $profile->status === 'offline') {
             
+            // CEK APAKAH DIBLOKIR?
+            if ($profile->auto_join_blocked) {
+                return response()->json([
+                    'status' => 'offline',
+                    'in_area' => true,
+                    'message' => 'Anda harus menekan tombol "Masuk Antrian" secara manual.'
+                ]);
+            }
+
             if (!$isInQueue) {
                 // Skenario Normal: Masuk Antrian Baru
                 $maxSort = DriverQueue::max('sort_order') ?? 0;

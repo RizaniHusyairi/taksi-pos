@@ -106,7 +106,11 @@ Future<void> _performLocationUpdate(
     );
 
     // 4. Update UI (if app is open)
-    service.invoke('update', response.data);
+    // Merge lat/lng into response data because backend doesn't return it
+    final data = Map<String, dynamic>.from(response.data);
+    data['latitude'] = position.latitude;
+    data['longitude'] = position.longitude;
+    service.invoke('update', data);
 
     // 5. Update Notification
     final timestamp = DateFormat('HH:mm:ss').format(DateTime.now());

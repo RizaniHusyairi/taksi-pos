@@ -26,11 +26,109 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _remainingTimeSeconds; // Grace Period Timer
   int? _pickupTimeSeconds; // Pickup Timer
 
+  // --- Location State ---
+  double? _lastLat;
+  double? _lastLng;
+
   @override
   void initState() {
     super.initState();
     _startLocationService();
     _startCountdownTimer();
+  }
+
+  // ... (dispose and timers remain same)
+
+  // Modifikasi _processLocationUpdate
+  void _processLocationUpdate(Map<String, dynamic> data) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final inArea = data['in_area'] ?? false;
+    var remainingRaw = data['remaining_time'];
+    int? remaining;
+    if (remainingRaw != null) {
+      remaining = int.tryParse(remainingRaw.toString());
+    }
+    final statusResp = data['status'];
+
+    // Simpan Lat/Lng
+    double? lat, lng;
+    if (data['latitude'] != null)
+      lat = double.tryParse(data['latitude'].toString());
+    if (data['longitude'] != null)
+      lng = double.tryParse(data['longitude'].toString());
+
+    if (mounted) {
+      setState(() {
+        _locationStatus =
+            "GPS: ${TimeOfDay.now().format(context)} (Background)";
+        _isInArea = inArea;
+        _remainingTimeSeconds = remaining;
+        _lastLat = lat;
+        _lastLng = lng;
+      });
+
+      // ... (Auto-refresh/Auto-kick logic remains same) ...
+      // Auto-refresh profile if auto-joined
+      if (statusResp == 'standby' &&
+          authProvider.user?['driver_profile']['status'] == 'offline') {
+        authProvider.fetchProfile();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Anda memasuki area. Otomatis masuk antrian!"),
+          ),
+        );
+      }
+
+      // Auto-kick notification
+      if (statusResp == 'offline' &&
+          authProvider.user?['driver_profile']['status'] == 'standby') {
+        authProvider.fetchProfile();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data['message'] ?? "Antrian Hangus"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // --- LOGIC MANUAL JOIN ---
+  Future<void> _joinQueue() async {
+    if (_lastLat == null || _lastLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Lokasi belum ditemukan. Tunggu sebentar..."),
+        ),
+      );
+      return;
+    }
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    try {
+      // 1. Panggil API Join
+      await _apiService.setStatus(
+        'join',
+        latitude: _lastLat!,
+        longitude: _lastLng!,
+      );
+
+      // 2. Refresh Profile
+      await auth.fetchProfile();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Berhasil masuk antrian!")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   @override
@@ -82,50 +180,6 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } else {
       if (mounted) setState(() => _locationStatus = "Izin GPS Ditolak");
-    }
-  }
-
-  void _processLocationUpdate(Map<String, dynamic> data) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    final inArea = data['in_area'] ?? false;
-    var remainingRaw = data['remaining_time'];
-    int? remaining;
-    if (remainingRaw != null) {
-      remaining = int.tryParse(remainingRaw.toString());
-    }
-    final statusResp = data['status'];
-
-    if (mounted) {
-      setState(() {
-        _locationStatus =
-            "GPS: ${TimeOfDay.now().format(context)} (Background)";
-        _isInArea = inArea;
-        _remainingTimeSeconds = remaining; // Sync with server
-      });
-
-      // Auto-refresh profile if auto-joined
-      if (statusResp == 'standby' &&
-          authProvider.user?['driver_profile']['status'] == 'offline') {
-        authProvider.fetchProfile();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Anda memasuki area. Otomatis masuk antrian!"),
-          ),
-        );
-      }
-
-      // Auto-kick notification
-      if (statusResp == 'offline' &&
-          authProvider.user?['driver_profile']['status'] == 'standby') {
-        authProvider.fetchProfile();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(data['message'] ?? "Antrian Hangus"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
@@ -719,7 +773,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           onPressed: () {
-            // TODO: Manual Join Logic
+            _joinQueue();
           },
         );
       }
