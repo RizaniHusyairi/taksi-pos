@@ -24,6 +24,7 @@
       }
     }
   </script>
+  <link rel="icon" href="{{ asset('pos-assets/img/logo_taksi.png') }}" type="image/png">
   <link rel="stylesheet" href="{{ asset('pos-assets/css/style.css') }}">
   <style>
     /* Custom styles for the mobile app feel */
@@ -53,7 +54,7 @@
   <!-- Top Header -->
   <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between sticky top-0 z-20">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-full bg-primary-600 text-white grid place-items-center font-bold text-lg">KT</div>
+      <img src="{{ asset('pos-assets/img/logo_taksi.png') }}" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-full p-1" />
       <div>
         <h1 class="font-bold text-slate-800 dark:text-slate-100">Taksi POS</h1>
         <p id="pageTitle" class="text-xs text-slate-500 dark:text-slate-400">Beranda</p>
@@ -107,9 +108,9 @@
                   <div>
                       <p class="text-sm opacity-80">Saldo Bersih Siap Cair</p>
                       <p id="walletBalance" class="text-4xl font-bold tracking-tight">Rp0</p>
+                  <div class="w-8 h-8 rounded-full bg-white text-white p-1">
+                      <img src="{{ asset('pos-assets/img/logo_taksi.png') }}" class="w-full h-full object-contain drop-shadow">
                   </div>
-                  <div class="w-8 h-8 rounded-full bg-white/20 text-white grid place-items-center font-bold">KT</div>
-              </div>
               <div class="mt-4 pt-4 border-t border-white/20 flex justify-between text-xs opacity-90">
                   <span>Pemasukan: <span id="infoIncome" class="font-bold">Rp0</span></span>
                   <span>Potongan Hutang: <span id="infoDebt" class="font-bold text-red-200">Rp0</span></span>

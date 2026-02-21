@@ -26,6 +26,7 @@
     </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="icon" href="{{ asset('pos-assets/img/logo_taksi.png') }}" type="image/png">
   <link rel="stylesheet" href="{{ asset('pos-assets/css/style.css') }}">
   <style>
     body { -webkit-tap-highlight-color: transparent; }
@@ -49,7 +50,7 @@
   <!-- Top Header -->
   <header class="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between sticky top-0 z-20">
     <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-full bg-primary-600 text-white grid place-items-center font-bold text-lg">KT</div>
+      <img src="{{ asset('pos-assets/img/logo_taksi.png') }}" alt="Logo" class="w-9 h-9 object-contain bg-white rounded-full p-1" />
       <div>
         <h1 class="font-bold text-slate-800 dark:text-slate-100">CSO Panel</h1>
         <p id="pageTitle" class="text-xs text-slate-500 dark:text-slate-400">Pemesanan Baru</p>
