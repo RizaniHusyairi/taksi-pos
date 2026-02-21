@@ -24,14 +24,21 @@ class AuthController extends Controller
             // Ambil role pengguna yang berhasil login
          $userRole = Auth::user()->role;
 
+         if ($userRole === 'driver') {
+             Auth::logout();
+             $request->session()->invalidate();
+             $request->session()->regenerateToken();
+             return back()->withErrors([
+                 'username' => 'Akun driver tidak dapat login melalui website.',
+             ])->onlyInput('username');
+         }
+
          // 3. Arahkan pengguna ke dasbor yang sesuai dengan rolenya
          switch ($userRole) {
              case 'admin':
                  return redirect()->intended('/admin');
              case 'cso':
                  return redirect()->intended('/cso');
-             case 'driver':
-                 return redirect()->intended('/driver');
              default:
                  // Jika role tidak ada, fallback ke halaman utama
                  return redirect()->intended('/');

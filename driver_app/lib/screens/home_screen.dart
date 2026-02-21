@@ -464,7 +464,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final price = double.tryParse(booking['price'].toString()) ?? 0;
     final csoName = booking['cso']?['name'] ?? 'Sistem';
     final passengerPhone = booking['passenger_phone'] ?? '-';
-    final paymentMethod = booking['transaction']?['method'] ?? 'Tunai';
+    var paymentMethod = booking['transaction']?['method'] ?? 'Tunai';
+    if (paymentMethod == 'CashCSO') {
+      paymentMethod = 'Tunai ke Kasir (CSO)';
+    } else if (paymentMethod == 'CashDriver') {
+      paymentMethod = 'Tunai ke Supir';
+    }
     final isOntrip = booking['status'] == 'OnTrip';
 
     return Card(

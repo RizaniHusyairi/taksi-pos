@@ -124,6 +124,7 @@ class ApiController extends Controller
         $validated = $request->validate([
             'name' => 'required|string',
             'username' => 'required|string|unique:users,username',
+            'email' => 'nullable|email|unique:users,email',
             'password' => 'required|string|min:6',
             'role' => 'required|in:cso,driver,admin',
             // validasi tambahan untuk supir
@@ -131,16 +132,23 @@ class ApiController extends Controller
             'plate_number' => 'nullable|string',
         ]);
 
+        $email = $validated['email'] ?? $validated['username'] . '@taksipos.test';
+
         $user = User::create([
             'name' => $validated['name'],
             'username' => $validated['username'],
+            'email' => $email,
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
         ]);
 
         if ($validated['role'] === 'driver') {
             // 1. Auto-generate Line Number
-            $maxLine = DriverProfile::max('line_number') ?? 0;
+            // Because line_number might be stored as string, we need to convert it to integer to find the highest number
+            $allLines = DriverProfile::pluck('line_number')->map(function ($line) {
+                return (int) $line;
+            });
+            $maxLine = $allLines->max() ?? 0;
             $newLine = $maxLine + 1;
 
             $user->driverProfile()->create([
@@ -186,8 +194,8 @@ class ApiController extends Controller
 
         if ($validated['role'] === 'driver') {
             $user->driverProfile()->updateOrCreate([], [
-                'car' => $validated['car_model'],
-                'plate' => $validated['plate_number'],
+                'car_model' => $validated['car_model'],
+                'plate_number' => $validated['plate_number'],
             ]);
         } else {
             // Jika bukan driver, hapus profil driver jika ada

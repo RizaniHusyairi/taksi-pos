@@ -654,10 +654,14 @@ class DriverApiController extends Controller
             ]);
         }
         
+        // 5. Tambahkan info line_number agar Notifikasi HP bisa baca
+        $lineNumber = $profile->line_number;
+
         return response()->json([
             'status' => $profile->status,
             'in_area' => $inArea,
-            'remaining_time' => $remainingTime
+            'remaining_time' => $remainingTime,
+            'line_number' => $lineNumber,
         ]); 
     }
 
