@@ -34,6 +34,8 @@ class User extends Authenticatable
         'qris_path',
         'password',
         'fcm_token',
+        'role',
+        'active',
     ];
 
     /**

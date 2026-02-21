@@ -15,26 +15,18 @@ class ZoneSeeder extends Seeder
     {
         // Data zona tujuan yang akan kita masukkan
         $zones = [
-            [
-            'name' => 'Pusat Kota (Big Mall)',
-            'price' => 150000
-            ],
-            [
-            'name' => 'Samarinda Square (SS)',
-            'price' => 135000
-            ],
-            [
-            'name' => 'Stadion Palaran',
-            'price' => 180000
-            ],
-            [
-            'name' => 'Pelabuhan Samarinda',
-            'price' => 160000
-            ],
-            [
-            'name' => 'Universitas Mulawarman',
-            'price' => 140000
-            ],
+            ['name' => 'BONTANG', 'price' => 550000],
+            ['name' => 'JONGGON', 'price' => 450000],
+            ['name' => 'KOTA BANGUN', 'price' => 600000],
+            ['name' => 'L4', 'price' => 350000],
+            ['name' => 'MARANGKAYU', 'price' => 300000],
+            ['name' => 'SAMBOJA', 'price' => 400000],
+            ['name' => 'SANGATTA', 'price' => 750000],
+            ['name' => 'Zona I ( Depan bandara )', 'price' => 50000],
+            ['name' => 'Zona II ( Sungai Siring -Tanah Merah )', 'price' => 100000],
+            ['name' => 'Zona III ( Talang Sari - Jalan Juanda )', 'price' => 185000],
+            ['name' => 'Zona IV ( Jalan Antasari - Sungai Kujang )', 'price' => 225000],
+            ['name' => 'Zona V ( Samarinda Seberang - Loa janan )', 'price' => 275000],
         ];
 
         // Loop melalui data dan masukkan ke database

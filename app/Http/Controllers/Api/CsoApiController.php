@@ -238,6 +238,17 @@ class CsoApiController extends Controller
             'payment_proof.required_if' => 'Wajib upload foto bukti transfer untuk QRIS.',
         ]);
 
+        // Cek apakah driver sedang dalam perjalanan (Punya booking belum selesai)
+        $hasActiveBooking = Booking::where('driver_id', $validated['driver_id'])
+            ->whereIn('status', ['Assigned', 'OnTrip'])
+            ->exists();
+
+        if ($hasActiveBooking) {
+            return response()->json([
+                'message' => 'Supir ini sedang menjalankan orderan lain dan belum selesai.'
+            ], 422); // Unprocessable Entity
+        }
+
         $zone = Zone::findOrFail($validated['zone_id']);
         $cso = Auth::user();
 

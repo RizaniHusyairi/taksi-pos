@@ -91,7 +91,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp {
   constructor() {
-    this.views = ['dashboard', 'queue', 'zones', 'users', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'settings'];
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'settings'];
     this.charts = {};
   }
   init() {
@@ -308,36 +308,15 @@ export class AdminApp {
     const userModalCancel = document.getElementById('userModalCancel');
     const userRole = document.getElementById('userRole');
 
-    function openModal(editing = false, data = null) {
-      userModal.classList.remove('hidden');
-      document.getElementById('userModalTitle').textContent = editing ? 'Edit Pengguna' : 'Tambah Pengguna';
-      if (editing && data) {
-        document.getElementById('userId').value = data.id;
-        document.getElementById('userName').value = data.name || '';
-        document.getElementById('userRole').value = data.role || 'cso';
-        document.getElementById('userUsername').value = data.username || '';
-        document.getElementById('userPassword').value = data.password || '';
-        document.getElementById('userCar').value = data.car || '';
-        document.getElementById('userPlate').value = data.plate || '';
-      } else {
-        document.getElementById('formUser').reset();
-        document.getElementById('userId').value = '';
-      }
-      toggleDriverExtra();
-    }
-    function closeModal() { userModal.classList.add('hidden'); }
-
     function toggleDriverExtra() {
       const role = userRole.value;
       const extra = document.getElementById('driverExtra');
-      extra.style.display = role === 'driver' ? 'grid' : 'none';
+      if (extra) extra.style.display = role === 'driver' ? 'grid' : 'none';
     }
 
     userRole?.addEventListener('change', toggleDriverExtra);
-    btnOpenCreateUser?.addEventListener('click', () => openModal(false));
-    userModalClose?.addEventListener('click', closeModal);
-    userModalCancel?.addEventListener('click', closeModal);
-    userModal?.addEventListener('click', (e) => { if (e.target === userModal) closeModal(); });
+    btnOpenCreateUser?.addEventListener('click', () => this.openUserForm(null));
+    userModalCancel?.addEventListener('click', () => this.closeUserForm());
     // Listener Refresh Queue
     document.getElementById('refreshQueue')?.addEventListener('click', () => this.renderQueue());
 
@@ -385,8 +364,7 @@ export class AdminApp {
 
         alert('Data pengguna berhasil disimpan!');
 
-        // Panggil fungsi closeModal() yang sudah Anda miliki
-        closeModal(); // Pastikan fungsi ini bisa diakses di sini
+        this.closeUserForm();
 
         // 3. Refresh data yang relevan setelah berhasil
         await this.renderUsers(); // Muat ulang tabel pengguna
@@ -468,6 +446,7 @@ export class AdminApp {
       'queue': 'Manajemen Antrian',
       'zones': 'Manajemen Zona & Tarif',
       'users': 'Manajemen Pengguna',
+      'user-form': 'Formulir Pengguna',
       'finance-log': 'Transaction Log',
       'withdrawals': 'Withdrawal Requests',
       'report-revenue': 'Laporan Pendapatan',
@@ -644,7 +623,7 @@ export class AdminApp {
       tbody.querySelectorAll('[data-edit-u]').forEach(btn => {
         btn.addEventListener('click', () => {
           const userData = JSON.parse(btn.dataset.editU);
-          this.openUserModal(userData);
+          this.openUserForm(userData);
         });
       });
 
@@ -727,33 +706,42 @@ export class AdminApp {
     }
 
   }
-  // Helper function untuk modal (bisa diletakkan di dalam class AdminApp)
-  // Ini dimodifikasi dari event listener global Anda sebelumnya agar lebih rapi
-  openUserModal(data) {
-    // data = null artinya mode 'Tambah Pengguna'
-    // data berisi objek user artinya mode 'Edit Pengguna'
-    const isEditing = data !== null;
+  openUserForm(data) {
+    try {
+      const isEditing = data !== null;
 
-    document.getElementById('userModal').classList.remove('hidden');
-    document.getElementById('userModalTitle').textContent = isEditing ? 'Edit Pengguna' : 'Tambah Pengguna';
+      // Navigate to the user form "page"
+      window.location.hash = '#user-form';
 
-    // 4. SESUAIKAN PENGISIAN FORM DENGAN STRUKTUR DATA BARU
-    document.getElementById('userId').value = isEditing ? data.id : '';
-    document.getElementById('userName').value = isEditing ? data.name : '';
-    document.getElementById('userRole').value = isEditing ? data.role : 'cso';
-    document.getElementById('userUsername').value = isEditing ? data.username : '';
+      document.getElementById('userFormTitle').textContent = isEditing ? 'Edit Akses Pengguna' : 'Tambah Pengguna Baru';
 
-    // Kosongkan password saat edit, minta pengguna mengisinya jika ingin mengubah
-    document.getElementById('userPassword').value = '';
-    document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+      // 4. SESUAIKAN PENGISIAN FORM DENGAN STRUKTUR DATA BARU
+      const formUser = document.getElementById('formUser');
+      if (formUser) formUser.reset();
 
-    // Akses data supir dengan optional chaining
-    document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
-    document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+      document.getElementById('userId').value = isEditing ? data.id : '';
+      document.getElementById('userName').value = isEditing ? data.name : '';
+      document.getElementById('userRole').value = isEditing ? data.role : 'cso';
+      document.getElementById('userUsername').value = isEditing ? data.username : '';
 
-    // Tampilkan/sembunyikan field tambahan untuk supir
-    const role = document.getElementById('userRole').value;
-    document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';
+      document.getElementById('userPassword').value = '';
+      document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+
+      document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
+      document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+
+      const role = document.getElementById('userRole').value;
+      const extra = document.getElementById('driverExtra');
+      if (extra) extra.style.display = role === 'driver' ? 'grid' : 'none';
+
+    } catch (error) {
+      console.error("Crash during openUserForm:", error);
+      alert("Terjadi error JS saat membuka formulir: " + error.message);
+    }
+  }
+
+  closeUserForm() {
+    window.location.hash = '#users';
   }
 
 
