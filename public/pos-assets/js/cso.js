@@ -325,7 +325,7 @@ class CsoApp {
 
             this.driversList.innerHTML = drivers.map((d, index) => {
                 const profile = d.driver_profile || {};
-                const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
+                const queueNumber = index + 1;
                 const queueScore = d.queue_score || 0;
 
                 let badgeHtml = '';
@@ -421,7 +421,7 @@ class CsoApp {
 
                 if (!isStandby) return ''; // Skip offline drivers in selection modal
 
-                const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
+                const queueNumber = index + 1;
                 const queueScore = d.queue_score || 0;
 
                 const lineNumber = profile.line_number
