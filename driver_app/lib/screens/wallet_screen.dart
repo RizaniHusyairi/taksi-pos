@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../providers/auth_provider.dart';
-import 'package:dio/dio.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});

@@ -53,10 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Simpan Lat/Lng
     double? lat, lng;
-    if (data['latitude'] != null)
+    if (data['latitude'] != null) {
       lat = double.tryParse(data['latitude'].toString());
-    if (data['longitude'] != null)
+    }
+    if (data['longitude'] != null) {
       lng = double.tryParse(data['longitude'].toString());
+    }
 
     if (mounted) {
       setState(() {

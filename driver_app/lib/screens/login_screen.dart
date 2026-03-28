@@ -120,17 +120,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             ? null
                             : () async {
                                 if (_formKey.currentState!.validate()) {
-                                  final success = await auth.login(
+                                  var result = await auth.login(
                                     _usernameController.text,
                                     _passwordController.text,
                                   );
-                                  if (!success && mounted) {
+                                  if (result != true && mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
+                                      SnackBar(
                                         content: Text(
-                                          'Login Gagal. Periksa username dan sandi.',
+                                          result.toString(),
                                         ),
                                         backgroundColor: Colors.redAccent,
+                                        duration: const Duration(seconds: 5),
                                       ),
                                     );
                                   }

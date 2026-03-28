@@ -1,10 +1,12 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
   // Use 10.0.2.2 for Android Emulator to access localhost
   // Use your machine's IP (e.g., 10.49.92.29) if testing on physical device
-  static const String baseUrl = 'http://192.168.1.18:8000/api';
+  static const String baseUrl = 'https://kaj.aptpairport.id/api';
 
   late Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -20,6 +22,16 @@ class ApiService {
           'Content-Type': 'application/json',
         },
       ),
+    );
+
+    // Bypass SSL Certificate Verifications for HandshakeException
+    _dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient();
+        client.badCertificateCallback = 
+            (X509Certificate cert, String host, int port) => true;
+        return client;
+      },
     );
 
     // Add interceptor to attach token
@@ -79,8 +91,9 @@ class ApiService {
   }) async {
     final Map<String, dynamic> data = {'action': action};
     if (reason != null) data['reason'] = reason;
-    if (manualDestination != null)
+    if (manualDestination != null) {
       data['manual_destination'] = manualDestination;
+    }
     if (manualPrice != null) data['manual_price'] = manualPrice;
     if (latitude != null) data['latitude'] = latitude;
     if (longitude != null) data['longitude'] = longitude;

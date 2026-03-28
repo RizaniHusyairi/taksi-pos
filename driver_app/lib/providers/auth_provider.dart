@@ -33,7 +33,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String username, String password) async {
+  Future<dynamic> login(String username, String password) async {
     _isLoading = true;
     notifyListeners();
 
@@ -56,15 +56,18 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on DioException {
+    } on DioException catch (e) {
       _isLoading = false;
       notifyListeners();
-      // You can handle specific errors here
-      return false;
+      if (e.response != null) {
+         return "Api Error: ${e.response?.statusCode} - ${e.response?.data}";
+      } else {
+         return "Network Error: ${e.type.toString()} | ${e.error.toString()}";
+      }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return false;
+      return "Sistem Error: $e";
     }
   }
 
