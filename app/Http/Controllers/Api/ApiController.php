@@ -152,8 +152,8 @@ class ApiController extends Controller
             $newLine = $maxLine + 1;
 
             $user->driverProfile()->create([
-                'car_model' => $validated['car_model'], // Corrected key from 'car' to 'car_model' based on DB
-                'plate_number' => $validated['plate_number'], // Corrected key from 'plate' to 'plate_number' based on DB
+                'car_model' => $validated['car_model'] ?? '-', 
+                'plate_number' => $validated['plate_number'] ?? '-', 
                 'line_number' => $newLine
             ]);
 
@@ -194,8 +194,8 @@ class ApiController extends Controller
 
         if ($validated['role'] === 'driver') {
             $user->driverProfile()->updateOrCreate([], [
-                'car_model' => $validated['car_model'],
-                'plate_number' => $validated['plate_number'],
+                'car_model' => $validated['car_model'] ?? '-',
+                'plate_number' => $validated['plate_number'] ?? '-',
             ]);
         } else {
             // Jika bukan driver, hapus profil driver jika ada
