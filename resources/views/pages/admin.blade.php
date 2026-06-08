@@ -8,6 +8,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="icon" href="{{ asset('pos-assets/img/logo_taksi.png') }}" type="image/png">
+
+  {{-- PWA: installable + cache aset statis (data tetap network-first) --}}
+  @include('partials.pwa-head', [
+    'appName'    => 'Admin POS',
+    'themeColor' => '#0d9488',
+    'manifest'   => asset('manifest-admin.webmanifest'),
+  ])
+
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>

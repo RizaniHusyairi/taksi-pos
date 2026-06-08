@@ -67,7 +67,12 @@ class CsoApp {
     cacheEls() {
         this.views = ['new', 'history', 'profile'];
         this.pageTitle = document.getElementById('pageTitle');
-        this.toSel = document.getElementById('toZone');
+        this.toSel = document.getElementById('toZone'); // hidden input penyimpan zona terpilih
+        this.zoneGrid = document.getElementById('zoneGrid');
+        this.zoneSearch = document.getElementById('zoneSearch');
+        this.zoneSearchClear = document.getElementById('zoneSearchClear');
+        this.zoneNoResult = document.getElementById('zoneNoResult');
+        this.zoneCount = document.getElementById('zoneCount');
         this.priceBox = document.getElementById('priceBox');
         this.driversList = document.getElementById('driversList');
         this.btnConfirm = document.getElementById('btnConfirmBooking');
@@ -174,8 +179,28 @@ class CsoApp {
     bind() {
         // Event listener untuk tombol logout sudah ditangani oleh form di blade
 
-        this.toSel.addEventListener('change', () => this.updatePrice());
-        this.refreshHistoryBtn.addEventListener('click', () => this.renderHistory());
+        // Pencarian zona (kartu)
+        this.zoneSearch?.addEventListener('input', (e) => {
+            const val = e.target.value;
+            this.zoneSearchClear?.classList.toggle('hidden', val.length === 0);
+            this.filterZones(val);
+        });
+        this.zoneSearchClear?.addEventListener('click', () => {
+            this.zoneSearch.value = '';
+            this.zoneSearchClear.classList.add('hidden');
+            this.filterZones('');
+            this.zoneSearch.focus();
+        });
+
+        this.refreshHistoryBtn.addEventListener('click', () => {
+            const icon = document.getElementById('refreshHistoryIcon');
+            if (icon) {
+                icon.classList.remove('spin-once');
+                void icon.offsetWidth;
+                icon.classList.add('spin-once');
+            }
+            this.renderHistory();
+        });
 
         // Ganti Logic Tombol Confirm -> Jadi "Input Pembayaran"
         this.btnConfirm.addEventListener('click', () => this.processBooking()); // Nama fx tetap processBooking tapi loginya berubah
@@ -288,6 +313,37 @@ class CsoApp {
         }
     }
 
+    // --- ANIMASI INDIKATOR LANGKAH (1 Tujuan -> 2 Bayar -> 3 Supir) ---
+    setStep(active) {
+        const doneCls = ['btn-grad', 'text-white', 'shadow-md'];
+        const idleCls = ['bg-slate-200', 'dark:bg-slate-700', 'text-slate-500', 'dark:text-slate-400'];
+        const activeLabel = ['text-indigo-600', 'dark:text-indigo-300'];
+
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById('stepDot' + i);
+            const label = document.getElementById('stepLabel' + i);
+            if (!dot) continue;
+
+            if (i <= active) {
+                dot.classList.add(...doneCls);
+                dot.classList.remove(...idleCls);
+                label?.classList.add(...activeLabel);
+                label?.classList.remove('text-slate-400');
+            } else {
+                dot.classList.remove(...doneCls);
+                dot.classList.add(...idleCls);
+                label?.classList.remove(...activeLabel);
+                label?.classList.add('text-slate-400');
+            }
+        }
+
+        // Garis penghubung ikut menyala
+        const line1 = document.getElementById('stepLine1');
+        const line2 = document.getElementById('stepLine2');
+        if (line1) line1.className = 'step-line h-1 flex-1 rounded-full -mt-4 ' + (active >= 2 ? 'btn-grad' : 'bg-slate-200 dark:bg-slate-700');
+        if (line2) line2.className = 'step-line h-1 flex-1 rounded-full -mt-4 ' + (active >= 3 ? 'btn-grad' : 'bg-slate-200 dark:bg-slate-700');
+    }
+
 
 
 
@@ -299,25 +355,132 @@ class CsoApp {
 
     // --- RENDER FUNCTIONS (NOW ASYNC) ---
 
+    // Skeleton loader untuk grid zona
+    zoneSkeleton(count = 4) {
+        return Array.from({ length: count }).map(() => `
+            <div class="rounded-2xl p-3.5 border-2 border-slate-100 dark:border-slate-700 space-y-2.5">
+                <div class="skeleton w-9 h-9 rounded-xl"></div>
+                <div class="skeleton h-3 w-3/4 rounded"></div>
+                <div class="skeleton h-3 w-1/2 rounded"></div>
+            </div>`).join('');
+    }
+
     async renderZones() {
+        if (!this.zoneGrid) return;
+        this.zoneGrid.innerHTML = this.zoneSkeleton(4);
+
         try {
             const zones = await fetchApi('/cso/zones');
             this.zones = zones; // Simpan data zona
-            const opts = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
-            this.toSel.innerHTML = '<option value="">Pilih Tujuan</option>' + opts;
+
+            if (!zones.length) {
+                this.zoneGrid.innerHTML = `<div class="col-span-2 text-center py-6 text-sm font-semibold text-slate-400">Belum ada zona tujuan.</div>`;
+                return;
+            }
+
+            this.renderZoneCards();
+            this.zoneSearch?.removeAttribute('disabled');
         } catch (error) {
-            this.toSel.innerHTML = '<option value="">Gagal memuat tujuan</option>';
+            this.zoneGrid.innerHTML = `<div class="col-span-2 text-center py-6 text-sm font-semibold text-rose-500">Gagal memuat tujuan.</div>`;
         }
     }
 
+    // Bangun seluruh kartu zona sekali, lalu pasang listener
+    renderZoneCards() {
+        const pinSvg = `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="2.5"/></svg>`;
+        const checkSvg = `<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`;
+
+        this.zoneGrid.innerHTML = this.zones.map((z, i) => {
+            const name = z.name || 'Zona';
+            const isSel = String(this.toSel.value) === String(z.id);
+            const delay = Math.min(i * 0.04, 0.3);
+            return `
+            <button type="button"
+                class="zone-card group relative text-left rounded-2xl p-3.5 border-2 border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/60 transition-all duration-300 hover:-translate-y-0.5 hover:border-indigo-400 hover:shadow-lg active:scale-[.98] ${isSel ? 'selected' : ''}"
+                data-zone-id="${z.id}" data-zone-name="${name.toLowerCase()}"
+                style="animation: fadeUp .45s cubic-bezier(.22,1,.36,1) both; animation-delay: ${delay}s;">
+                <div class="flex items-start justify-between">
+                    <div class="zone-icon w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 flex items-center justify-center">
+                        ${pinSvg}
+                    </div>
+                    <span class="zone-check w-6 h-6 rounded-full btn-grad text-white flex items-center justify-center shadow-md">${checkSvg}</span>
+                </div>
+                <div class="font-bold text-slate-800 dark:text-slate-100 text-sm mt-2.5 leading-tight line-clamp-2">${name}</div>
+                <div class="flex items-baseline gap-1 mt-1">
+                    <span class="text-[10px] text-slate-400 font-medium">Tarif</span>
+                    <span class="text-grad font-extrabold text-sm">${Utils.formatCurrency(z.price)}</span>
+                </div>
+            </button>`;
+        }).join('');
+
+        // Pasang listener pilih zona
+        this.zoneGrid.querySelectorAll('.zone-card').forEach(card => {
+            card.addEventListener('click', () => this.selectZone(card));
+        });
+
+        // Terapkan filter pencarian yang sedang aktif (jika ada)
+        this.filterZones(this.zoneSearch?.value || '');
+    }
+
+    // Pilih satu zona
+    selectZone(card) {
+        this.zoneGrid.querySelectorAll('.zone-card.selected').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        this.toSel.value = card.dataset.zoneId;
+        this.updatePrice();
+    }
+
+    // Filter kartu zona berdasarkan teks pencarian
+    filterZones(query) {
+        if (!this.zoneGrid) return;
+        const q = (query || '').trim().toLowerCase();
+        let visible = 0;
+        this.zoneGrid.querySelectorAll('.zone-card').forEach(card => {
+            const match = (card.dataset.zoneName || '').includes(q);
+            card.classList.toggle('hidden', !match);
+            if (match) visible++;
+        });
+        this.zoneNoResult?.classList.toggle('hidden', visible !== 0);
+        if (this.zoneCount) {
+            this.zoneCount.textContent = q ? `${visible} dari ${this.zones.length} zona` : `${this.zones.length} zona`;
+        }
+    }
+
+    // Reset pilihan & pencarian zona (dipanggil setelah order selesai)
+    clearZoneSelection() {
+        this.zoneGrid?.querySelectorAll('.zone-card.selected').forEach(c => c.classList.remove('selected'));
+        if (this.zoneSearch) this.zoneSearch.value = '';
+        this.zoneSearchClear?.classList.add('hidden');
+        this.filterZones('');
+    }
+
+    // Skeleton loader untuk daftar supir
+    driverSkeleton(count = 3) {
+        return Array.from({ length: count }).map(() => `
+            <div class="glass rounded-2xl p-3 flex items-center gap-3 border border-white/40 dark:border-slate-700">
+                <div class="skeleton w-11 h-11 rounded-xl flex-shrink-0"></div>
+                <div class="flex-1 space-y-2">
+                    <div class="skeleton h-3.5 w-2/3 rounded"></div>
+                    <div class="skeleton h-2.5 w-1/2 rounded"></div>
+                </div>
+                <div class="skeleton h-5 w-14 rounded-full"></div>
+            </div>`).join('');
+    }
+
     async renderDrivers() {
-        this.driversList.innerHTML = `<div class="text-center text-slate-500 py-4">Memuat data supir...</div>`;
+        this.driversList.innerHTML = this.driverSkeleton(3);
 
         try {
             const drivers = await fetchApi('/cso/available-drivers');
 
             if (drivers.length === 0) {
-                this.driversList.innerHTML = `<div class="text-center p-4 text-slate-500">Tidak ada supir standby.</div>`;
+                this.driversList.innerHTML = `
+                <div class="glass rounded-2xl p-8 text-center">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-3">
+                        <svg class="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4z"/></svg>
+                    </div>
+                    <p class="text-slate-500 dark:text-slate-400 font-semibold text-sm">Tidak ada supir standby.</p>
+                </div>`;
                 return;
             }
 
@@ -327,24 +490,28 @@ class CsoApp {
                 const profile = d.driver_profile || {};
                 const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
                 const queueScore = d.queue_score || 0;
+                const isReady = profile.status === 'standby' || profile.status === 'available';
 
                 let badgeHtml = '';
-                // Hapus logic btnHtml untuk dashboard utama (READ ONLY)
                 let wrapperClass = '';
+                let queueBadgeClass = '';
 
-                // LOGIKA TAMPILAN BERDASARKAN STATUS
-                if (profile.status === 'standby' || profile.status === 'available') {
+                if (isReady) {
                     // STATUS READY
-                    wrapperClass = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'; // Hapus cursor-pointer & hover effect berlebih
-                    badgeHtml = `<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">Ready</span>`;
+                    wrapperClass = 'glass border-white/50 dark:border-slate-700 card-hover';
+                    queueBadgeClass = 'btn-grad text-white';
+                    badgeHtml = `<span class="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 text-[10px] px-2 py-1 rounded-full font-bold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot"></span>Ready
+                    </span>`;
                 } else {
                     // STATUS OFFLINE
-                    wrapperClass = 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 opacity-60';
-                    badgeHtml = `<span class="bg-slate-200 text-slate-500 border border-slate-300 text-[10px] px-2 py-0.5 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
+                    wrapperClass = 'bg-slate-50/70 dark:bg-slate-900/40 border-slate-100 dark:border-slate-800 opacity-60';
+                    queueBadgeClass = 'bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
+                    badgeHtml = `<span class="bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-600 text-[10px] px-2 py-1 rounded-full font-bold">${profile.status || 'Offline'}</span>`;
                 }
 
                 const lineNumber = profile.line_number
-                    ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
+                    ? `<span class="font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/20 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
                     : '';
 
                 // --- LOGIKA SEPARATOR REJOIN ---
@@ -352,13 +519,13 @@ class CsoApp {
                 if (queueScore >= 1000 && !hasRejoinHeaderRendered) {
                     hasRejoinHeaderRendered = true;
                     separatorHtml = `
-                    <div class="relative py-4">
+                    <div class="relative py-3">
                         <div class="absolute inset-0 flex items-center">
                             <div class="w-full border-t border-slate-300 dark:border-slate-600 border-dashed"></div>
                         </div>
                         <div class="relative flex justify-center">
-                            <span class="bg-slate-100 dark:bg-slate-900 px-3 text-xs font-bold text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700 rounded-full">
-                                Antrian Rejoin
+                            <span class="glass px-3 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-300 uppercase tracking-widest border border-amber-200 dark:border-amber-500/30 rounded-full">
+                                ↺ Antrian Rejoin
                             </span>
                         </div>
                     </div>`;
@@ -366,18 +533,19 @@ class CsoApp {
 
                 return `
             ${separatorHtml}
-            <div class="driver-card relative w-full border rounded-xl p-3 text-left transition-all duration-200 mb-2 ${wrapperClass}">
+            <div class="driver-card relative w-full border rounded-2xl p-3.5 text-left transition-all duration-300 ${wrapperClass}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3 overflow-hidden">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-lg font-bold text-slate-700 dark:text-slate-200">
-                        ${queueNumber}
-                    </div>
+                        <div class="flex-shrink-0 w-11 h-11 rounded-xl ${queueBadgeClass} flex items-center justify-center text-lg font-extrabold shadow-md">
+                            ${queueNumber}
+                        </div>
                         <div class="min-w-0">
                             <div class="flex items-center">
                                 ${lineNumber}
                                 <div class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${d.name}</div>
                             </div>
                             <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2 truncate">
+                                <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-5a2 2 0 012-1.5h10A2 2 0 0119 8l2 5M5 16h.01M19 16h.01M4 13h16v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3z"/></svg>
                                 <span>${profile.car_model || '-'}</span>
                                 <span class="w-1 h-1 rounded-full bg-slate-300"></span>
                                 <span class="font-mono">${profile.plate_number || '-'}</span>
@@ -386,7 +554,6 @@ class CsoApp {
                     </div>
                     <div class="flex flex-col items-end gap-2 pl-2">
                         ${badgeHtml}
-                        <!-- Tombol Pilih Dihapus untuk Main View -->
                     </div>
                 </div>
             </div>`;
@@ -394,19 +561,19 @@ class CsoApp {
 
         } catch (error) {
             console.error("Error render drivers:", error);
-            this.driversList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
+            this.driversList.innerHTML = `<div class="glass rounded-2xl p-5 text-center text-rose-600 font-semibold">Gagal memuat antrian.</div>`;
         }
     }
 
     // --- NEW: RENDER DRIVERS FOR SELECTION MODAL ---
     async renderDriversForSelection() {
-        this.selectDriverList.innerHTML = `<div class="text-center text-slate-500 py-4">Memuat data supir...</div>`;
+        this.selectDriverList.innerHTML = this.driverSkeleton(3);
 
         try {
             const drivers = await fetchApi('/cso/available-drivers');
 
             if (drivers.length === 0) {
-                this.selectDriverList.innerHTML = `<div class="text-center p-4 text-slate-500">Tidak ada supir standby saat ini.</div>`;
+                this.selectDriverList.innerHTML = `<div class="glass rounded-2xl p-6 text-center text-slate-500 font-semibold">Tidak ada supir standby saat ini.</div>`;
                 return;
             }
 
@@ -433,13 +600,13 @@ class CsoApp {
                 if (queueScore >= 1000 && !hasRejoinHeaderRendered) {
                     hasRejoinHeaderRendered = true;
                     separatorHtml = `
-                     <div class="relative py-4">
+                     <div class="relative py-3">
                          <div class="absolute inset-0 flex items-center">
                              <div class="w-full border-t border-slate-300 dark:border-slate-600 border-dashed"></div>
                          </div>
                          <div class="relative flex justify-center">
-                             <span class="bg-slate-100 dark:bg-slate-900 px-3 text-xs font-bold text-slate-500 uppercase tracking-widest border border-slate-200 dark:border-slate-700 rounded-full">
-                                 Antrian Rejoin
+                             <span class="bg-white dark:bg-slate-900 px-3 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-300 uppercase tracking-widest border border-amber-200 dark:border-amber-500/30 rounded-full">
+                                 ↺ Antrian Rejoin
                              </span>
                          </div>
                      </div>`;
@@ -447,10 +614,10 @@ class CsoApp {
 
                 return `
                 ${separatorHtml}
-                <div class="relative w-full border border-emerald-100 dark:border-emerald-900 bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-emerald-400 transition-all mb-2">
+                <div class="group relative w-full border border-emerald-100 dark:border-emerald-900/50 bg-white dark:bg-slate-800 rounded-2xl p-3.5 shadow-sm hover:shadow-lg hover:border-emerald-400 hover:-translate-y-0.5 transition-all duration-300">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3 overflow-hidden">
-                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">
+                            <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center text-lg font-extrabold shadow-md">
                                 ${queueNumber}
                             </div>
                             <div class="min-w-0">
@@ -465,8 +632,9 @@ class CsoApp {
                                 </div>
                             </div>
                         </div>
-                        <button class="btn-select-final bg-primary-600 text-white px-4 py-2 rounded-lg text-xs font-bold shadow hover:bg-primary-700 active:scale-95 transition-transform" data-driver-id="${d.id}">
+                        <button class="btn-select-final bg-gradient-to-br from-emerald-500 to-teal-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1" data-driver-id="${d.id}">
                             PILIH
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                         </button>
                     </div>
                 </div>`;
@@ -490,10 +658,20 @@ class CsoApp {
         this.selectDriverModal.classList.remove('hidden');
         this.selectDriverModal.classList.add('flex');
         this.renderDriversForSelection();
+
+        // Langkah 3: Pilih Supir
+        this.setStep(3);
     }
 
     async renderHistory() {
-        this.historyList.innerHTML = `<div class="text-center text-slate-500 py-8">Memuat riwayat...</div>`;
+        this.historyList.innerHTML = Array.from({ length: 3 }).map(() => `
+            <div class="glass rounded-2xl p-4 space-y-3 border border-white/40 dark:border-slate-700">
+                <div class="flex justify-between">
+                    <div class="space-y-2"><div class="skeleton h-3.5 w-32 rounded"></div><div class="skeleton h-2.5 w-20 rounded"></div></div>
+                    <div class="skeleton h-6 w-20 rounded-full"></div>
+                </div>
+                <div class="skeleton h-12 w-full rounded-xl"></div>
+            </div>`).join('');
 
         try {
             // 1. Ambil Nilai Filter
@@ -551,98 +729,111 @@ class CsoApp {
                 let statusBadge = '';
                 let statusText = '';
                 let statusIcon = '';
+                let accentBar = '';
 
                 switch (rawStatus) {
                     case 'Assigned':
                         statusText = 'Sedang Menjemput';
-                        statusBadge = 'bg-yellow-100 text-yellow-700 border-yellow-200';
-                        statusIcon = `<svg class="w-3 h-3 animate-bounce" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg > `;
+                        statusBadge = 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30';
+                        accentBar = 'bg-amber-400';
+                        statusIcon = `<svg class="w-3 h-3 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
                         break;
                     case 'OnTrip': // Perlu update di sisi Driver App nanti
                         statusText = 'Dalam Perjalanan';
-                        statusBadge = 'bg-blue-100 text-blue-700 border-blue-200';
-                        statusIcon = `<svg class="w-3 h-3 animate-pulse" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg > `;
+                        statusBadge = 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30';
+                        accentBar = 'bg-blue-500';
+                        statusIcon = `<svg class="w-3 h-3 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`;
                         break;
                     case 'Completed': // Perlu update di sisi Driver App nanti
                         statusText = 'Selesai';
-                        statusBadge = 'bg-emerald-100 text-emerald-700 border-emerald-200';
-                        statusIcon = `<svg class="w-3 h-3" fill = "none" viewBox = "0 0 24 24" stroke = "currentColor" > <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg > `;
+                        statusBadge = 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30';
+                        accentBar = 'bg-emerald-500';
+                        statusIcon = `<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
                         break;
                     case 'Cancelled':
                         statusText = 'Dibatalkan';
-                        statusBadge = 'bg-red-100 text-red-700 border-red-200';
+                        statusBadge = 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/30';
+                        accentBar = 'bg-rose-500';
                         break;
                     default:
                         // Fallback untuk data lama (Paid/CashDriver) dianggap Selesai/Arsip
                         statusText = rawStatus;
-                        statusBadge = 'bg-gray-100 text-gray-600 border-gray-200';
+                        statusBadge = 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600';
+                        accentBar = 'bg-slate-400';
                 }
 
                 // Line Number Supir
-                const lineDisplay = profile.line_number ? `<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded ml-1" > #L${profile.line_number}</span > ` : '';
+                const lineDisplay = profile.line_number ? `<span class="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 px-1.5 py-0.5 rounded ml-1">#L${profile.line_number}</span>` : '';
 
                 // Tombol Lihat Bukti (Hanya jika QRIS & Ada Bukti)
 
                 let btnProof = '';
                 if (tx.method === 'QRIS' && tx.payment_proof) {
-                    const proofUrl = `/ storage / ${tx.payment_proof} `;
+                    const proofUrl = `/storage/${tx.payment_proof}`;
                     btnProof = `
-            <button class="btn-view-proof flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 transition-colors mr-3" data - proof - url="${proofUrl}" >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg>
-        Bukti
-                    </button > `;
+            <button class="btn-view-proof flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 transition-colors" data-proof-url="${proofUrl}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                Bukti
+            </button>`;
                 }
 
                 return `
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-4 mb-3 transition-all hover:shadow-md" >
-                    
+            <div class="glass card-hover rounded-2xl shadow-sm border border-white/50 dark:border-slate-700 p-4 overflow-hidden relative">
+                    <div class="absolute left-0 top-0 bottom-0 w-1 ${accentBar}"></div>
+
                     <div class="flex justify-between items-start mb-3">
                         <div>
-                            <div class="font-bold text-slate-800 dark:text-slate-100 text-sm">
-                                Bandara → ${zoneTo.name || 'Unknown'}
+                            <div class="font-bold text-slate-800 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                                <span class="text-slate-400">Bandara</span>
+                                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                                <span>${zoneTo.name || 'Unknown'}</span>
                             </div>
-                            <div class="text-xs text-slate-500 mt-0.5">
+                            <div class="text-xs text-slate-500 mt-0.5 font-medium">
                                 ${new Date(tx.created_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' })} • #${tx.id}
                             </div>
                         </div>
-                        <div class="flex items-center gap-1 px-2 py-1 rounded border ${statusBadge}">
+                        <div class="flex items-center gap-1 px-2.5 py-1 rounded-full border ${statusBadge}">
                             ${statusIcon}
                             <span class="text-[10px] font-bold uppercase tracking-wide">${statusText}</span>
                         </div>
                     </div>
 
-                    <div class="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2.5 space-y-2 text-xs">
-                        <div class="flex justify-between items-center border-b border-slate-200 dark:border-slate-600 pb-2 mb-2">
+                    <div class="bg-slate-50/80 dark:bg-slate-700/40 rounded-xl p-3 space-y-2 text-xs">
+                        <div class="flex justify-between items-center border-b border-slate-200/70 dark:border-slate-600/70 pb-2 mb-2">
                             <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                                <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg>
-                                <span class="font-semibold">${driver.name || '-'}</span>
+                                <div class="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 dark:text-indigo-300 flex items-center justify-center">
+                                    <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" /></svg>
+                                </div>
+                                <span class="font-bold">${driver.name || '-'}</span>
                                 ${lineDisplay}
                             </div>
-                            <div class="text-primary-600 dark:text-primary-400 font-bold text-sm">
+                            <div class="text-grad font-extrabold text-sm">
                                 ${formattedPrice}
                             </div>
                         </div>
-                        
+
                         <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                            <svg class="w-3.5 h-3.5 text-green-500" viewBox="0 0 20 20" fill="currentColor"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" /></svg>
-                            <span class="font-mono font-medium">${passengerPhone}</span>
+                            <div class="w-6 h-6 rounded-lg bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-300 flex items-center justify-center">
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" /></svg>
+                            </div>
+                            <span class="font-mono font-semibold">${passengerPhone}</span>
                         </div>
                     </div>
 
-                    <div class="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-700">
-                        <span class="text-[10px] px-2 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 font-medium">
-                            Metode: ${tx.method === 'CashDriver' ? 'Tunai (Supir)' : (tx.method === 'CashCSO' ? 'Tunai (Kasir)' : tx.method)}
+                    <div class="flex justify-between items-center pt-3 mt-1 border-t border-slate-100 dark:border-slate-700">
+                        <span class="text-[10px] px-2.5 py-1 rounded-full border bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600 font-bold">
+                            ${tx.method === 'CashDriver' ? '💵 Tunai (Supir)' : (tx.method === 'CashCSO' ? '💵 Tunai (Kasir)' : '🏦 ' + tx.method)}
                         </span>
                         <div class="flex items-center gap-2">
                             ${this.renderChangeDriverButton(tx.booking, rawStatus)}
                             ${btnProof}
-                            <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
+                            <button class="btn-view-receipt flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors" data-tx-object='${JSON.stringify(tx)}'>
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l4 4a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" /></svg>
                                 Struk
                             </button>
                         </div>
                     </div>
-                </div > `;
+                </div>`;
             }).join('');
 
             // Re-bind listener tombol struk
@@ -671,7 +862,7 @@ class CsoApp {
 
         } catch (error) {
             console.error(error);
-            this.historyList.innerHTML = `< div class="text-center text-red-500 p-8" > Gagal memuat riwayat.</div > `;
+            this.historyList.innerHTML = `<div class="glass rounded-2xl p-6 text-center text-rose-500 font-semibold">Gagal memuat riwayat.</div>`;
         }
     }
 
@@ -682,11 +873,19 @@ class CsoApp {
         const zone = this.zones.find(z => z.id == zoneId);
         this.priceBox.textContent = zone ? Utils.formatCurrency(zone.price) : '-';
 
+        // Animasi pop pada angka tarif
+        this.priceBox.classList.remove('price-pop');
+        void this.priceBox.offsetWidth; // reflow agar animasi bisa diulang
+        this.priceBox.classList.add('price-pop');
+
         // RESET PAYMENT jika ganti tujuan
         this.paymentVerified = false;
         this.pendingPaymentPayload = null;
         // Tidak perlu re-render drivers karena Dashboard hanya Read-Only sekarang
-        // this.renderDrivers(); 
+        // this.renderDrivers();
+
+        // Update indikator langkah
+        this.setStep(zoneId ? 1 : 1);
 
         this.updateConfirmButtonState();
     }
@@ -694,13 +893,18 @@ class CsoApp {
         const zoneId = this.toSel.value;
         // Tombol hanya butuh Zone ID, tidak butuh Driver ID lagi
         this.btnConfirm.disabled = !zoneId;
-        this.btnConfirm.textContent = this.paymentVerified ? 'Pembayaran Selesai' : 'Input Pembayaran';
 
         if (this.paymentVerified) {
-            this.btnConfirm.classList.add('bg-green-600', 'text-white');
+            this.btnConfirm.innerHTML = `
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span>Pembayaran Selesai</span>`;
+            this.btnConfirm.classList.add('is-done');
             this.btnConfirm.disabled = true; // Disable jika sudah bayar
         } else {
-            this.btnConfirm.classList.remove('bg-green-600', 'text-white');
+            this.btnConfirm.innerHTML = `
+                <span>Input Pembayaran</span>
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>`;
+            this.btnConfirm.classList.remove('is-done');
         }
     }
 
@@ -752,6 +956,9 @@ class CsoApp {
 
         this.modal.classList.add('flex');
         this.modal.classList.remove('hidden');
+
+        // Langkah 2: Bayar
+        this.setStep(2);
     }
 
     closePayment() {
@@ -760,6 +967,9 @@ class CsoApp {
         // Tidak perlu cancelBooking ke API karena data belum masuk DB
         this.selectedOrderData = null;
         this.resetProof();
+
+        // Kembalikan indikator langkah jika pembayaran belum terverifikasi
+        if (!this.paymentVerified) this.setStep(1);
     }
 
     askCashConfirmation(method) {
@@ -918,8 +1128,10 @@ class CsoApp {
             this.pendingPaymentPayload = null;
             this.selectedDriverId = null;
             this.toSel.value = ''; // Reset pilihan zona
+            this.clearZoneSelection(); // Bersihkan highlight kartu & pencarian
             this.priceBox.textContent = '-';
             this.inpPassengerPhone.value = '';
+            this.setStep(1); // Kembali ke langkah awal
 
             // Render Ulang
             this.renderHistory();
@@ -1368,30 +1580,34 @@ class CsoApp {
         this.selectedBookingIdForChange = bookingId;
         this.changeDriverModal.classList.remove('hidden');
         this.changeDriverModal.classList.add('flex');
-        this.changeDriverList.innerHTML = '<div class="p-4 text-center text-slate-500">Memuat supir...</div>';
+        this.changeDriverList.innerHTML = '<div class="p-6 text-center text-slate-500 font-semibold">Memuat supir...</div>';
 
         try {
             const drivers = await fetchApi('/cso/available-drivers');
 
             if (drivers.length === 0) {
-                this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500">Tidak ada supir standby.</div>';
+                this.changeDriverList.innerHTML = '<div class="p-6 text-center text-rose-500 font-semibold">Tidak ada supir standby.</div>';
                 return;
             }
 
             this.changeDriverList.innerHTML = drivers.map(d => {
                 const profile = d.driver_profile || {};
+                const initial = (d.name || '?').charAt(0).toUpperCase();
                 return `
-                <div class="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer" onclick="window.app.doChangeDriver(${d.id})">
-                    <div>
-                        <div class="font-bold text-slate-800 dark:text-slate-100">${d.name}</div>
-                        <div class="text-xs text-slate-500">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
+                <div class="group flex items-center justify-between gap-3 p-3.5 border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-indigo-50/60 dark:hover:bg-slate-700/60 cursor-pointer transition-colors" onclick="window.app.doChangeDriver(${d.id})">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl btn-grad text-white flex items-center justify-center font-extrabold shadow-md flex-shrink-0">${initial}</div>
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 dark:text-slate-100 truncate">${d.name}</div>
+                            <div class="text-xs text-slate-500 truncate">${profile.car_model || '-'} • ${profile.plate_number || '-'}</div>
+                        </div>
                     </div>
-                    <button class="text-xs bg-primary-600 text-white px-3 py-1.5 rounded-lg font-bold">Pilih</button>
+                    <button class="text-xs btn-grad text-white px-3.5 py-2 rounded-xl font-bold flex-shrink-0 group-hover:scale-105 transition-transform">Pilih</button>
                 </div>`;
             }).join('');
 
         } catch (e) {
-            this.changeDriverList.innerHTML = '<div class="p-4 text-center text-red-500 error">Gagal memuat supir.</div>';
+            this.changeDriverList.innerHTML = '<div class="p-6 text-center text-rose-500 font-semibold error">Gagal memuat supir.</div>';
         }
     }
 

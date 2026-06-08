@@ -76,7 +76,7 @@ class DriverApiController extends Controller
         
 
         // Hitung Posisi Antrian (Jika standby)
-        if ($driver->driverProfile->status === 'standby') {
+        if ($driver->driverProfile && $driver->driverProfile->status === 'standby') {
             $myQueue = DriverQueue::where('user_id', $driver->id)->first();
             if ($myQueue) {
                 // Posisi = Jumlah antrian dengan sort_order lebih kecil + 1
