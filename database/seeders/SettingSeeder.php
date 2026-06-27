@@ -2,9 +2,8 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use App\Models\Setting;
 
 class SettingSeeder extends Seeder
 {
@@ -13,20 +12,19 @@ class SettingSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('settings')->insert([
-            [
-                'key' => 'commission_rate',
-                'value' => '0.2', // Simpan sebagai '0.2' untuk 20%
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'key' => 'admin_email',
-                'value' => 'leo.rizan68@gmail.com', 
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-    
-        ]);
+        // Data setting default aplikasi
+        $settings = [
+            'commission_rate' => '0.2', // Simpan sebagai '0.2' untuk 20%
+            'admin_email'     => 'leo.rizan68@gmail.com',
+        ];
+
+        // Menggunakan updateOrCreate agar seeder aman dijalankan lebih dari sekali
+        // (menghindari UNIQUE constraint violation pada kolom 'key').
+        foreach ($settings as $key => $value) {
+            Setting::updateOrCreate(
+                ['key' => $key],
+                ['value' => $value]
+            );
+        }
     }
 }

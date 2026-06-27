@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
+import 'screens/cso/cso_main_screen.dart';
+import 'screens/splash_screen.dart';
+import 'theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'services/api_service.dart';
@@ -43,21 +45,10 @@ class DriverApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taksi POS Driver',
+      title: 'Taxi Angkasa Jaya Driver',
+      debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey, // Pasang navigatorKey
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primaryColor: const Color(0xFF1A1A1A),
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-        textTheme: GoogleFonts.outfitTextTheme(
-          Theme.of(context).textTheme,
-        ).apply(bodyColor: Colors.white, displayColor: Colors.white),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFD4AF37), // Gold
-          secondary: Color(0xFFD4AF37),
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(context),
       home: const AuthWrapper(),
     );
   }
@@ -71,6 +62,8 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _showSplash = true;
+
   @override
   void initState() {
     super.initState();
@@ -94,18 +87,28 @@ class _AuthWrapperState extends State<AuthWrapper> {
       () =>
           Provider.of<AuthProvider>(context, listen: false).checkLoginStatus(),
     );
+
+    // 3. Tampilkan splash beranimasi sejenak saat pertama buka
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (mounted) setState(() => _showSplash = false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AuthProvider>(
-      builder: (context, auth, _) {
-        if (auth.isAuthenticated) {
-          return const MainScreen();
-        } else {
-          return const LoginScreen();
-        }
-      },
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 500),
+      child: _showSplash
+          ? const SplashScreen()
+          : Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                if (!auth.isAuthenticated) {
+                  return const LoginScreen();
+                }
+                // Arahkan ke shell sesuai peran pengguna.
+                return auth.isCso ? const CsoMainScreen() : const MainScreen();
+              },
+            ),
     );
   }
 }

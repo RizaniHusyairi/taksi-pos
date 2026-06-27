@@ -271,6 +271,15 @@ class ApiController extends Controller
     // [UBAH INI] Setujui Permintaan + Upload Bukti (Satu Langkah)
     public function adminApproveWithdrawal(Request $request, Withdrawals $withdrawal)
     {
+        // Hanya pencairan yang masih 'Pending' yang boleh disetujui.
+        // Tanpa guard ini, menyetujui pencairan yang sudah Approved/Rejected
+        // bisa memproses ulang transaksi & mengacaukan saldo driver.
+        if ($withdrawal->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Pencairan ini sudah diproses sebelumnya (status: ' . $withdrawal->status . ').',
+            ], 422);
+        }
+
         $request->validate([
             'proof_image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
         ]);
@@ -344,6 +353,17 @@ class ApiController extends Controller
     // === Update pada adminRejectWithdrawal ===
     public function adminRejectWithdrawal(Withdrawals $withdrawal)
     {
+        // Hanya pencairan yang masih 'Pending' yang boleh ditolak.
+        // KRITIS: tanpa guard ini, menolak pencairan yang sudah 'Approved'
+        // akan mengembalikan transaksi yang sudah 'Paid' menjadi 'Unpaid',
+        // sehingga uang yang sudah ditransfer MUNCUL LAGI di saldo driver
+        // (driver bisa menariknya dua kali / double payout).
+        if ($withdrawal->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Pencairan ini sudah diproses sebelumnya (status: ' . $withdrawal->status . ').',
+            ], 422);
+        }
+
         DB::transaction(function () use ($withdrawal) {
             // 1. Update Withdrawal
             $withdrawal->update(['status' => 'Rejected', 'processed_at' => now()]);

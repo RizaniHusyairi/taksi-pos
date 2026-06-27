@@ -53,7 +53,6 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/withdrawals', [ApiController::class, 'adminGetWithdrawals']);
         Route::post('/withdrawals/{withdrawal}/approve', [ApiController::class, 'adminApproveWithdrawal']);
         Route::post('/withdrawals/{withdrawal}/reject', [ApiController::class, 'adminRejectWithdrawal']);
-        Route::post('/withdrawals/{withdrawal}/paid', [ApiController::class, 'adminMarkAsPaid']);
         Route::get('/withdrawals/{withdrawal}/details', [ApiController::class, 'adminGetWithdrawalDetails']);
         
         // Laporan
@@ -84,6 +83,9 @@ Route::middleware('auth:sanctum')->group(function() {
         // Mengambil data awal yang dibutuhkan panel
         Route::get('/zones', [CsoApiController::class, 'getZones']);
         Route::get('/available-drivers', [CsoApiController::class, 'getAvailableDrivers']);
+        Route::get('/company-qris', [CsoApiController::class, 'companyQris']);
+        Route::get('/driver-locations', [CsoApiController::class, 'getDriverLocations']);
+        Route::get('/dashboard-stats', [CsoApiController::class, 'getDashboardStats']);
 
         // Aksi membuat booking dan pembayaran
         Route::post('/bookings', [CsoApiController::class, 'storeBooking']);
@@ -96,7 +98,6 @@ Route::middleware('auth:sanctum')->group(function() {
 
         // Route Profile CSO
         Route::get('/profile', [CsoApiController::class, 'getProfile']);
-        Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
 

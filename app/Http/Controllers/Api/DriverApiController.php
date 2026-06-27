@@ -139,7 +139,7 @@ class DriverApiController extends Controller
                 // Ambil Angka Giliran Hari Ini (Default 1 jika error)
                 $dailyStart = (int) Setting::where('key', 'daily_start_line')->value('value') ?: 1;
                 $myLine = $profile->line_number;
-                $totalDrivers = 30; // Atau hitung dinamis: DriverProfile::max('line_number');
+                $totalDrivers = \App\Models\DriverProfile::max('line_number') ?: 30; // jumlah driver dinamis
 
                 // Rumus Matematika Rotasi
                 if ($myLine >= $dailyStart) {
@@ -152,16 +152,21 @@ class DriverApiController extends Controller
                 }
             }
 
-            // Find the maximum sort_order in the queue
-            $maxOrder = DriverQueue::max('sort_order') ?? 0;
-
+            // Simpan ke antrian memakai sort_order hasil ROTASI:
+            //  - first-join hari ini  -> posisi giliran (mis. 0,1,2,... berdasar line_number)
+            //  - re-join              -> 1000 (antrian belakang / grup "Rejoin")
+            // Sebelumnya keliru memakai ($maxOrder + 1) sehingga rotasi tidak pernah berlaku
+            // dan semua driver selalu masuk ke belakang antrian.
             DriverQueue::updateOrCreate(
                 ['user_id' => $user->id],
                 [
                     'latitude' => $request->latitude,
                     'longitude' => $request->longitude,
-                    'sort_order' => $maxOrder + 1,
-                    'joined_at' => now(), // Reset waktu join
+                    'sort_order' => $sortOrder,
+                    // Catatan: TIDAK menyimpan 'joined_at' — kolomnya tidak ada di tabel &
+                    // bukan $fillable, jadi selama ini di-drop diam-diam. Waktu masuk antrian
+                    // sudah otomatis tercatat di created_at (baris antrian dibuat ulang tiap
+                    // join karena 'leave' menghapusnya); admin pun membaca created_at.
                 ]
             );
 
@@ -254,7 +259,18 @@ class DriverApiController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Update status booking saja. 
+        // Hanya order yang sedang berjalan (OnTrip) yang boleh diselesaikan.
+        // Mencegah "menyelesaikan" order yang belum dimulai (Assigned),
+        // sudah selesai (Completed), atau dibatalkan (Cancelled). Penting:
+        // tanpa cek ini, blok self-order di bawah bisa membuat catatan
+        // hutang (Transaction) ganda untuk order yang sama.
+        if ($booking->status !== 'OnTrip') {
+            return response()->json([
+                'message' => 'Order ini tidak bisa diselesaikan (status saat ini: ' . $booking->status . ').',
+            ], 422);
+        }
+
+        // Update status booking saja.
         // Tidak perlu update status driver_profile (karena kolomnya sudah dihapus).
         // Driver otomatis jadi 'offline' (tidak di queue) setelah trip selesai.
 
@@ -670,6 +686,15 @@ class DriverApiController extends Controller
     {
         if ($request->user()->id !== $booking->driver_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Hanya order yang belum dimulai & belum selesai yang boleh di-Start.
+        // (Sebelumnya tanpa cek status: order Completed/Cancelled pun bisa
+        //  dipaksa menjadi OnTrip.)
+        if (in_array($booking->status, ['OnTrip', 'Completed', 'Cancelled'])) {
+            return response()->json([
+                'message' => 'Order ini tidak bisa dimulai (status saat ini: ' . $booking->status . ').',
+            ], 422);
         }
 
         $booking->update(['status' => 'OnTrip']);

@@ -7,6 +7,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/sky_header.dart';
+import '../widgets/app_card.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/fade_in.dart';
 
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -36,8 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _startLocationService();
     _startCountdownTimer();
   }
-
-  // ... (dispose and timers remain same)
 
   // Modifikasi _processLocationUpdate
   void _processLocationUpdate(Map<String, dynamic> data) {
@@ -70,7 +73,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _lastLng = lng;
       });
 
-      // ... (Auto-refresh/Auto-kick logic remains same) ...
       // Auto-refresh profile if auto-joined
       if (statusResp == 'standby' &&
           authProvider.user?['driver_profile']['status'] == 'offline') {
@@ -89,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(data['message'] ?? "Antrian Hangus"),
-            backgroundColor: Colors.red,
+            backgroundColor: AppColors.danger,
           ),
         );
       }
@@ -127,7 +129,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gagal: $e"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Gagal: $e"),
+            backgroundColor: AppColors.danger,
+          ),
         );
       }
     }
@@ -237,9 +242,16 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (stfContext, setState) {
           return AlertDialog(
-            title: Text(
-              "Dapat Penumpang Sendiri",
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            title: Row(
+              children: [
+                const Icon(Icons.person_pin_circle_rounded,
+                    color: AppColors.cyan),
+                const SizedBox(width: 8),
+                Text(
+                  "Penumpang Sendiri",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -251,6 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     hintText: "Misal: Hotel A",
                   ),
                 ),
+                const SizedBox(height: 14),
                 TextField(
                   controller: priceController,
                   decoration: const InputDecoration(
@@ -259,10 +272,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Biaya admin Rp 10.000 akan dicatat sebagai hutang.",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          color: AppColors.warning, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Biaya admin Rp 10.000 dicatat sebagai hutang.",
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            color: AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -271,9 +303,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: isLoading
                     ? null
                     : () => Navigator.pop(dialogContext),
-                child: const Text("Batal"),
+                child: Text(
+                  "Batal",
+                  style: GoogleFonts.outfit(color: AppColors.inkSoft),
+                ),
               ),
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.skyBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 onPressed: isLoading
                     ? null
                     : () async {
@@ -299,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         } catch (e) {
                           setState(() => isLoading = false);
                           if (mounted) {
-                            // Use PARENT context for SnackBar (dialog context might be tricky)
+                            // Use PARENT context for SnackBar
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text("Error: $e")),
                             );
@@ -310,7 +352,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text("Mulai Jalan"),
               ),
@@ -328,6 +373,42 @@ class _HomeScreenState extends State<HomeScreen> {
     return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
   }
 
+  // Metadata status (warna, label, ikon) sesuai kondisi driver.
+  ({Color color, String label, IconData icon}) _statusMeta(String status) {
+    if (status == 'offline') {
+      if (!_isInArea) {
+        return (
+          color: AppColors.warning,
+          label: 'DI LUAR AREA',
+          icon: Icons.location_off_rounded,
+        );
+      }
+      return (
+        color: AppColors.danger,
+        label: 'TIDAK AKTIF',
+        icon: Icons.pause_circle_filled_rounded,
+      );
+    } else if (status == 'standby') {
+      if (!_isInArea) {
+        return (
+          color: const Color(0xFFE8590C),
+          label: 'PERINGATAN',
+          icon: Icons.warning_amber_rounded,
+        );
+      }
+      return (
+        color: AppColors.success,
+        label: 'MENUNGGU ORDER',
+        icon: Icons.flight_takeoff_rounded,
+      );
+    }
+    return (
+      color: AppColors.skyBlue,
+      label: 'SEDANG SIBUK',
+      icon: Icons.directions_car_filled_rounded,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
@@ -339,19 +420,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // --- Parse Pickup Timer if Booking Exists ---
     if (activeBooking != null && activeBooking['status'] == 'Assigned') {
       if (_pickupTimeSeconds == null) {
-        // Only set once to avoid reset on refresh
         final createdAtStr = activeBooking['created_at'];
         if (createdAtStr != null) {
-          final created = DateTime.parse(createdAtStr); // UTC / Server Time
-          // Assuming Server Time is synced roughly, we calculate diff
-          // Better approach: Server sends 'seconds_left'. But here we calc manually.
-          // Note: DateTime.parse might parse as Local if no timezone info.
-          // Ideally backend sends 'expires_at'.
-          // Simple Fix: We assume created time is recent.
-
-          // If created is 10:00, now is 10:02. Diff is 2 mins. Remaining 8 mins (480s).
+          final created = DateTime.parse(createdAtStr);
           final now = DateTime.now();
-          // Adjust timezone if needed. For now assume same timezone.
           final diff = now.difference(created).inSeconds;
           final totalTimeout = 600; // 10 minutes
 
@@ -369,98 +441,195 @@ class _HomeScreenState extends State<HomeScreen> {
       decimalDigits: 0,
     );
 
+    final name = (user?['name'] ?? 'Driver').toString();
+    final firstName = name.split(' ').first;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          'DASHBOARD',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          SkyHeader(
+            title: 'Halo, $firstName 👋',
+            subtitle: 'Semoga lancar mengangkasa hari ini',
+            actions: [
+              HeaderIconButton(
+                icon: Icons.refresh_rounded,
+                onTap: () => auth.fetchProfile(),
+                tooltip: 'Segarkan',
+              ),
+              HeaderIconButton(
+                icon: Icons.logout_rounded,
+                onTap: () => auth.logout(),
+                tooltip: 'Keluar',
+              ),
+            ],
+            child: _driverHeaderCard(name, profile, status),
           ),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => auth.fetchProfile(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () => auth.logout(),
+          Expanded(
+            child: RefreshIndicator(
+              color: AppColors.skyBlue,
+              onRefresh: auth.fetchProfile,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (activeBooking != null) ...[
+                      FadeInUp(
+                        child: _buildOrderCard(activeBooking, currencyFormat),
+                      ),
+                    ] else ...[
+                      FadeInUp(
+                        child: _buildStatusCard(
+                          status,
+                          profile,
+                          user?['queue_position'],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      FadeInUp(
+                        delayMs: 120,
+                        child: _buildActionButtons(status),
+                      ),
+                    ],
+                    const SizedBox(height: 26),
+                    Center(child: _locationChip()),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: auth.fetchProfile,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // User Info Card
-              Card(
-                color: Colors.white10,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const CircleAvatar(
-                        backgroundColor: Colors.white24,
-                        child: Icon(Icons.person, color: Colors.white),
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "${user?['name'] ?? 'Driver'}",
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            profile?['plate_number'] ?? '-',
-                            style: GoogleFonts.outfit(color: Colors.white70),
-                          ),
-                        ],
-                      ),
-                    ],
+    );
+  }
+
+  Widget _driverHeaderCard(
+    String name,
+    Map<String, dynamic>? profile,
+    String status,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 25,
+            backgroundColor: Colors.white,
+            child: const Icon(Icons.person_rounded,
+                color: AppColors.deepBlue, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              if (activeBooking != null) ...[
-                _buildOrderCard(activeBooking, currencyFormat),
-              ] else ...[
-                _buildStatusCard(status, profile, user?['queue_position']),
-                const SizedBox(height: 24),
-                _buildActionButtons(status),
-              ],
-
-              const SizedBox(height: 24),
-              Center(
-                child: Text(
-                  _locationStatus,
-                  style: const TextStyle(color: Colors.white30, fontSize: 10),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    const Icon(Icons.directions_car_rounded,
+                        color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      profile?['plate_number'] ?? '-',
+                      style: GoogleFonts.outfit(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          _headerStatusPill(status),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerStatusPill(String status) {
+    final meta = _statusMeta(status);
+    String short;
+    if (status == 'standby') {
+      short = _isInArea ? 'AKTIF' : 'WASPADA';
+    } else if (status == 'offline') {
+      short = 'NONAKTIF';
+    } else {
+      short = 'SIBUK';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: meta.color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            short,
+            style: GoogleFonts.outfit(
+              color: meta.color,
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _locationChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.paleBlue,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.gps_fixed_rounded, size: 14, color: AppColors.cyan),
+          const SizedBox(width: 6),
+          Text(
+            _locationStatus,
+            style: GoogleFonts.outfit(
+              color: AppColors.inkSoft,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildOrderCard(Map<String, dynamic> booking, NumberFormat currency) {
-    final zoneName =
-        booking['zone_to']?['name'] ??
+    final zoneName = booking['zone_to']?['name'] ??
         booking['manual_destination'] ??
         'Tujuan Manual';
     final price = double.tryParse(booking['price'].toString()) ?? 0;
@@ -473,137 +642,131 @@ class _HomeScreenState extends State<HomeScreen> {
       paymentMethod = 'Tunai ke Supir';
     }
     final isOntrip = booking['status'] == 'OnTrip';
+    final accent = isOntrip ? AppColors.skyBlue : AppColors.success;
 
-    return Card(
-      color: isOntrip
-          ? Colors.blue.withOpacity(0.1)
-          : const Color(0xFFD4AF37).withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: isOntrip ? Colors.blue : const Color(0xFFD4AF37),
-          width: 2,
+    return AppCard(
+      padding: EdgeInsets.zero,
+      shadow: [
+        BoxShadow(
+          color: accent.withValues(alpha: 0.25),
+          blurRadius: 26,
+          offset: const Offset(0, 12),
         ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header strip gradien
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isOntrip
+                    ? const [AppColors.deepBlue, AppColors.skyBlue]
+                    : const [Color(0xFF12A06B), AppColors.success],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: Row(
               children: [
                 Icon(
-                  Icons.directions_car,
-                  color: isOntrip ? Colors.blue : const Color(0xFFD4AF37),
+                  isOntrip
+                      ? Icons.navigation_rounded
+                      : Icons.notifications_active_rounded,
+                  color: Colors.white,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Text(
                   isOntrip ? "DALAM PERJALANAN" : "ORDERAN MASUK",
                   style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isOntrip ? Colors.blue : const Color(0xFFD4AF37),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
             ),
-            const Divider(color: Colors.white24, height: 32),
-
-            if (!isOntrip && _pickupTimeSeconds != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: (_pickupTimeSeconds! < 60)
-                      ? Colors.red.withOpacity(0.2)
-                      : Colors.orange.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: (_pickupTimeSeconds! < 60)
-                        ? Colors.red
-                        : Colors.orange.withOpacity(0.5),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.timer,
-                      color: (_pickupTimeSeconds! < 60)
-                          ? Colors.red
-                          : Colors.orange,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!isOntrip && _pickupTimeSeconds != null)
+                  _pickupTimerBox(),
+                _orderRow("Tujuan", zoneName, isBold: true),
+                _orderRow("Tarif", currency.format(price), isHighlight: true),
+                const Divider(height: 28),
+                _orderRow("Penumpang (WA)", passengerPhone),
+                _orderRow("CSO", csoName),
+                _orderRow("Pembayaran", paymentMethod),
+                const SizedBox(height: 24),
+                if (!isOntrip)
+                  GradientButton(
+                    label: "MULAI PERJALANAN",
+                    icon: Icons.play_arrow_rounded,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF12A06B), AppColors.success],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Waktu Jemput",
-                            style: GoogleFonts.outfit(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            _formatDuration(_pickupTimeSeconds!),
-                            style: GoogleFonts.robotoMono(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ],
-                      ),
+                    onPressed: () => _startTrip(booking['id']),
+                  )
+                else
+                  GradientButton(
+                    label: "SELESAIKAN PERJALANAN",
+                    icon: Icons.check_circle_rounded,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.deepBlue, AppColors.skyBlue],
                     ),
-                  ],
-                ),
-              ),
+                    onPressed: () => _completeTrip(booking['id']),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            _orderRow("Tujuan", zoneName, isBold: true),
-            _orderRow("Tarif", currency.format(price), isHighlight: true),
-            const SizedBox(height: 16),
-            _orderRow("Penumpang (WA)", passengerPhone),
-            _orderRow("CSO", csoName),
-            _orderRow("Pembayaran", paymentMethod),
-
-            const SizedBox(height: 32),
-
-            if (!isOntrip)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+  Widget _pickupTimerBox() {
+    final urgent = _pickupTimeSeconds! < 60;
+    final color = urgent ? AppColors.danger : AppColors.warning;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.timer_rounded, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Batas Waktu Jemput",
+                  style: GoogleFonts.outfit(
+                    color: AppColors.inkSoft,
+                    fontSize: 12,
                   ),
                 ),
-                onPressed: () => _startTrip(booking['id']),
-                child: Text(
-                  "MULAI PERJALANAN",
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                ),
-              )
-            else
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                Text(
+                  _formatDuration(_pickupTimeSeconds!),
+                  style: GoogleFonts.robotoMono(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
                   ),
                 ),
-                onPressed: () => _completeTrip(booking['id']),
-                child: Text(
-                  "SELESAIKAN PERJALANAN",
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -615,21 +778,20 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isHighlight = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.outfit(color: Colors.white70)),
+          Text(label, style: GoogleFonts.outfit(color: AppColors.inkSoft)),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
               style: GoogleFonts.outfit(
-                color: isHighlight ? const Color(0xFFD4AF37) : Colors.white,
-                fontWeight: isBold || isHighlight
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-                fontSize: isHighlight ? 18 : 14,
+                color: isHighlight ? AppColors.cyan : AppColors.ink,
+                fontWeight:
+                    isBold || isHighlight ? FontWeight.bold : FontWeight.w500,
+                fontSize: isHighlight ? 20 : 14,
               ),
             ),
           ),
@@ -643,100 +805,129 @@ class _HomeScreenState extends State<HomeScreen> {
     Map<String, dynamic>? profile,
     dynamic queuePosition,
   ) {
-    Color color;
-    String text;
+    final meta = _statusMeta(status);
+    final color = meta.color;
 
-    // LOGIKA STATUS TEXT
-    if (status == 'offline') {
-      if (!_isInArea) {
-        color = Colors.orange;
-        text = 'DILUAR AREA';
-      } else {
-        color = Colors.red;
-        text = 'TIDAK AKTIF';
-      }
-    } else if (status == 'standby') {
-      // Jika Standby tapi diluar area -> WARNING GRACE PERIOD
-      if (!_isInArea) {
-        color = Colors.deepOrange; // Lebih gelap
-        text = 'PERINGATAN';
-      } else {
-        color = Colors.green;
-        text = 'MENUNGGU';
-      }
-    } else {
-      color = Colors.blue;
-      text = 'SIBUK';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color, width: 2),
-      ),
+    return AppCard(
       child: Column(
         children: [
-          Text(
-            text,
-            style: GoogleFonts.outfit(
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              color: color,
-              letterSpacing: 2,
-            ),
+          Row(
+            children: [
+              _StatusEmblem(
+                color: color,
+                icon: meta.icon,
+                pulsing: status == 'standby' && _isInArea,
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Status Anda",
+                      style: GoogleFonts.outfit(
+                        color: AppColors.inkSoft,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      meta.label,
+                      style: GoogleFonts.outfit(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
 
-          // Subtext Warning Grace Period + Live Countdown
+          // Grace period countdown (standby di luar area)
           if (status == 'standby' && !_isInArea) ...[
-            const SizedBox(height: 16),
+            const Divider(height: 28),
             Text(
               "Kembali ke area dalam:",
-              style: GoogleFonts.outfit(fontSize: 14, color: Colors.white70),
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                color: AppColors.inkSoft,
+              ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.redAccent.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(50),
-                border: Border.all(color: Colors.redAccent),
+                color: AppColors.danger.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.5)),
               ),
               child: Text(
                 _remainingTimeSeconds != null
                     ? _formatDuration(_remainingTimeSeconds!)
                     : "--:--",
-                textAlign: TextAlign.center,
                 style: GoogleFonts.robotoMono(
-                  // Monospace biar angkanya diam
-                  fontSize: 32,
-                  color: Colors.white,
+                  fontSize: 30,
+                  color: AppColors.danger,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
                 ),
               ),
             ),
-          ] else if (status == 'standby' &&
-              !_isInArea &&
-              _remainingTimeSeconds == null) ...[
-            // Fallback if null
-            const SizedBox(height: 16),
-            const CircularProgressIndicator(color: Colors.white),
           ] else if (status == 'offline' && !_isInArea) ...[
-            const SizedBox(height: 8),
-            Text(
-              "Masuk area bandara untuk antri",
-              style: GoogleFonts.outfit(fontSize: 14, color: Colors.white70),
+            const Divider(height: 28),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.info_outline_rounded,
+                    size: 16, color: AppColors.inkSoft),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    "Masuk area bandara untuk mulai antri",
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
 
-          // Queue info
+          // Info antrian (saat standby)
           if (status == 'standby') ...[
-            const SizedBox(height: 16),
-            Text(
-              "Antrian #${queuePosition ?? profile?['line_number'] ?? '-'}",
-              style: GoogleFonts.outfit(fontSize: 20, color: Colors.white),
+            const SizedBox(height: 18),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                gradient: AppColors.skyGradient,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    "NOMOR ANTRIAN",
+                    style: GoogleFonts.outfit(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    "#${queuePosition ?? profile?['line_number'] ?? '-'}",
+                    style: GoogleFonts.outfit(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -747,65 +938,111 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildActionButtons(String status) {
     if (status == 'offline') {
       if (!_isInArea) {
-        return ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white10,
-            foregroundColor: Colors.white30,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        return const GradientButton(
+          label: "TIDAK BISA MASUK ANTRIAN",
+          icon: Icons.block_rounded,
           onPressed: null,
-          child: Text(
-            "TIDAK BISA MASUK ANTRIAN",
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-          ),
         );
       } else {
-        return ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFD4AF37),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          icon: const Icon(Icons.login, color: Colors.black),
-          label: Text(
-            "GABUNG ANTRIAN (MANUAL)",
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
-          onPressed: () {
-            _joinQueue();
-          },
+        return GradientButton(
+          label: "GABUNG ANTRIAN (MANUAL)",
+          icon: Icons.login_rounded,
+          onPressed: _joinQueue,
         );
       }
     } else if (status == 'standby') {
-      return ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blueAccent, // Change to Blue to distinguish
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+      return GradientButton(
+        label: "DAPAT PENUMPANG SENDIRI",
+        icon: Icons.person_add_alt_1_rounded,
+        gradient: const LinearGradient(
+          colors: [AppColors.deepBlue, AppColors.royalBlue],
         ),
-        icon: const Icon(Icons.person_add, color: Colors.white),
-        label: Text(
-          "DAPAT PENUMPANG SENDIRI",
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        onPressed: () {
-          _showSelfPassengerDialog();
-        },
+        onPressed: _showSelfPassengerDialog,
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// Lambang status berbentuk lingkaran; menampilkan cincin berdenyut saat
+/// driver aktif menunggu order (animasi kecil + RepaintBoundary -> ringan).
+class _StatusEmblem extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final bool pulsing;
+
+  const _StatusEmblem({
+    required this.color,
+    required this.icon,
+    required this.pulsing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (pulsing) RepaintBoundary(child: _PulseRing(color: color)),
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseRing extends StatefulWidget {
+  final Color color;
+  const _PulseRing({required this.color});
+
+  @override
+  State<_PulseRing> createState() => _PulseRingState();
+}
+
+class _PulseRingState extends State<_PulseRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final v = _c.value;
+        return Opacity(
+          opacity: (1 - v) * 0.5,
+          child: Transform.scale(
+            scale: 0.7 + v * 0.7,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: widget.color, width: 2.5),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

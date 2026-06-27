@@ -4,6 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_colors.dart';
+import '../widgets/sky_header.dart';
+import '../widgets/app_card.dart';
+import '../widgets/gradient_button.dart';
+import '../widgets/fade_in.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -17,7 +22,6 @@ class _WalletScreenState extends State<WalletScreen> {
   bool _isLoading = true;
   double _balance = 0;
   List<dynamic> _history = [];
-  String _error = '';
 
   // Bank Info
   String _bankName = 'Bank BTN';
@@ -60,7 +64,6 @@ class _WalletScreenState extends State<WalletScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Failed to load data';
           _isLoading = false;
         });
       }
@@ -90,9 +93,16 @@ class _WalletScreenState extends State<WalletScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Batal"),
+            child: Text(
+              "Batal",
+              style: GoogleFonts.outfit(color: AppColors.inkSoft),
+            ),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.skyBlue,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text("Ya, Tarik Dana"),
           ),
@@ -127,120 +137,96 @@ class _WalletScreenState extends State<WalletScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(ctx).viewInsets.bottom,
           left: 24,
           right: 24,
-          top: 24,
+          top: 12,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: AppColors.inkFaint.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
             Text(
               "Atur Rekening Pencairan",
               style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppColors.ink,
               ),
             ),
-            const SizedBox(height: 24),
-
-            Text("Nama Bank", style: GoogleFonts.outfit(color: Colors.white70)),
+            const SizedBox(height: 22),
+            Text("Nama Bank",
+                style: GoogleFonts.outfit(color: AppColors.inkSoft)),
             const SizedBox(height: 8),
             TextField(
               enabled: false,
               decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.white10,
-                hintText: "Bank BTN",
-                hintStyle: GoogleFonts.outfit(color: Colors.white),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                hintText: _bankName,
+                hintStyle: GoogleFonts.outfit(color: AppColors.ink),
+                prefixIcon:
+                    const Icon(Icons.account_balance_rounded, color: AppColors.cyan),
               ),
             ),
             const SizedBox(height: 16),
-
-            Text(
-              "Nomor Rekening",
-              style: GoogleFonts.outfit(color: Colors.white70),
-            ),
+            Text("Nomor Rekening",
+                style: GoogleFonts.outfit(color: AppColors.inkSoft)),
             const SizedBox(height: 8),
             TextField(
               controller: accController,
               keyboardType: TextInputType.number,
-              style: GoogleFonts.outfit(color: Colors.white),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Colors.white10,
+              style: GoogleFonts.outfit(color: AppColors.ink),
+              decoration: const InputDecoration(
                 hintText: "Masukkan nomor rekening",
-                hintStyle: GoogleFonts.outfit(color: Colors.white30),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Colors.white10),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFD4AF37)),
-                ),
+                prefixIcon: Icon(Icons.numbers_rounded, color: AppColors.cyan),
               ),
             ),
-            const SizedBox(height: 32),
-
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFD4AF37),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  if (accController.text.isEmpty) return;
-                  try {
-                    Navigator.pop(ctx);
+            const SizedBox(height: 28),
+            GradientButton(
+              label: "SIMPAN REKENING",
+              icon: Icons.save_rounded,
+              onPressed: () async {
+                if (accController.text.isEmpty) return;
+                try {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Menyimpan rekening...')),
+                  );
+                  await _apiService.updateBankDetails(accController.text);
+                  await _fetchData(); // Refresh UI
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Menyimpan rekening...')),
+                      const SnackBar(
+                        content: Text('Rekening berhasil disimpan!'),
+                      ),
                     );
-                    await _apiService.updateBankDetails(accController.text);
-                    await _fetchData(); // Refresh UI
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Rekening berhasil disimpan!'),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Gagal menyimpan rekening'),
-                        ),
-                      );
-                    }
                   }
-                },
-                child: Text(
-                  "SIMPAN REKENING",
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                ),
-              ),
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Gagal menyimpan rekening')),
+                    );
+                  }
+                }
+              },
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
           ],
         ),
       ),
@@ -256,332 +242,300 @@ class _WalletScreenState extends State<WalletScreen> {
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      appBar: AppBar(
-        title: Text(
-          'DOMPET',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          const SkyHeader(
+            title: 'Dompet',
+            subtitle: 'Saldo & pencairan dana Anda',
           ),
-        ),
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetchData,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // === Bank Account Card ===
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white10,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Row(
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    color: AppColors.skyBlue,
+                    onRefresh: _fetchData,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance,
-                            color: Colors.blue,
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _bankName,
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _accountNumber.isEmpty
-                                    ? "Belum Diatur"
-                                    : _accountNumber,
-                                style: GoogleFonts.outfit(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _showEditBankDialog,
+                        // === Balance hero ===
+                        FadeInUp(child: _balanceCard(currencyFormat)),
+                        const SizedBox(height: 18),
+                        // === Bank account ===
+                        FadeInUp(delayMs: 90, child: _bankCard()),
+                        const SizedBox(height: 28),
+                        FadeInUp(
+                          delayMs: 150,
                           child: Text(
-                            _accountNumber.isEmpty ? "ATUR" : "UBAH",
+                            "Riwayat Penarikan",
                             style: GoogleFonts.outfit(
-                              color: const Color(0xFFD4AF37),
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
+                              color: AppColors.ink,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Balance Card
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFD4AF37), Color(0xFFA6862D)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFD4AF37).withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Total Saldo Bersih',
-                              style: GoogleFonts.outfit(
-                                color: Colors.black54,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.account_balance_wallet,
-                              color: Colors.black54,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          currencyFormat.format(_balance),
-                          style: GoogleFonts.outfit(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                            onPressed: _balance >= 10000
-                                ? _requestWithdrawal
-                                : null,
-                            child: Text(
-                              'TARIK DANA',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (_balance < 10000)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Center(
-                              child: Text(
-                                "Minimal penarikan Rp 10.000",
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: Colors.black54,
+                        const SizedBox(height: 14),
+                        if (_history.isEmpty)
+                          _emptyHistory()
+                        else
+                          ..._history.asMap().entries.map(
+                                (e) => FadeInUp(
+                                  delayMs: (e.key * 50).clamp(0, 300),
+                                  child: _withdrawalItem(e.value, currencyFormat),
                                 ),
                               ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
 
-                  const SizedBox(height: 32),
-                  Text(
-                    "Riwayat Penarikan",
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+  Widget _balanceCard(NumberFormat currency) {
+    final canWithdraw = _balance >= 10000;
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: AppColors.skyGradient,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.skyBlue.withValues(alpha: 0.35),
+            blurRadius: 26,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total Saldo Bersih',
+                style: GoogleFonts.outfit(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Icon(Icons.account_balance_wallet_rounded,
+                  color: Colors.white),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            currency.format(_balance),
+            style: GoogleFonts.outfit(
+              fontSize: 36,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 22),
+          _WhiteButton(
+            label: 'TARIK DANA',
+            icon: Icons.arrow_outward_rounded,
+            onPressed: canWithdraw ? _requestWithdrawal : null,
+          ),
+          if (!canWithdraw)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Center(
+                child: Text(
+                  "Minimal penarikan Rp 10.000",
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.85),
                   ),
-                  const SizedBox(height: 16),
-
-                  if (_history.isEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 32),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.history,
-                              size: 48,
-                              color: Colors.white10,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              "Belum ada riwayat penarikan.",
-                              style: GoogleFonts.outfit(color: Colors.white30),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    ..._history.map((item) {
-                      final status = item['status'];
-                      Color statusColor;
-                      IconData statusIcon;
-
-                      switch (status) {
-                        case 'Paid':
-                          statusColor = Colors.green;
-                          statusIcon = Icons.check_circle;
-                          break;
-                        case 'Pending':
-                          statusColor = Colors.orange;
-                          statusIcon = Icons.access_time_filled;
-                          break;
-                        case 'Rejected':
-                          statusColor = Colors.red;
-                          statusIcon = Icons.cancel;
-                          break;
-                        default:
-                          statusColor = Colors.grey;
-                          statusIcon = Icons.help;
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              statusIcon,
-                              color: statusColor,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            currencyFormat.format(
-                              double.parse(item['amount'].toString()),
-                            ),
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  DateFormat('dd MMM yyyy, HH:mm').format(
-                                    DateTime.parse(item['requested_at']),
-                                  ),
-                                  style: GoogleFonts.outfit(
-                                    color: Colors.white38,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                if (item['proof_image_url'] != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: InkWell(
-                                      onTap: () => _showProofDialog(
-                                        context,
-                                        item['proof_image_url'],
-                                      ),
-                                      child: Text(
-                                        "Lihat Bukti Transfer",
-                                        style: GoogleFonts.outfit(
-                                          color: Colors.blueAccent,
-                                          fontSize: 12,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: statusColor.withOpacity(0.3),
-                              ),
-                            ),
-                            child: Text(
-                              status.toUpperCase(),
-                              style: GoogleFonts.outfit(
-                                color: statusColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-
-                  const SizedBox(height: 32),
-                ],
+                ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bankCard() {
+    return AppCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.paleBlue,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.account_balance_rounded,
+                color: AppColors.skyBlue, size: 26),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _bankName,
+                  style: GoogleFonts.outfit(
+                    color: AppColors.inkSoft,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _accountNumber.isEmpty ? "Belum Diatur" : _accountNumber,
+                  style: GoogleFonts.outfit(
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: _showEditBankDialog,
+            child: Text(
+              _accountNumber.isEmpty ? "ATUR" : "UBAH",
+              style: GoogleFonts.outfit(
+                color: AppColors.cyan,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyHistory() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 30),
+      child: Column(
+        children: [
+          Icon(Icons.receipt_long_rounded,
+              size: 54, color: AppColors.inkFaint.withValues(alpha: 0.5)),
+          const SizedBox(height: 14),
+          Text(
+            "Belum ada riwayat penarikan.",
+            style: GoogleFonts.outfit(color: AppColors.inkFaint),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _withdrawalItem(dynamic item, NumberFormat currency) {
+    final status = item['status'];
+    Color statusColor;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'Paid':
+        statusColor = AppColors.success;
+        statusIcon = Icons.check_circle_rounded;
+        break;
+      case 'Pending':
+        statusColor = AppColors.warning;
+        statusIcon = Icons.access_time_filled_rounded;
+        break;
+      case 'Rejected':
+        statusColor = AppColors.danger;
+        statusIcon = Icons.cancel_rounded;
+        break;
+      default:
+        statusColor = AppColors.inkFaint;
+        statusIcon = Icons.help_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(statusIcon, color: statusColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  currency.format(double.parse(item['amount'].toString())),
+                  style: GoogleFonts.outfit(
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  DateFormat('dd MMM yyyy, HH:mm')
+                      .format(DateTime.parse(item['requested_at'])),
+                  style: GoogleFonts.outfit(
+                    color: AppColors.inkFaint,
+                    fontSize: 12,
+                  ),
+                ),
+                if (item['proof_image_url'] != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: InkWell(
+                      onTap: () =>
+                          _showProofDialog(context, item['proof_image_url']),
+                      child: Text(
+                        "Lihat Bukti Transfer",
+                        style: GoogleFonts.outfit(
+                          color: AppColors.cyan,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              status.toString().toUpperCase(),
+              style: GoogleFonts.outfit(
+                color: statusColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -596,10 +550,10 @@ class _WalletScreenState extends State<WalletScreen> {
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 child: Image.network(
                   imageUrl,
                   fit: BoxFit.contain,
@@ -634,6 +588,49 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Tombol putih untuk dipakai di atas kartu gradien (kontras tinggi).
+class _WhiteButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  const _WhiteButton({required this.label, required this.icon, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: AppColors.deepBlue, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    color: AppColors.deepBlue,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

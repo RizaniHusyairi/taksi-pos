@@ -4,9 +4,16 @@ import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  // Use 10.0.2.2 for Android Emulator to access localhost
-  // Use your machine's IP (e.g., 10.49.92.29) if testing on physical device
-  static const String baseUrl = 'https://kaj.aptpairport.id/api';
+  // Testing via USB: phone reaches the PC server through `adb reverse tcp:8000 tcp:8000`,
+  // so localhost on the phone tunnels to the PC. No Wi-Fi/firewall needed.
+  //   LAN alternative: http://<PC-LAN-IP>:8000/api  (needs server on 0.0.0.0 + firewall open)
+  //   Production:      https://kaj.aptpairport.id/api
+  static const String baseUrl = 'http://127.0.0.1:8000/api';
+
+  /// Base URL untuk aset publik (mis. /storage/...) — baseUrl tanpa sufiks '/api'.
+  static String get assetBaseUrl => baseUrl.endsWith('/api')
+      ? baseUrl.substring(0, baseUrl.length - 4)
+      : baseUrl;
 
   late Dio _dio;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -28,7 +35,7 @@ class ApiService {
     _dio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
         final client = HttpClient();
-        client.badCertificateCallback = 
+        client.badCertificateCallback =
             (X509Certificate cert, String host, int port) => true;
         return client;
       },
@@ -154,6 +161,93 @@ class ApiService {
     return await _dio.post(
       '/driver/update-fcm-token',
       data: {'fcm_token': token},
+    );
+  }
+
+  // --- CSO Endpoints ---
+
+  Future<Response> getCsoProfile() async {
+    return await _dio.get('/cso/profile');
+  }
+
+  Future<Response> updateCsoProfile(Map<String, dynamic> data) async {
+    return await _dio.post('/cso/profile/update', data: data);
+  }
+
+  Future<Response> changeCsoPassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    return await _dio.post(
+      '/cso/profile/password',
+      data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+        'new_password_confirmation': newPassword,
+      },
+    );
+  }
+
+  Future<Response> getCsoZones() async {
+    return await _dio.get('/cso/zones');
+  }
+
+  Future<Response> getCsoAvailableDrivers() async {
+    return await _dio.get('/cso/available-drivers');
+  }
+
+  Future<Response> getCsoCompanyQris() async {
+    return await _dio.get('/cso/company-qris');
+  }
+
+  Future<Response> getCsoDriverLocations() async {
+    return await _dio.get('/cso/driver-locations');
+  }
+
+  Future<Response> getCsoDashboardStats() async {
+    return await _dio.get('/cso/dashboard-stats');
+  }
+
+  Future<Response> getCsoHistory({String? startDate, String? endDate}) async {
+    final Map<String, dynamic> params = {};
+    if (startDate != null && endDate != null) {
+      params['start_date'] = startDate;
+      params['end_date'] = endDate;
+    }
+    return await _dio.get(
+      '/cso/history',
+      queryParameters: params.isEmpty ? null : params,
+    );
+  }
+
+  /// Membuat order CSO (booking + transaksi + notifikasi) dalam satu panggilan.
+  /// [proofImagePath] hanya diisi untuk metode QRIS (foto bukti transfer).
+  Future<Response> csoProcessOrder({
+    required int driverId,
+    required int zoneId,
+    required String method,
+    required String passengerPhone,
+    String? proofImagePath,
+  }) async {
+    final Map<String, dynamic> fields = {
+      'driver_id': driverId,
+      'zone_id': zoneId,
+      'method': method,
+      'passenger_phone': passengerPhone,
+    };
+    if (proofImagePath != null) {
+      fields['payment_proof'] = await MultipartFile.fromFile(proofImagePath);
+    }
+    return await _dio.post(
+      '/cso/process-order',
+      data: FormData.fromMap(fields),
+    );
+  }
+
+  Future<Response> csoChangeDriver(int bookingId, int newDriverId) async {
+    return await _dio.post(
+      '/cso/bookings/$bookingId/change-driver',
+      data: {'new_driver_id': newDriverId},
     );
   }
 }

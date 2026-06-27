@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/sky_header.dart';
+import '../widgets/gradient_button.dart';
 import 'package:dio/dio.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -78,7 +81,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
         // Refresh Auth Provider
         await Provider.of<AuthProvider>(context, listen: false).fetchProfile();
-        Navigator.pop(context); // Go back
+        if (mounted) Navigator.pop(context); // Go back
       }
     } on DioException catch (e) {
       if (mounted) {
@@ -98,130 +101,122 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      appBar: AppBar(
-        title: Text(
-          'EDIT PROFIL',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          SkyHeader(
+            title: 'Edit Profil',
+            subtitle: 'Perbarui data diri & kendaraan',
+            onBack: () => Navigator.pop(context),
           ),
-        ),
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle("Informasi Akun"),
-              _buildTextField("Nama Lengkap", _nameController),
-              _buildTextField("Username", _usernameController),
-              _buildTextField(
-                "Email",
-                _emailController,
-                TextInputType.emailAddress,
-              ),
-              _buildTextField(
-                "Nomor HP",
-                _phoneController,
-                TextInputType.phone,
-              ),
-
-              const SizedBox(height: 24),
-              _buildSectionTitle("Informasi Kendaraan"),
-              _buildTextField(
-                "Model Mobil (Contoh: Avanza Hitam)",
-                _carModelController,
-              ),
-              _buildTextField("Plat Nomor", _plateNumberController),
-
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD4AF37),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 22, 16, 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle("Informasi Akun"),
+                    _buildTextField("Nama Lengkap", _nameController,
+                        icon: Icons.badge_rounded),
+                    _buildTextField("Username", _usernameController,
+                        icon: Icons.alternate_email_rounded),
+                    _buildTextField(
+                      "Email",
+                      _emailController,
+                      type: TextInputType.emailAddress,
+                      icon: Icons.email_rounded,
                     ),
-                  ),
-                  onPressed: _isLoading ? null : _saveProfile,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : Text(
-                          "SIMPAN PERUBAHAN",
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                    _buildTextField(
+                      "Nomor HP",
+                      _phoneController,
+                      type: TextInputType.phone,
+                      icon: Icons.phone_rounded,
+                    ),
+                    const SizedBox(height: 22),
+                    _buildSectionTitle("Informasi Kendaraan"),
+                    _buildTextField(
+                      "Model Mobil (Contoh: Avanza Hitam)",
+                      _carModelController,
+                      icon: Icons.directions_car_rounded,
+                    ),
+                    _buildTextField("Plat Nomor", _plateNumberController,
+                        icon: Icons.confirmation_number_rounded),
+                    const SizedBox(height: 28),
+                    GradientButton(
+                      label: "SIMPAN PERUBAHAN",
+                      icon: Icons.save_rounded,
+                      loading: _isLoading,
+                      onPressed: _saveProfile,
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Text(
-        title,
-        style: GoogleFonts.outfit(
-          color: const Color(0xFFD4AF37),
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
+      padding: const EdgeInsets.only(bottom: 16, left: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              gradient: AppColors.buttonGradient,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: GoogleFonts.outfit(
+              color: AppColors.ink,
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildTextField(
     String label,
-    TextEditingController controller, [
+    TextEditingController controller, {
     TextInputType? type,
-  ]) {
+    IconData? icon,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.outfit(color: Colors.white70)),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              color: AppColors.inkSoft,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 8),
           TextFormField(
             controller: controller,
             keyboardType: type,
-            style: GoogleFonts.outfit(color: Colors.white),
+            style: GoogleFonts.outfit(color: AppColors.ink),
             validator: (val) =>
                 val == null || val.isEmpty ? 'Wajib diisi' : null,
             decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white10,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.white10),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFD4AF37)),
-              ),
+              prefixIcon: icon == null
+                  ? null
+                  : Icon(icon, color: AppColors.cyan, size: 20),
             ),
           ),
         ],

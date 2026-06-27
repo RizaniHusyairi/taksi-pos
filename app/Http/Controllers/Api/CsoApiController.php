@@ -136,6 +136,102 @@ class CsoApiController extends Controller
     }
 
     /**
+     * Lokasi para supir untuk peta dashboard CSO.
+     * Sumber posisi: tabel driver_queues (diperbarui saat supir mengirim lokasi).
+     * Juga mengembalikan titik bandara + radius untuk pusat & lingkaran peta.
+     */
+    public function getDriverLocations()
+    {
+        $drivers = DriverQueue::with(['driver.driverProfile'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0)
+            ->orderBy('sort_order', 'asc')
+            ->get()
+            ->map(function ($q) {
+                $user = $q->driver;
+                if (!$user) {
+                    return null;
+                }
+                $profile = $user->driverProfile;
+
+                return [
+                    'id'           => $user->id,
+                    'name'         => $user->name,
+                    'line_number'  => $profile?->line_number,
+                    'car_model'    => $profile?->car_model,
+                    'plate_number' => $profile?->plate_number,
+                    'status'       => $profile?->status ?? 'offline',
+                    'queue_score'  => $q->sort_order,
+                    'latitude'     => (float) $q->latitude,
+                    'longitude'    => (float) $q->longitude,
+                ];
+            })
+            ->filter()
+            ->values();
+
+        return response()->json([
+            'base' => [
+                'latitude'  => (float) config('taksi.driver_queue.latitude'),
+                'longitude' => (float) config('taksi.driver_queue.longitude'),
+                'radius_km' => (float) config('taksi.driver_queue.radius_km'),
+            ],
+            'drivers' => $drivers,
+        ]);
+    }
+
+    /**
+     * Ringkasan untuk dashboard CSO: pendapatan & transaksi hari ini,
+     * rincian Cash vs QRIS, jumlah antrian, dan transaksi terakhir.
+     */
+    public function getDashboardStats(Request $request)
+    {
+        $cso = $request->user();
+        $today = now()->toDateString();
+
+        // Query dasar: transaksi milik CSO ini
+        $base = Transaction::whereHas('booking', function ($q) use ($cso) {
+            $q->where('cso_id', $cso->id);
+        });
+
+        $todayTx = (clone $base)->whereDate('created_at', $today)->get();
+
+        $cashSum = $todayTx->whereIn('method', ['CashCSO', 'CashDriver'])->sum('amount');
+        $qrisSum = $todayTx->where('method', 'QRIS')->sum('amount');
+
+        $recent = (clone $base)
+            ->with([
+                'booking.zoneTo:id,name',
+                'booking.driver.driverProfile',
+                'booking.cso',
+                'booking',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+
+        $queueTotal = DriverQueue::count();
+        $queueReady = DriverQueue::whereHas('driver.driverProfile', function ($q) {
+            $q->whereIn('status', ['standby', 'available']);
+        })->count();
+
+        return response()->json([
+            'today' => [
+                'count'   => $todayTx->count(),
+                'revenue' => (float) $todayTx->sum('amount'),
+                'cash'    => (float) $cashSum,
+                'qris'    => (float) $qrisSum,
+            ],
+            'queue' => [
+                'total' => $queueTotal,
+                'ready' => $queueReady,
+            ],
+            'recent' => $recent,
+        ]);
+    }
+
+    /**
      * Menyimpan booking baru.
      */
     public function storeBooking(Request $request)
@@ -288,7 +384,8 @@ class CsoApiController extends Controller
             DriverQueue::where('user_id', $validated['driver_id'])->delete();
 
             // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
-            return $booking->load(['driver.driverProfile', 'zoneTo', 'cso']);
+            // 'transaction' diikutkan agar app bisa membangun link/QR struk dari ID transaksi.
+            return $booking->load(['driver.driverProfile', 'zoneTo', 'cso', 'transaction']);
         });
 
         // 3. LOGIKA NOTIFIKASI (Di luar transaction DB agar tidak lambat)
@@ -460,6 +557,142 @@ class CsoApiController extends Controller
             ]);
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Driver Activity Log Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Mengalihkan sebuah booking ke supir lain.
+     * (Sebelumnya route ini menunjuk method yang tidak ada sehingga fitur "Ganti Supir" rusak.)
+     */
+    public function changeDriver(Request $request, Booking $booking)
+    {
+        $validated = $request->validate([
+            'new_driver_id' => 'required|exists:users,id',
+        ]);
+
+        $newDriverId = (int) $validated['new_driver_id'];
+
+        // Hanya order yang masih 'Assigned' (belum dijalankan/selesai) yang boleh dialihkan.
+        if ($booking->status !== 'Assigned') {
+            return response()->json([
+                'message' => 'Order ini tidak bisa dialihkan (status: ' . $booking->status . ').'
+            ], 422);
+        }
+
+        if ($newDriverId === (int) $booking->driver_id) {
+            return response()->json(['message' => 'Supir tujuan sama dengan supir saat ini.'], 422);
+        }
+
+        // Pastikan supir baru valid (role driver).
+        $newDriver = User::where('id', $newDriverId)->where('role', 'driver')->first();
+        if (!$newDriver) {
+            return response()->json(['message' => 'Supir tujuan tidak valid.'], 422);
+        }
+
+        // Supir baru tidak boleh sedang menjalankan order lain.
+        $newDriverBusy = Booking::where('driver_id', $newDriverId)
+            ->whereIn('status', ['Assigned', 'OnTrip'])
+            ->where('id', '!=', $booking->id)
+            ->exists();
+        if ($newDriverBusy) {
+            return response()->json(['message' => 'Supir tujuan sedang menjalankan order lain.'], 422);
+        }
+
+        $oldDriverId = (int) $booking->driver_id;
+
+        DB::transaction(function () use ($booking, $newDriverId, $oldDriverId) {
+            // Alihkan order ke supir baru (status tetap 'Assigned').
+            $booking->update(['driver_id' => $newDriverId]);
+
+            // Keluarkan supir baru dari antrian karena sekarang mendapat order.
+            DriverQueue::where('user_id', $newDriverId)->delete();
+
+            // Catat aktivitas untuk kedua supir.
+            $this->logDriverActivity($oldDriverId, 'ORDER_REASSIGNED_OUT', 'Order dialihkan ke supir lain oleh CSO');
+            $this->logDriverActivity($newDriverId, 'ORDER_REASSIGNED_IN', 'Menerima order alihan dari CSO');
+            $this->logDriverActivity($newDriverId, 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Order Alihan)');
+        });
+
+        // Muat ulang relasi untuk response dan notifikasi.
+        $booking->load(['driver.driverProfile', 'zoneTo', 'cso', 'transaction']);
+
+        // Beritahu supir baru lewat FCM (di luar transaksi DB agar tidak memperlambat).
+        try {
+            $zoneName = $booking->zoneTo->name ?? 'Tujuan';
+            $this->pushFcmToDriver(
+                $booking->driver,
+                'Order Dialihkan ke Anda! 🚖',
+                "Tujuan: $zoneName - Penumpang menunggu.",
+                ['type' => 'new_order', 'booking_id' => (string) $booking->id]
+            );
+        } catch (\Exception $e) {
+            Log::error('Notifikasi ganti supir gagal: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Supir berhasil diganti.',
+            'data' => $booking,
+        ]);
+    }
+
+    /**
+     * Mengembalikan URL QRIS perusahaan (diatur oleh Admin) agar app CSO bisa menampilkannya.
+     * Di web, nilai ini disuntik via blade (window.companyQrisUrl); app butuh endpoint sendiri.
+     */
+    public function companyQris()
+    {
+        $path = Setting::where('key', 'company_qris_path')->value('value');
+
+        return response()->json([
+            'company_qris_url' => $path ? asset('storage/' . $path) : null,
+        ]);
+    }
+
+    /**
+     * Helper pengiriman push notification FCM (HTTP v1) ke satu supir.
+     */
+    private function pushFcmToDriver($driver, string $title, string $body, array $data = [])
+    {
+        if (!$driver || !$driver->fcm_token) {
+            return;
+        }
+
+        try {
+            $credentialsPath = storage_path('app/firebase_credentials.json');
+            if (!file_exists($credentialsPath)) {
+                Log::error("FCM Error: Credentials file not found at $credentialsPath");
+                return;
+            }
+
+            $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
+            $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials($scopes, $credentialsPath);
+            $accessToken = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build())['access_token'];
+
+            $json = json_decode(file_get_contents($credentialsPath), true);
+            $projectId = $json['project_id'];
+
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken,
+                'Content-Type'  => 'application/json',
+            ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
+                'message' => [
+                    'token' => $driver->fcm_token,
+                    'notification' => ['title' => $title, 'body' => $body],
+                    'data' => array_merge(['click_action' => 'FLUTTER_NOTIFICATION_CLICK'], $data),
+                    'android' => [
+                        'priority' => 'HIGH',
+                        'notification' => [
+                            'channel_id' => 'high_importance_channel',
+                            'default_sound' => true,
+                            'default_vibrate_timings' => true,
+                        ],
+                    ],
+                ],
+            ]);
+
+            Log::info("FCM v1 Response: " . $response->status() . " | " . $response->body());
+        } catch (\Exception $e) {
+            Log::error("FCM v1 Error: " . $e->getMessage());
         }
     }
 }

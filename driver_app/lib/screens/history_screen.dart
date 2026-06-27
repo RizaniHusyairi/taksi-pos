@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/sky_header.dart';
+import '../widgets/fade_in.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -45,101 +48,138 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dateFormat = DateFormat('dd MMM yyyy, HH:mm');
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      appBar: AppBar(
-        title: Text(
-          'RIWAYAT PERJALANAN',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          const SkyHeader(
+            title: 'Riwayat Perjalanan',
+            subtitle: 'Catatan trip & pendapatan Anda',
           ),
-        ),
-        backgroundColor: Colors.transparent,
-        automaticallyImplyLeading: false, // Managed by MainScreen
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _history.isEmpty
+                    ? _emptyState()
+                    : RefreshIndicator(
+                        color: AppColors.skyBlue,
+                        onRefresh: _fetchHistory,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                          itemCount: _history.length,
+                          itemBuilder: (context, index) {
+                            return FadeInUp(
+                              delayMs: (index * 45).clamp(0, 300),
+                              child: _tripCard(
+                                _history[index],
+                                currencyFormat,
+                                dateFormat,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _history.isEmpty
-          ? Center(
-              child: Text(
-                "Belum ada perjalanan.",
-                style: GoogleFonts.outfit(color: Colors.white54),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _history.length,
-              itemBuilder: (context, index) {
-                final trip = _history[index];
-                final booking = trip['booking'];
-                final zone =
-                    booking['zone_to']?['name'] ??
-                    (booking['manual_destination'] != null
-                        ? 'Self: ${booking['manual_destination']}'
-                        : 'Manual / Charter');
+    );
+  }
 
-                return Card(
-                  color: Colors.white10,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+  Widget _emptyState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.flight_takeoff_rounded,
+              size: 64, color: AppColors.inkFaint.withValues(alpha: 0.5)),
+          const SizedBox(height: 16),
+          Text(
+            "Belum ada perjalanan.",
+            style: GoogleFonts.outfit(color: AppColors.inkFaint, fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tripCard(
+    dynamic trip,
+    NumberFormat currencyFormat,
+    DateFormat dateFormat,
+  ) {
+    final booking = trip['booking'];
+    final zone = booking['zone_to']?['name'] ??
+        (booking['manual_destination'] != null
+            ? 'Self: ${booking['manual_destination']}'
+            : 'Manual / Charter');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepBlue.withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.paleBlue,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.place_rounded,
+                    color: AppColors.skyBlue, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  zone,
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.ink,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              zone,
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              currencyFormat.format(
-                                double.parse(trip['amount'].toString()),
-                              ),
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFD4AF37),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today,
-                              size: 14,
-                              color: Colors.white54,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              dateFormat.format(
-                                DateTime.parse(trip['created_at']),
-                              ),
-                              style: GoogleFonts.outfit(
-                                color: Colors.white54,
-                                fontSize: 12,
-                              ),
-                            ),
-                            const Spacer(),
-                            _buildStatusBadge(trip),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                ),
+              ),
+              Text(
+                currencyFormat.format(double.parse(trip['amount'].toString())),
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.cyan,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_rounded,
+                  size: 13, color: AppColors.inkFaint),
+              const SizedBox(width: 5),
+              Text(
+                dateFormat.format(DateTime.parse(trip['created_at'])),
+                style: GoogleFonts.outfit(
+                  color: AppColors.inkFaint,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              _buildStatusBadge(trip),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -152,27 +192,27 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     switch (status) {
       case 'Paid':
-        color = Colors.green;
+        color = AppColors.success;
         // Jika metode 'CashDriver' (Hutang), istilahnya LUNAS
         text = (method == 'CashDriver') ? 'SUDAH LUNAS' : 'SUDAH CAIR';
         break;
       case 'Processing':
-        color = Colors.orange;
+        color = AppColors.warning;
         text = 'DIPROSES';
         break;
       case 'Unpaid':
       default:
-        color = Colors.red;
+        color = AppColors.danger;
         // Jika metode 'CashDriver' (Hutang), istilahnya BELUM LUNAS
         text = (method == 'CashDriver') ? 'BELUM LUNAS' : 'BELUM CAIR';
         break;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         text,

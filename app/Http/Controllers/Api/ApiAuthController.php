@@ -27,10 +27,13 @@ class ApiAuthController extends Controller
 
         $user = Auth::user();
 
-        // Optional: Batasi hanya untuk role driver jika diinginkan
-        // if ($user->role !== 'driver') {
-        //     return response()->json(['message' => 'Unauthorized role.'], 403);
-        // }
+        // Aplikasi mobile hanya untuk role driver & cso. Admin tetap lewat web.
+        if (!in_array($user->role, ['driver', 'cso'])) {
+            Auth::logout();
+            return response()->json([
+                'message' => 'Akun ini tidak memiliki akses ke aplikasi mobile.'
+            ], 403);
+        }
 
         // Hapus token lama jika ingin single session, atau biarkan multi-device
         // $user->tokens()->delete();

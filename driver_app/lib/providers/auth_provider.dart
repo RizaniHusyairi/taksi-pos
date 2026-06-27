@@ -11,14 +11,23 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isAuthenticated = false;
   Map<String, dynamic>? _user;
+  String? _role;
 
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _isAuthenticated;
   Map<String, dynamic>? get user => _user;
 
+  /// Peran pengguna ('driver' atau 'cso'). Dipakai untuk menentukan shell & endpoint.
+  String? get role => _role ?? _user?['role'] as String?;
+  bool get isCso => role == 'cso';
+  bool get isDriver => role == 'driver';
+
   Future<void> checkLoginStatus() async {
     final token = await _storage.read(key: 'auth_token');
     if (token != null) {
+      // Muat role yang tersimpan dulu agar fetchProfile memanggil endpoint yang benar
+      // (penting saat app dibuka ulang: _user masih null tapi role sudah diketahui).
+      _role = await _storage.read(key: 'user_role');
       try {
         await fetchProfile();
         _isAuthenticated = true;
@@ -44,6 +53,8 @@ class AuthProvider with ChangeNotifier {
       final userData = response.data['user'];
 
       await _storage.write(key: 'auth_token', value: token);
+      _role = userData?['role'] as String?;
+      await _storage.write(key: 'user_role', value: _role);
       _user = userData;
       _isAuthenticated = true;
 
@@ -73,7 +84,10 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> fetchProfile() async {
     try {
-      final response = await _apiService.getProfile();
+      // Endpoint profil berbeda per peran; CSO tidak boleh menembak /driver/profile.
+      final response = isCso
+          ? await _apiService.getCsoProfile()
+          : await _apiService.getProfile();
       _user = response.data;
       notifyListeners();
     } catch (e) {
@@ -88,8 +102,10 @@ class AuthProvider with ChangeNotifier {
       // Ignore errors during logout
     }
     await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: 'user_role');
     _isAuthenticated = false;
     _user = null;
+    _role = null;
     notifyListeners();
   }
 
