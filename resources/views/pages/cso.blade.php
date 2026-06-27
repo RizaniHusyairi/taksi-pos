@@ -684,6 +684,13 @@
     </div>
   </div>
 
+  {{-- Banner "Install App" kustom --}}
+  @include('partials.pwa-install-banner', [
+    'appName'      => 'CSO Panel',
+    'appKey'       => 'cso',
+    'bottomOffset' => '6rem',
+  ])
+
   <script>
     window.companyQrisUrl = "{{ $companyQrisUrl ?? '' }}";
   </script>

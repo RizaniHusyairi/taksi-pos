@@ -983,5 +983,12 @@
       else { aside.classList.add('hidden'); }
     });
   </script>
+
+  {{-- Banner "Install App" kustom --}}
+  @include('partials.pwa-install-banner', [
+    'appName'      => 'Admin POS',
+    'appKey'       => 'admin',
+    'bottomOffset' => '1.5rem',
+  ])
 </body>
 </html>
