@@ -91,7 +91,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp {
   constructor() {
-    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'driver-map', 'api', 'settings'];
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'driver-map', 'api', 'wa', 'settings'];
     this.charts = {};
   }
   init() {
@@ -195,11 +195,19 @@ export class AdminApp {
       formData.append('mail_encryption', document.getElementById('mailEncryption').value);
       formData.append('mail_from_address', document.getElementById('mailUsername').value.trim()); // Fallback sender
       formData.append('mail_from_name', document.getElementById('mailFromName').value.trim());
-      formData.append('wa_token', document.getElementById('waToken').value.trim());
-      formData.append('admin_wa_number', document.getElementById('adminWaNumber').value.trim());
+      // (Konfigurasi WhatsApp Gateway kini disimpan terpisah di menu WhatsApp Gateway.)
       const radiusEl = document.getElementById('airportRadiusKm');
       if (radiusEl && radiusEl.value.trim() !== '') {
         formData.append('airport_radius_km', radiusEl.value.trim());
+      }
+      // Jam operasi pelacakan lokasi (HH:MM). Kosong = jangan ubah.
+      const opStartEl = document.getElementById('operatingStart');
+      const opEndEl = document.getElementById('operatingEnd');
+      if (opStartEl && opStartEl.value.trim() !== '') {
+        formData.append('operating_start', opStartEl.value.trim());
+      }
+      if (opEndEl && opEndEl.value.trim() !== '') {
+        formData.append('operating_end', opEndEl.value.trim());
       }
 
       // FILE UPLOAD
@@ -398,6 +406,11 @@ export class AdminApp {
     document.getElementById('btnRefreshMap')?.addEventListener('click', () => this.renderDriverMap());
     document.getElementById('btnClearRoute')?.addEventListener('click', () => this.clearRoute());
     document.getElementById('btnNewApiKey')?.addEventListener('click', () => this.createApiKey());
+    document.getElementById('btnTestWa')?.addEventListener('click', () => this.testWa());
+    document.getElementById('formWaConfig')?.addEventListener('submit', (e) => this.saveWaConfig(e));
+    document.getElementById('btnRefreshWaLog')?.addEventListener('click', () => this.renderWaLog());
+    ['waLogDirection', 'waLogStatus', 'waLogLimit'].forEach(id =>
+      document.getElementById(id)?.addEventListener('change', () => this.renderWaLog()));
     document.getElementById('btnCopyApiKey')?.addEventListener('click', () => this.copyNewApiKey());
     document.getElementById('apiClientsTable')?.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-revoke]');
@@ -470,6 +483,7 @@ export class AdminApp {
       this.renderDriverMap();
       this._mapPoll = setInterval(() => this.renderDriverMap(), 15000);
     }
+    if (hash === 'wa') this.renderWa();
   }
   titleOf(v) {
     return {
@@ -484,6 +498,7 @@ export class AdminApp {
       'report-driver': 'Laporan Kinerja Supir',
       'driver-map': 'Peta Supir',
       'api': 'API Integrasi',
+      'wa': 'WhatsApp Gateway',
       'settings': 'Pengaturan'
     }[v] || 'Dashboard';
   }
@@ -1370,6 +1385,118 @@ export class AdminApp {
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  // Kirim tes notifikasi WhatsApp via gateway (pakai konfigurasi tersimpan).
+  async testWa() {
+    const to = (document.getElementById('waTestTo')?.value
+      || document.getElementById('adminWaNumber')?.value || '').trim();
+    const box = document.getElementById('waTestResult');
+    const show = (cls, txt) => {
+      if (!box) return;
+      box.className = 'text-xs rounded-lg p-2 ' + cls;
+      box.textContent = txt;
+      box.classList.remove('hidden');
+    };
+    if (!to) {
+      show('bg-amber-100 text-amber-800', 'Isi nomor tujuan tes dulu (atau isi Nomor WA Admin).');
+      return;
+    }
+    show('bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200', 'Mengirim tes…');
+    try {
+      const res = await fetchApi('/admin/wa/test', {
+        method: 'POST',
+        body: JSON.stringify({ to }),
+      });
+      if (res.ok) show('bg-green-100 text-green-800', '✓ ' + (res.message || 'Terkirim ke gateway.'));
+      else show('bg-red-100 text-red-700', '✗ ' + (res.message || 'Gagal mengirim.'));
+    } catch (e) {
+      show('bg-red-100 text-red-700', '✗ Gagal menghubungi server.');
+    }
+  }
+
+  // ----- WhatsApp Gateway (konfigurasi + log) -----
+  async renderWa() {
+    try {
+      const s = await fetchApi('/admin/settings');
+      const wt = document.getElementById('waToken');
+      if (wt) {
+        wt.value = '';
+        wt.placeholder = s.wa_token_is_set ? '•••••••• (kosongkan untuk tetap)' : 'Belum diatur';
+      }
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('adminWaNumber', s.admin_wa_number || '');
+      set('waEndpoint', s.wa_endpoint || '');
+      set('waDeviceId', s.wa_device_id || 1);
+    } catch (e) {
+      console.error('Gagal memuat konfigurasi WA:', e);
+    }
+    this.renderWaLog();
+  }
+
+  async saveWaConfig(e) {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append('wa_token', document.getElementById('waToken').value.trim());
+    fd.append('admin_wa_number', document.getElementById('adminWaNumber').value.trim());
+    fd.append('wa_endpoint', document.getElementById('waEndpoint').value.trim());
+    fd.append('wa_device_id', document.getElementById('waDeviceId').value.trim() || '1');
+    try {
+      await fetchApi('/admin/settings', { method: 'POST', body: fd });
+      alert('Konfigurasi WhatsApp Gateway disimpan!');
+      this.renderWa();
+    } catch (err) {
+      alert('Gagal menyimpan konfigurasi.');
+    }
+  }
+
+  async renderWaLog() {
+    const tbody = document.getElementById('waLogTable');
+    if (!tbody) return;
+    const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const dir = document.getElementById('waLogDirection')?.value || '';
+    const st = document.getElementById('waLogStatus')?.value || '';
+    const lim = document.getElementById('waLogLimit')?.value || '20';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-slate-400">Memuat…</td></tr>';
+    try {
+      const q = new URLSearchParams({ limit: lim });
+      if (dir) q.set('direction', dir);
+      if (st) q.set('status', st);
+      const res = await fetchApi('/admin/wa/messages?' + q.toString());
+      if (!res.ok) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">${esc(res.message || 'Gagal memuat log. Cek API Key & gateway.')}</td></tr>`;
+        return;
+      }
+      const d = res.data;
+      let list = Array.isArray(d) ? d
+        : (d?.data?.messages || d?.messages || (Array.isArray(d?.data) ? d.data : null) || d?.items || []);
+      if (!Array.isArray(list)) list = [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-slate-400">Belum ada pesan.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(m => {
+        const to = m.to || m.recipient || m.phone || m.number || '-';
+        const body = m.body || m.message || m.text || m.content || '';
+        const direction = m.direction || m.type || '-';
+        const status = m.status || '-';
+        const at = m.createdAt || m.created_at || m.timestamp || m.sentAt || m.updatedAt || '';
+        let when = '-';
+        try { if (at) when = new Date(at).toLocaleString('id-ID'); } catch (_) {}
+        const sc = /sent|deliver|read|success/i.test(status) ? 'text-green-600'
+          : /fail|error|reject/i.test(status) ? 'text-red-600' : 'text-amber-600';
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+          <td class="py-2.5 px-4 font-mono text-xs text-slate-600 dark:text-slate-300">${esc(to)}</td>
+          <td class="py-2.5 px-4 text-xs text-slate-600 dark:text-slate-300"><div class="max-w-xs truncate">${esc(body)}</div></td>
+          <td class="py-2.5 px-4 text-center text-[11px]">${esc(direction)}</td>
+          <td class="py-2.5 px-4 text-center text-[11px] font-bold ${sc}">${esc(status)}</td>
+          <td class="py-2.5 px-4 text-xs text-slate-500">${esc(when)}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      console.error('Gagal memuat log WA:', e);
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Gagal memuat log.</td></tr>';
+    }
+  }
+
   // ----- Settings -----
   // ----- Settings -----
   async renderSettings() {
@@ -1388,6 +1515,12 @@ export class AdminApp {
       if (radiusInput && settings.airport_radius_km !== undefined) {
         radiusInput.value = settings.airport_radius_km;
       }
+
+      // Jam operasi pelacakan lokasi
+      const opStart = document.getElementById('operatingStart');
+      const opEnd = document.getElementById('operatingEnd');
+      if (opStart && settings.operating_start) opStart.value = settings.operating_start;
+      if (opEnd && settings.operating_end) opEnd.value = settings.operating_end;
 
       // 2. Render Email (BARU)
       const emailInput = document.getElementById('adminEmail');
@@ -1410,12 +1543,7 @@ export class AdminApp {
       }
       if (document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
       if (document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
-      if (document.getElementById('waToken')) {
-        const wt = document.getElementById('waToken');
-        wt.value = '';
-        wt.placeholder = settings.wa_token_is_set ? '•••••••• (kosongkan untuk tetap)' : 'Belum diatur';
-      }
-      if (document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
+      // (Field WhatsApp Gateway dipindah ke menu WhatsApp Gateway — lihat renderWa().)
 
       // 3. QRIS Preview
       const previewQris = document.getElementById('previewQris');

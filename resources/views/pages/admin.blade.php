@@ -203,6 +203,11 @@
             <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
             <span class="font-medium">API Integrasi</span>
           </a>
+
+          <a href="#wa" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
+            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+            <span class="font-medium">WhatsApp Gateway</span>
+          </a>
         </nav>
       </div>
       
@@ -963,6 +968,98 @@
         </div>
       </section>
 
+      <!-- WHATSAPP GATEWAY VIEW -->
+      <section id="view-wa" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="mb-4 border-b border-gray-100 dark:border-white/10 pb-4">
+            <h3 class="font-bold text-gray-800 dark:text-white text-lg">Konfigurasi WhatsApp Gateway</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Kredensial gateway untuk notifikasi WA (struk, order, pencairan).</p>
+          </div>
+          <form id="formWaConfig" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">API Key (X-API-Key)</label>
+              <input type="text" id="waToken" placeholder="wag_xxx.yyy" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Device ID</label>
+              <input type="number" id="waDeviceId" min="1" placeholder="1" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Gateway URL</label>
+              <input type="text" id="waEndpoint" placeholder="https://wg.aptpairport.id/api/v1/messages/send" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Nomor WA Admin (penerima notifikasi)</label>
+              <input type="text" id="adminWaNumber" placeholder="0812xxxxxxxx" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2.5 w-full font-bold shadow transition-transform active:scale-95">Simpan Konfigurasi</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5">
+          <h3 class="font-bold text-gray-800 dark:text-white text-lg mb-3">Tes Kirim Notifikasi</h3>
+          <div class="flex items-end gap-2">
+            <div class="flex-1">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Kirim WA tes ke nomor</label>
+              <input type="text" id="waTestTo" placeholder="0812xxxxxxxx (default: Nomor WA Admin)" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <button type="button" id="btnTestWa" class="shrink-0 inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition-transform active:scale-95">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+              Kirim Tes
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5">Pakai konfigurasi tersimpan — simpan API Key dulu sebelum tes.</p>
+          <p id="waTestResult" class="hidden text-xs rounded-lg p-2 mt-2"></p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 border-b border-gray-100 dark:border-white/10 pb-4">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Log Pengiriman</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Riwayat pesan dari gateway (GET /messages).</p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <select id="waLogDirection" class="rounded-lg border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-xs py-1.5 px-2">
+                <option value="">Semua arah</option>
+                <option value="OUTBOUND">Keluar</option>
+                <option value="INBOUND">Masuk</option>
+              </select>
+              <select id="waLogStatus" class="rounded-lg border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-xs py-1.5 px-2">
+                <option value="">Semua status</option>
+                <option value="SENT">SENT</option>
+                <option value="QUEUED">QUEUED</option>
+                <option value="FAILED">FAILED</option>
+              </select>
+              <select id="waLogLimit" class="rounded-lg border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-xs py-1.5 px-2">
+                <option value="20">20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <button id="btnRefreshWaLog" type="button" class="text-xs font-semibold text-primary-600 hover:text-primary-800 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                Segarkan
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-3 px-4">Nomor</th>
+                  <th class="py-3 px-4">Pesan</th>
+                  <th class="py-3 px-4 text-center">Arah</th>
+                  <th class="py-3 px-4 text-center">Status</th>
+                  <th class="py-3 px-4">Waktu</th>
+                </tr>
+              </thead>
+              <tbody id="waLogTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- SETTINGS VIEW -->
       <section id="view-settings" class="hidden space-y-6">
         <div class="glass-card rounded-2xl p-5 max-w-2xl mx-auto">
@@ -1040,7 +1137,23 @@
                     <p class="text-[10px] text-gray-400 mt-1">Jangkauan geofence auto-antrian &amp; peta supir.</p>
                 </div>
               </div>
-              
+
+              <!-- Jam Operasi Pelacakan Lokasi -->
+              <div class="pt-2">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Jam Operasi Pelacakan (WITA)</label>
+                <p class="text-[11px] text-gray-400 dark:text-gray-500 mb-3">Di luar jam ini aplikasi driver otomatis mematikan GPS demi hemat baterai &amp; privasi &mdash; kecuali sedang mengantar penumpang. Samakan jam mulai &amp; selesai untuk 24 jam nonstop.</p>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Mulai</label>
+                    <input type="time" id="operatingStart" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Selesai</label>
+                    <input type="time" id="operatingEnd" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
+                  </div>
+                </div>
+              </div>
+
               <!-- QRIS Upload Section -->
               <div class="pt-4">
                   <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Kode QRIS Perusahaan</label>
@@ -1111,26 +1224,6 @@
                     </div>
                 </div>
             </div>
-            <div class="space-y-3 pt-4 border-t">
-              <h4 class="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                  <span class="text-green-600">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-                  </span>
-                  Konfigurasi WhatsApp (Fonnte)
-              </h4>
-              
-              <div class="grid grid-cols-2 gap-3">
-                  <div>
-                      <label class="block text-xs text-slate-500 dark:text-slate-400">API Token (Fonnte)</label>
-                      <input type="text" id="waToken" placeholder="Contoh: 12345678xxxx" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-                  </div>
-                  <div>
-                      <label class="block text-xs text-slate-500 dark:text-slate-400">Nomor WA Admin (Penerima)</label>
-                      <input type="text" id="adminWaNumber" placeholder="0812xxxxxxxx" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-                  </div>
-              </div>
-          </div>
-
             <div class="flex pt-2">
               <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 w-full font-bold shadow transition-transform active:scale-95">Simpan Pengaturan</button>
             </div>

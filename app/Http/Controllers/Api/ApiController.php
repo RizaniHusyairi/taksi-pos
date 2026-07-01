@@ -560,6 +560,17 @@ class ApiController extends Controller
             config('taksi.driver_queue.radius_km')
         );
 
+        // WhatsApp Gateway — kirim nilai efektif (default sesuai dokumentasi gateway).
+        $settings['wa_endpoint'] = $settings->get('wa_endpoint')
+            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        $settings['wa_device_id'] = (int) ($settings->get('wa_device_id') ?: 1);
+
+        // Jam operasi pelacakan lokasi — kirim nilai efektif (setting || config)
+        // agar field di UI tidak pernah kosong.
+        $oh = \App\Models\Setting::operatingHours();
+        $settings['operating_start'] = $oh['start'];
+        $settings['operating_end']   = $oh['end'];
+
         return response()->json($settings);
     }
     
@@ -587,6 +598,10 @@ class ApiController extends Controller
             'wa_token'          => 'nullable|string',
             'admin_wa_number'   => 'nullable|string',
             'airport_radius_km' => 'nullable|numeric|min:0.1|max:50',
+            'wa_endpoint'       => 'nullable|url|max:255',
+            'wa_device_id'      => 'nullable|integer|min:1',
+            'operating_start'   => 'nullable|date_format:H:i',
+            'operating_end'     => 'nullable|date_format:H:i',
         ]);
     
         // 1. Handle File Upload (QRIS)
@@ -640,6 +655,94 @@ class ApiController extends Controller
         Setting::forgetMemo();
 
         return response()->json(['message' => 'Pengaturan berhasil disimpan.']);
+    }
+
+    /**
+     * Kirim tes notifikasi WhatsApp via gateway (pakai setting tersimpan) agar
+     * admin bisa memverifikasi konfigurasi. Selalu balas 200 dengan flag `ok`.
+     */
+    public function adminTestWa(Request $request)
+    {
+        $validated = $request->validate(['to' => 'required|string|max:20']);
+
+        $token = Setting::getValue('wa_token');
+        if (!$token) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'API Key WA belum diatur. Simpan API Key dulu, lalu tes.',
+            ]);
+        }
+
+        $endpoint = Setting::getValue('wa_endpoint')
+            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        $deviceId = (int) (Setting::getValue('wa_device_id') ?: 1);
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::withHeaders(['X-API-Key' => $token])
+                ->acceptJson()
+                ->timeout(15)
+                ->post($endpoint, [
+                    'deviceId' => $deviceId,
+                    'to'       => $validated['to'],
+                    'body'     => 'Tes notifikasi WhatsApp Gateway — Koperasi Angkasa Jaya. Jika pesan ini diterima, konfigurasi sudah benar.',
+                ]);
+
+            return response()->json([
+                'ok'      => $response->successful(),
+                'status'  => $response->status(),
+                'message' => $response->successful()
+                    ? "Terkirim ke gateway (HTTP {$response->status()}). Cek WhatsApp nomor tujuan."
+                    : "Gateway menolak (HTTP {$response->status()}): " . substr($response->body(), 0, 180),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'Gagal menghubungi gateway: ' . $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Ambil riwayat pesan dari gateway (GET /messages) untuk log pengiriman WA.
+     * Meneruskan filter (direction, status, limit, dll). Selalu balas 200 + `ok`.
+     */
+    public function adminWaMessages(Request $request)
+    {
+        $token = Setting::getValue('wa_token');
+        if (!$token) {
+            return response()->json(['ok' => false, 'message' => 'API Key WA belum diatur.']);
+        }
+
+        $endpoint = Setting::getValue('wa_endpoint')
+            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        // .../messages/send → .../messages (buang segmen terakhir).
+        $base = rtrim($endpoint, '/');
+        $listUrl = ($pos = strrpos($base, '/')) !== false ? substr($base, 0, $pos) : $base;
+
+        $params = array_filter(
+            $request->only(['page', 'limit', 'deviceId', 'direction', 'status', 'type', 'search', 'from', 'to']),
+            fn ($v) => $v !== null && $v !== ''
+        );
+        $params['limit'] = $params['limit'] ?? 20;
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::withHeaders(['X-API-Key' => $token])
+                ->acceptJson()
+                ->timeout(15)
+                ->get($listUrl, $params);
+
+            return response()->json([
+                'ok'      => $response->successful(),
+                'status'  => $response->status(),
+                'data'    => $response->json() ?? $response->body(),
+                'message' => $response->successful() ? null : "Gateway menolak (HTTP {$response->status()})",
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'Gagal menghubungi gateway: ' . $e->getMessage(),
+            ]);
+        }
     }
 
     public function adminGetUsersByRole($role)

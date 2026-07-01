@@ -23,10 +23,12 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
   Timer? _locationTimer;
   Timer? _countdownTimer; // Local countdown timer
+  Timer? _windowTimer; // cek berkala: nyalakan ulang layanan saat masuk jam operasi
+  bool _trackingClosed = false; // true = di luar jam operasi (GPS dimatikan)
   String _locationStatus = "Menunggu GPS...";
   bool _isInArea = false;
   int? _remainingTimeSeconds; // Grace Period Timer
@@ -39,8 +41,61 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startLocationService();
     _startCountdownTimer();
+    // Setiap 60 dtk: bila layanan mati TAPI sudah masuk jam operasi lagi,
+    // nyalakan ulang (mis. app dibiarkan terbuka melewati jam buka).
+    _windowTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _ensureTrackingIfWithinHours(),
+    );
+  }
+
+  // Saat app kembali ke depan: evaluasi ulang jam operasi & nyalakan layanan
+  // bila perlu (mis. supir buka app untuk memulai shift).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _ensureTrackingIfWithinHours();
+    }
+  }
+
+  // Nyalakan ulang layanan lokasi bila mati DAN sekarang di dalam jam operasi.
+  Future<void> _ensureTrackingIfWithinHours() async {
+    if (!mounted) return;
+    if (!_withinLocalOperatingHours()) return; // masih di luar jam → biarkan mati
+    final service = FlutterBackgroundService();
+    if (await service.isRunning()) return; // sudah jalan
+    await _startLocationService();
+  }
+
+  // Cek jam operasi memakai waktu LOKAL perangkat (WITA utk driver Samarinda),
+  // berdasarkan jam yang dikirim server di profil. Tidak tahu / format aneh →
+  // true (fail-open) agar tak pernah mengunci supir.
+  bool _withinLocalOperatingHours() {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final oh = auth.user?['operating_hours'];
+      if (oh is! Map) return true;
+      final s = _hhmmToMin('${oh['start'] ?? ''}');
+      final e = _hhmmToMin('${oh['end'] ?? ''}');
+      if (s == null || e == null || s == e) return true;
+      final now = TimeOfDay.now();
+      final n = now.hour * 60 + now.minute;
+      return s < e ? (n >= s && n < e) : (n >= s || n < e);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  int? _hhmmToMin(String v) {
+    final p = v.split(':');
+    if (p.length != 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    if (h == null || m == null) return null;
+    return h * 60 + m;
   }
 
   // Modifikasi _processLocationUpdate
@@ -54,6 +109,8 @@ class _HomeScreenState extends State<HomeScreen> {
       remaining = int.tryParse(remainingRaw.toString());
     }
     final statusResp = data['status'];
+    // Di luar jam operasi (& tidak mengantar) → layanan akan mati; tandai UI.
+    final closed = data['tracking_open'] == false && statusResp != 'ontrip';
 
     // Simpan Lat/Lng
     double? lat, lng;
@@ -66,8 +123,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (mounted) {
       setState(() {
-        _locationStatus =
-            "GPS: ${TimeOfDay.now().format(context)} (Background)";
+        _trackingClosed = closed;
+        _locationStatus = closed
+            ? "Di luar jam operasi — pelacakan nonaktif"
+            : "GPS: ${TimeOfDay.now().format(context)} (Background)";
         _isInArea = inArea;
         _remainingTimeSeconds = remaining;
         _lastLat = lat;
@@ -141,8 +200,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _locationTimer?.cancel();
     _countdownTimer?.cancel();
+    _windowTimer?.cancel();
     _serviceSubscription?.cancel();
     super.dispose();
   }
@@ -186,7 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // Trigger start tracking (in case it paused)
       service.invoke('startTracking');
 
-      // Listen for updates
+      // Listen for updates (batalkan langganan lama agar tak dobel saat
+      // layanan dinyalakan ulang lintas jam operasi).
+      _serviceSubscription?.cancel();
       _serviceSubscription = service.on('update').listen((data) {
         if (data != null) {
           _processLocationUpdate(data);
@@ -612,22 +675,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _locationChip() {
+    final closed = _trackingClosed;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.paleBlue,
+        color: closed ? const Color(0xFFFFF4E5) : AppColors.paleBlue,
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.gps_fixed_rounded, size: 14, color: AppColors.cyan),
+          Icon(
+            closed ? Icons.bedtime_rounded : Icons.gps_fixed_rounded,
+            size: 14,
+            color: closed ? const Color(0xFFB45309) : AppColors.cyan,
+          ),
           const SizedBox(width: 6),
-          Text(
-            _locationStatus,
-            style: GoogleFonts.outfit(
-              color: AppColors.inkSoft,
-              fontSize: 11,
+          Flexible(
+            child: Text(
+              _locationStatus,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                color: closed ? const Color(0xFFB45309) : AppColors.inkSoft,
+                fontSize: 11,
+              ),
             ),
           ),
         ],

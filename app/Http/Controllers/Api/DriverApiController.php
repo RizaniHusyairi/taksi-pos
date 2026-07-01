@@ -90,7 +90,16 @@ class DriverApiController extends Controller
         }
 
         $driver->active_booking = $ongoingBooking;
-        
+
+        // Info jam operasi → app pakai untuk menyalakan ulang layanan lokasi
+        // saat jendela kerja dibuka (dan menampilkan status "di luar jam").
+        $oh = Setting::operatingHours();
+        $driver->operating_hours = [
+            'start' => $oh['start'],
+            'end'   => $oh['end'],
+            'open'  => Setting::isWithinOperatingHours(),
+        ];
+
         return response()->json($driver);
     }
     /**
@@ -611,6 +620,10 @@ class DriverApiController extends Controller
         $radius = Setting::airportRadiusKm();
         $inArea = ($distance <= $radius);
 
+        // Gerbang jam operasi: app akan mematikan layanan lokasi bila false
+        // & tidak sedang mengantar (lihat background_service.dart).
+        $trackingOpen = Setting::isWithinOperatingHours();
+
         // Hitung berapa kali supir KELUAR-MASUK area bandara (independen dari
         // status antrian) — bandingkan dengan state in_area sebelumnya.
         if ($profile) {
@@ -663,6 +676,7 @@ class DriverApiController extends Controller
                      return response()->json([
                          'status' => 'offline',
                          'in_area' => false,
+                         'tracking_open' => $trackingOpen,
                          'message' => 'Antrian hangus karena diluar area lebih dari 60 menit.'
                      ]);
                  }
@@ -686,6 +700,7 @@ class DriverApiController extends Controller
                 return response()->json([
                     'status' => 'offline',
                     'in_area' => true,
+                    'tracking_open' => $trackingOpen,
                     'message' => 'Anda harus menekan tombol "Masuk Antrian" secara manual.'
                 ]);
             }
@@ -711,9 +726,10 @@ class DriverApiController extends Controller
                 $this->logActivity($user->id, 'QUEUE_JOIN_AUTO', 'Masuk Antrian Otomatis (Masuk Area)');
 
                 return response()->json([
-                    'status' => 'standby', 
+                    'status' => 'standby',
                     'message' => 'Anda memasuki area bandara (Auto-Queue).',
-                    'in_area' => true
+                    'in_area' => true,
+                    'tracking_open' => $trackingOpen
                 ]);
             } else {
                 // Skenario Repair
@@ -726,9 +742,10 @@ class DriverApiController extends Controller
                 $this->logActivity($user->id, 'QUEUE_JOIN_REPAIR', 'Masuk Antrian (Repair/Recovery)');
 
                 return response()->json([
-                    'status' => 'standby', 
+                    'status' => 'standby',
                     'message' => 'Status antrian dipulihkan (Auto-Repair).',
-                    'in_area' => true
+                    'in_area' => true,
+                    'tracking_open' => $trackingOpen
                 ]);
             }
 
@@ -750,7 +767,8 @@ class DriverApiController extends Controller
             'in_area' => $inArea,
             'remaining_time' => $remainingTime,
             'line_number' => $lineNumber,
-        ]); 
+            'tracking_open' => $trackingOpen,
+        ]);
     }
 
     

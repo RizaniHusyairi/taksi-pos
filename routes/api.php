@@ -82,6 +82,8 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
         Route::post('/settings/password', [ApiController::class, 'adminChangePassword']);
+        Route::post('/wa/test', [ApiController::class, 'adminTestWa']); // tes notifikasi WA gateway
+        Route::get('/wa/messages', [ApiController::class, 'adminWaMessages']); // log pengiriman WA
 
         Route::get('/queue', [ApiController::class, 'adminGetQueue']);
         Route::delete('/queue/{userId}', [ApiController::class, 'adminRemoveFromQueue']); // Restful style

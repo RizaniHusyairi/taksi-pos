@@ -102,6 +102,20 @@ void onStart(ServiceInstance service) async {
       data['longitude'] = pos.longitude;
       service.invoke('update', data);
 
+      // Gerbang JAM OPERASI: bila server bilang di luar jam (`tracking_open`
+      // == false) DAN supir tidak sedang mengantar → hentikan layanan penuh
+      // demi hemat baterai. Layanan menyala lagi saat app dibuka/di-resume
+      // di dalam jam (lihat home_screen: _ensureTrackingIfWithinHours).
+      final trackingOpen = response.data['tracking_open'];
+      final srvStatus = response.data['status'];
+      if (trackingOpen == false && srvStatus != 'ontrip') {
+        _updateNotif(notifPlugin, service, {'status': 'closed'});
+        posSub?.cancel();
+        heartbeat?.cancel();
+        service.stopSelf();
+        return;
+      }
+
       _updateNotif(notifPlugin, service, response.data);
 
       // Naikkan/turunkan akurasi mengikuti status dari server.
@@ -166,6 +180,8 @@ void _updateNotif(
     statusText = "Offline (Diluar Area) | $timestamp";
   } else if (status == 'ontrip') {
     statusText = "Mengantar penumpang | $timestamp";
+  } else if (status == 'closed') {
+    statusText = "Di luar jam operasi — pelacakan nonaktif";
   }
 
   if (service is AndroidServiceInstance) {
