@@ -170,6 +170,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startLocationService() async {
     var status = await Permission.location.request();
     if (status.isGranted) {
+      // OEM agresif (MIUI/Redmi) sering membunuh service latar → minta pengecualian
+      // optimasi baterai agar tracking tetap hidup saat layar mati.
+      if (!await Permission.ignoreBatteryOptimizations.isGranted) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+
       final service = FlutterBackgroundService();
 
       // Ensure service is running

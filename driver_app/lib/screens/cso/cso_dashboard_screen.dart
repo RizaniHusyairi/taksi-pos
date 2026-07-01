@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../models/cso_transaction.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
@@ -668,106 +669,274 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
   }
 
   void _showDriverInfo(_DriverLoc d) {
+    final bool ontrip = d.status == 'ontrip';
+    final Color accent = ontrip
+        ? AppColors.skyBlue
+        : (d.isReady ? AppColors.success : AppColors.inkFaint);
+    final String statusLabel = ontrip
+        ? 'Sedang Mengantar'
+        : (d.isReady ? 'Siap Menerima Order' : d.status);
+    final IconData statusIcon = ontrip
+        ? Icons.directions_car_filled_rounded
+        : (d.isReady
+            ? Icons.check_circle_rounded
+            : Icons.pause_circle_filled_rounded);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 50,
-              height: 50,
-              alignment: Alignment.center,
+              width: 44,
+              height: 5,
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
               decoration: BoxDecoration(
-                color: d.isReady ? AppColors.success : AppColors.inkFaint,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                d.line != null ? '#${d.line}' : '•',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
+                color: AppColors.inkFaint.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // === HERO: warna & ikon mengikuti status supir ===
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [accent, accent.withValues(alpha: 0.72)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.32),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    d.name,
-                    style: const TextStyle(
-                      color: AppColors.ink,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${d.car ?? '-'} • ${d.plate ?? '-'}',
-                    style: const TextStyle(
-                      color: AppColors.inkSoft,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3,
-                    ),
+                    width: 60,
+                    height: 60,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color:
-                          (d.isReady ? AppColors.success : AppColors.inkFaint)
-                              .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      d.isReady ? 'Ready' : d.status,
-                      style: TextStyle(
-                        color: d.isReady
-                            ? AppColors.success
-                            : AppColors.inkSoft,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time_rounded,
-                        size: 13,
-                        color: d.isStale ? AppColors.warning : AppColors.inkSoft,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        d.isStale
-                            ? 'Lokasi basi • ${d.lastSeen}'
-                            : 'Lokasi: ${d.lastSeen}',
-                        style: TextStyle(
-                          color: d.isStale
-                              ? AppColors.warning
-                              : AppColors.inkSoft,
-                          fontSize: 12,
-                          fontWeight:
-                              d.isStale ? FontWeight.w700 : FontWeight.w500,
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: d.line != null
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '#${d.line}',
+                                style: GoogleFonts.outfit(
+                                  color: accent,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  height: 1,
+                                ),
+                              ),
+                              Text(
+                                'ANTRI',
+                                style: GoogleFonts.outfit(
+                                  color: accent.withValues(alpha: 0.7),
+                                  fontSize: 7.5,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Icon(Icons.person_rounded, color: accent, size: 28),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          d.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 19,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(statusIcon, color: Colors.white, size: 13),
+                              const SizedBox(width: 5),
+                              Text(
+                                statusLabel,
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
+            // === DETAIL: tile berikon ===
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+              child: Column(
+                children: [
+                  _driverDetailTile(
+                    Icons.directions_car_filled_rounded,
+                    'Kendaraan',
+                    d.car ?? '-',
+                    AppColors.skyBlue,
+                  ),
+                  _driverDetailTile(
+                    Icons.confirmation_number_rounded,
+                    'Plat Nomor',
+                    d.plate ?? '-',
+                    AppColors.deepBlue,
+                  ),
+                  _driverDetailTile(
+                    d.isStale
+                        ? Icons.gps_off_rounded
+                        : Icons.gps_fixed_rounded,
+                    'Status Lokasi',
+                    d.isStale
+                        ? 'Basi • ${d.lastSeen}'
+                        : 'Terkini • ${d.lastSeen}',
+                    d.isStale ? AppColors.warning : AppColors.success,
+                    highlight: d.isStale,
+                  ),
+                ],
+              ),
+            ),
+            if (d.isStale)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: AppColors.warning, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Posisi supir belum diperbarui — jangan diandalkan untuk penjemputan.',
+                          style: GoogleFonts.outfit(
+                            color: AppColors.inkSoft,
+                            fontSize: 11.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            SizedBox(height: MediaQuery.of(sheetCtx).padding.bottom + 20),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _driverDetailTile(
+    IconData icon,
+    String label,
+    String value,
+    Color color, {
+    bool highlight = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: highlight ? color.withValues(alpha: 0.08) : AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+        border: highlight
+            ? Border.all(color: color.withValues(alpha: 0.25))
+            : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    color: AppColors.inkFaint,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: GoogleFonts.outfit(
+                    color: highlight ? color : AppColors.ink,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

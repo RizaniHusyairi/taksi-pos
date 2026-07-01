@@ -51,104 +51,139 @@ Future<bool> onIosBackground(ServiceInstance service) async {
   return true;
 }
 
-// Main Background Logic
+// Main Background Logic — stream lokasi hemat-daya + adaptif per status + heartbeat.
+// Ganti polling Timer 30 dtk (boros: fix akurasi-tinggi tiap tick walau diam)
+// dengan stream ber-distanceFilter: hanya kirim saat BERGERAK, plus heartbeat
+// ringan saat diam agar server & peta CSO tahu supir masih ada.
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
   final ApiService apiService = ApiService();
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  final FlutterLocalNotificationsPlugin notifPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // Timer reference
-  Timer? timer;
+  StreamSubscription<Position>? posSub;
+  Timer? heartbeat;
+  Position? lastPos;
+  // Mode akurasi: 'ontrip' (mengantar → mulus & sering) vs 'idle' (standby/offline → hemat).
+  String mode = 'idle';
+
+  // Setting stream berbeda per mode: on-trip presisi & sering; idle irit baterai.
+  LocationSettings settingsFor(String m) {
+    if (m == 'ontrip') {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // meter
+        intervalDuration: const Duration(seconds: 4),
+      );
+    }
+    return AndroidSettings(
+      accuracy: LocationAccuracy.medium,
+      distanceFilter: 40, // meter — supir parkir di antrian nyaris tak kirim data
+      intervalDuration: const Duration(seconds: 15),
+    );
+  }
+
+  // Dua closure saling-memanggil → dideklarasikan sebagai variabel `late`
+  // (Dart tak mengizinkan forward-reference antar fungsi lokal biasa).
+  late final Future<void> Function(Position) push;
+  late final void Function() subscribe;
+
+  // Kirim satu posisi ke server + update UI/notif + adaptasi mode + reset heartbeat.
+  push = (Position pos) async {
+    lastPos = pos;
+    try {
+      final response =
+          await apiService.updateLocation(pos.latitude, pos.longitude);
+
+      final data = Map<String, dynamic>.from(response.data);
+      data['latitude'] = pos.latitude;
+      data['longitude'] = pos.longitude;
+      service.invoke('update', data);
+
+      _updateNotif(notifPlugin, service, response.data);
+
+      // Naikkan/turunkan akurasi mengikuti status dari server.
+      final newMode = response.data['status'] == 'ontrip' ? 'ontrip' : 'idle';
+      if (newMode != mode) {
+        mode = newMode;
+        subscribe(); // re-subscribe dengan setting baru
+      }
+    } catch (e) {
+      print("Location push failed: $e");
+    }
+
+    // Heartbeat: saat DIAM (stream tak emit), tetap kirim posisi terakhir tiap
+    // 75 dtk agar server & peta CSO tak menandai supir "basi" (ambang 120 dtk).
+    heartbeat?.cancel();
+    heartbeat = Timer(const Duration(seconds: 75), () {
+      if (lastPos != null) push(lastPos!);
+    });
+  };
+
+  subscribe = () {
+    posSub?.cancel();
+    posSub = Geolocator.getPositionStream(locationSettings: settingsFor(mode))
+        .listen(
+      (pos) => push(pos),
+      onError: (e) => print("Location stream error: $e"),
+    );
+  };
 
   service.on('stopService').listen((event) {
+    posSub?.cancel();
+    heartbeat?.cancel();
     service.stopSelf();
-    timer?.cancel();
   });
 
-  print("Background Service: Started");
+  print("Background Service: Started (stream mode)");
 
-  // Immediate Update
-  _performLocationUpdate(apiService, flutterLocalNotificationsPlugin, service);
-
-  // Periodic Update (30s)
-  timer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-    try {
-      await _performLocationUpdate(
-        apiService,
-        flutterLocalNotificationsPlugin,
-        service,
-      );
-    } catch (e) {
-      print("Background Loop Error: $e");
-    }
-  });
+  // Fix awal cepat, lalu jalankan stream hemat-daya.
+  try {
+    final first = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    );
+    await push(first);
+  } catch (e) {
+    print("Initial fix failed: $e");
+  }
+  subscribe();
 }
 
-Future<void> _performLocationUpdate(
-  ApiService apiService,
+// Update notifikasi foreground service (ongoing, tanpa suara).
+void _updateNotif(
   FlutterLocalNotificationsPlugin notifPlugin,
   ServiceInstance service,
+  dynamic data,
 ) async {
-  try {
-    // 1. Get Permission Check (Optional, usually assumed granted)
-    // 2. Get Location
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
+  final timestamp = DateFormat('HH:mm:ss').format(DateTime.now());
+  final status = data['status'];
+  String statusText = "Lokasi terupdate: $timestamp";
+  if (status == 'standby') {
+    statusText = "Standby (Antrian #${data['line_number'] ?? '?'}) | $timestamp";
+  } else if (status == 'offline') {
+    statusText = "Offline (Diluar Area) | $timestamp";
+  } else if (status == 'ontrip') {
+    statusText = "Mengantar penumpang | $timestamp";
+  }
 
-    // 3. Send to API
-    final response = await apiService.updateLocation(
-      position.latitude,
-      position.longitude,
-    );
-
-    // 4. Update UI (if app is open)
-    // Merge lat/lng into response data because backend doesn't return it
-    final data = Map<String, dynamic>.from(response.data);
-    data['latitude'] = position.latitude;
-    data['longitude'] = position.longitude;
-    service.invoke('update', data);
-
-    // 5. Update Notification
-    final timestamp = DateFormat('HH:mm:ss').format(DateTime.now());
-
-    // Status text for notification
-    String statusText = "Lokasi terupdate: $timestamp";
-    if (response.data['status'] == 'standby') {
-      statusText =
-          "Standby (Antrian #${response.data['line_number'] ?? '?'}) | $timestamp";
-    } else if (response.data['status'] == 'offline') {
-      statusText = "Offline (Diluar Area) | $timestamp";
-    }
-
-    if (service is AndroidServiceInstance) {
-      if (await service.isForegroundService()) {
-        notifPlugin.show(
-          888,
-          'Taksi POS Driver (Aktif)',
-          statusText,
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'my_foreground',
-              'Location Tracking',
-              icon:
-                  'ic_bg_service_small', // Make sure this icon exists or use default
-              ongoing: true,
-              importance: Importance.low,
-            ),
+  if (service is AndroidServiceInstance) {
+    if (await service.isForegroundService()) {
+      notifPlugin.show(
+        888,
+        'Taksi POS Driver (Aktif)',
+        statusText,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'my_foreground',
+            'Location Tracking',
+            icon: 'ic_bg_service_small',
+            ongoing: true,
+            importance: Importance.low,
           ),
-        );
-      }
-    }
-
-    print("Background Update SUCCESS: $timestamp");
-  } catch (e) {
-    print("Background Update FAILED: $e");
-    if (service is AndroidServiceInstance) {
-      // service.setAsForegroundService(); // Ensure it stays alive
+        ),
+      );
     }
   }
 }
