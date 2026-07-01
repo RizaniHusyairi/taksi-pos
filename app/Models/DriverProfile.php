@@ -17,6 +17,13 @@ class DriverProfile extends Model
         'last_queue_date',
         'out_of_area_since',
         'auto_join_blocked',
+        'latitude',
+        'longitude',
+        'location_updated_at',
+    ];
+
+    protected $casts = [
+        'location_updated_at' => 'datetime',
     ];
 
     public function user()

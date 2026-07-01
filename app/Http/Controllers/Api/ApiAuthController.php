@@ -27,6 +27,14 @@ class ApiAuthController extends Controller
 
         $user = Auth::user();
 
+        // Akun yang dinonaktifkan admin tidak boleh masuk.
+        if (!$user->active) {
+            Auth::logout();
+            return response()->json([
+                'message' => 'Akun Anda dinonaktifkan. Silakan hubungi admin.'
+            ], 403);
+        }
+
         // Aplikasi mobile hanya untuk role driver & cso. Admin tetap lewat web.
         if (!in_array($user->role, ['driver', 'cso'])) {
             Auth::logout();

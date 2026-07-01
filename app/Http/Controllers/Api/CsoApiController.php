@@ -102,7 +102,11 @@ class CsoApiController extends Controller
 
        $drivers = DriverQueue::with(['driver.driverProfile'])
             ->whereHas('driver.driverProfile', function ($query) {
-                $query->whereNull('out_of_area_since');
+                // Hanya driver yang BENAR-BENAR siap: sudah tiba & standby, dan tidak
+                // sedang di luar area. Cegah order jatuh ke driver yang belum datang
+                // (mis. hasil pre-fill rotasi harian yang masih offline & lat/lng 0).
+                $query->whereIn('status', ['standby', 'available'])
+                      ->whereNull('out_of_area_since');
             })
             ->orderBy('sort_order', 'asc')
             ->orderBy('created_at', 'asc')
@@ -137,35 +141,42 @@ class CsoApiController extends Controller
 
     /**
      * Lokasi para supir untuk peta dashboard CSO.
-     * Sumber posisi: tabel driver_queues (diperbarui saat supir mengirim lokasi).
+     * Sumber posisi: tabel driver_profiles (lokasi terakhir tiap supir).
+     * Menampilkan supir yang sedang AKTIF — standby (menunggu) maupun OnTrip
+     * (mengantar) — sehingga supir yang sedang jalan tetap terlihat & terlacak,
+     * walaupun sudah keluar dari tabel antrian.
      * Juga mengembalikan titik bandara + radius untuk pusat & lingkaran peta.
      */
     public function getDriverLocations()
     {
-        $drivers = DriverQueue::with(['driver.driverProfile'])
+        // Posisi antrian (sort_order) hanya ada untuk supir yang masih mengantri.
+        // Supir OnTrip tidak punya — biarkan null.
+        $queueScores = DriverQueue::pluck('sort_order', 'user_id');
+
+        $drivers = \App\Models\DriverProfile::with('user:id,name')
+            ->whereIn('status', ['standby', 'ontrip'])
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->where('latitude', '!=', 0)
             ->where('longitude', '!=', 0)
-            ->orderBy('sort_order', 'asc')
             ->get()
-            ->map(function ($q) {
-                $user = $q->driver;
+            ->map(function ($p) use ($queueScores) {
+                $user = $p->user;
                 if (!$user) {
                     return null;
                 }
-                $profile = $user->driverProfile;
 
                 return [
                     'id'           => $user->id,
                     'name'         => $user->name,
-                    'line_number'  => $profile?->line_number,
-                    'car_model'    => $profile?->car_model,
-                    'plate_number' => $profile?->plate_number,
-                    'status'       => $profile?->status ?? 'offline',
-                    'queue_score'  => $q->sort_order,
-                    'latitude'     => (float) $q->latitude,
-                    'longitude'    => (float) $q->longitude,
+                    'line_number'  => $p->line_number,
+                    'car_model'    => $p->car_model,
+                    'plate_number' => $p->plate_number,
+                    'status'       => $p->status,
+                    'queue_score'  => $queueScores[$user->id] ?? null,
+                    'latitude'     => (float) $p->latitude,
+                    'longitude'    => (float) $p->longitude,
+                    'updated_at'   => optional($p->location_updated_at)->toIso8601String(),
                 ];
             })
             ->filter()
@@ -195,10 +206,13 @@ class CsoApiController extends Controller
             $q->where('cso_id', $cso->id);
         });
 
-        $todayTx = (clone $base)->whereDate('created_at', $today)->get();
-
-        $cashSum = $todayTx->whereIn('method', ['CashCSO', 'CashDriver'])->sum('amount');
-        $qrisSum = $todayTx->where('method', 'QRIS')->sum('amount');
+        // Agregasi di DB (1 query) — tidak menarik semua transaksi hari ini ke memori.
+        $todayAgg = (clone $base)->whereDate('created_at', $today)
+            ->selectRaw('COUNT(*) as cnt')
+            ->selectRaw('COALESCE(SUM(amount), 0) as revenue')
+            ->selectRaw("COALESCE(SUM(CASE WHEN method IN ('CashCSO','CashDriver') THEN amount ELSE 0 END), 0) as cash")
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'QRIS' THEN amount ELSE 0 END), 0) as qris")
+            ->first();
 
         $recent = (clone $base)
             ->with([
@@ -218,10 +232,10 @@ class CsoApiController extends Controller
 
         return response()->json([
             'today' => [
-                'count'   => $todayTx->count(),
-                'revenue' => (float) $todayTx->sum('amount'),
-                'cash'    => (float) $cashSum,
-                'qris'    => (float) $qrisSum,
+                'count'   => (int) $todayAgg->cnt,
+                'revenue' => (float) $todayAgg->revenue,
+                'cash'    => (float) $todayAgg->cash,
+                'qris'    => (float) $todayAgg->qris,
             ],
             'queue' => [
                 'total' => $queueTotal,
@@ -391,10 +405,10 @@ class CsoApiController extends Controller
         // 3. LOGIKA NOTIFIKASI (Di luar transaction DB agar tidak lambat)
         try {
             $driver = $result->driver;
-            $waToken = Setting::where('key', 'wa_token')->value('value');
+            $waToken = Setting::getValue('wa_token');
             
             // Link Struk (menggunakan ID transaksi)
-            $receiptUrl = route('receipt.show', $result->transaction->id);
+            $receiptUrl = route('receipt.show', $result->transaction->receipt_token);
             
             $zoneName = $result->zoneTo->name;
             $priceRp = number_format($result->price, 0, ',', '.');
@@ -416,7 +430,7 @@ class CsoApiController extends Controller
                     . "Lihat struk digital Anda di sini:\n"
                     . "$receiptUrl\n\n"
                     . "Selamat menikmati perjalanan!";
-            WhatsAppService::send($validated['passenger_phone'], $msgPassenger, $waToken);
+            \App\Jobs\SendWhatsAppMessage::dispatch($validated['passenger_phone'], $msgPassenger, $waToken);
             }
 
             // --- B. KIRIM WA KE DRIVER ---
@@ -431,7 +445,7 @@ class CsoApiController extends Controller
                     . "Struk Pembayaran:\n$receiptUrl\n\n"
                     . "Harap segera menuju titik jemput.";
 
-                WhatsAppService::send($driverPhone, $msgDriver, $waToken);
+                \App\Jobs\SendWhatsAppMessage::dispatch($driverPhone, $msgDriver, $waToken);
             }
 
             // --- C. KIRIM EMAIL KE DRIVER ---
@@ -440,64 +454,20 @@ class CsoApiController extends Controller
                 Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
             }
 
-            // --- D. NOTIFIKASI FCM KE DRIVER APP (HTTP v1) ---
-            if ($driver->fcm_token) {
-                try {
-                    $credentialsPath = storage_path('app/firebase_credentials.json');
-                    
-                    if (!file_exists($credentialsPath)) {
-                        Log::error("FCM Error: Credentials file not found at $credentialsPath");
-                    } else {
-                        // 1. Get Access Token
-                        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-                        $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials(
-                            $scopes,
-                            $credentialsPath
-                        );
-                        $token = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build());
-                        $accessToken = $token['access_token'];
-
-                        // 2. Get Project ID
-                        $json = json_decode(file_get_contents($credentialsPath), true);
-                        $projectId = $json['project_id'];
-
-                        // 3. Send Notification (v1 syntax)
-                        Log::info("Sending FCM v1 to Driver: {$driver->id}");
-
-                        $response = \Illuminate\Support\Facades\Http::withHeaders([
-                            'Authorization' => 'Bearer ' . $accessToken,
-                            'Content-Type'  => 'application/json',
-                        ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
-                            'message' => [
-                                'token' => $driver->fcm_token,
-                                'notification' => [
-                                    'title' => 'Order Baru Masuk! 🚖',
-                                    'body' => "Tujuan: $zoneName - Penumpang menunggu.",
-                                ],
-                                'data' => [
-                                    'type' => 'new_order',
-                                    'booking_id' => (string)$booking->id,
-                                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                                ],
-                                'android' => [
-                                    'priority' => 'HIGH',
-                                    'notification' => [
-                                        'channel_id' => 'high_importance_channel',
-                                        // 'sound' => 'default', // default_sound: true takes care of this
-                                        'default_sound' => true,
-                                        'default_vibrate_timings' => true,
-                                    ]
-                                ]
-                            ]
-                        ]);
-
-                        Log::info("FCM v1 Response: " . $response->status() . " | " . $response->body());
-                    }
-
-                } catch (\Exception $e) {
-                    Log::error("FCM v1 Error: " . $e->getMessage());
-                }
-            }
+            // --- D. NOTIFIKASI FCM KE DRIVER APP (async + retry via queue) ---
+            $methodLabel = $this->paymentMethodLabel($validated['method']);
+            $this->pushFcmToDriver(
+                $driver,
+                'Order Baru Masuk! 🚖',
+                "Tujuan: {$zoneName} · Tarif Rp {$priceRp} · {$methodLabel}",
+                [
+                    'type'        => 'new_order',
+                    'booking_id'  => (string) $result->id,
+                    'destination' => $zoneName,
+                    'fare'        => $priceRp,
+                    'method'      => $methodLabel,
+                ]
+            );
         } catch (\Exception $e) {
             Log::error("Notifikasi Gagal: " . $e->getMessage());
         }
@@ -619,11 +589,19 @@ class CsoApiController extends Controller
         // Beritahu supir baru lewat FCM (di luar transaksi DB agar tidak memperlambat).
         try {
             $zoneName = $booking->zoneTo->name ?? 'Tujuan';
+            $priceRp = number_format($booking->price, 0, ',', '.');
+            $methodLabel = $this->paymentMethodLabel($booking->transaction->method ?? 'QRIS');
             $this->pushFcmToDriver(
                 $booking->driver,
                 'Order Dialihkan ke Anda! 🚖',
-                "Tujuan: $zoneName - Penumpang menunggu.",
-                ['type' => 'new_order', 'booking_id' => (string) $booking->id]
+                "Tujuan: {$zoneName} · Tarif Rp {$priceRp} · {$methodLabel}",
+                [
+                    'type'        => 'new_order',
+                    'booking_id'  => (string) $booking->id,
+                    'destination' => $zoneName,
+                    'fare'        => $priceRp,
+                    'method'      => $methodLabel,
+                ]
             );
         } catch (\Exception $e) {
             Log::error('Notifikasi ganti supir gagal: ' . $e->getMessage());
@@ -641,11 +619,23 @@ class CsoApiController extends Controller
      */
     public function companyQris()
     {
-        $path = Setting::where('key', 'company_qris_path')->value('value');
+        $path = Setting::getValue('company_qris_path');
 
         return response()->json([
             'company_qris_url' => $path ? asset('storage/' . $path) : null,
         ]);
+    }
+
+    /**
+     * Label metode pembayaran yang ramah dibaca supir di notifikasi.
+     */
+    private function paymentMethodLabel(string $method): string
+    {
+        return match ($method) {
+            'CashDriver' => 'Tunai ke Supir',
+            'CashCSO'    => 'Tunai ke Kasir',
+            default      => 'QRIS',
+        };
     }
 
     /**
@@ -657,42 +647,7 @@ class CsoApiController extends Controller
             return;
         }
 
-        try {
-            $credentialsPath = storage_path('app/firebase_credentials.json');
-            if (!file_exists($credentialsPath)) {
-                Log::error("FCM Error: Credentials file not found at $credentialsPath");
-                return;
-            }
-
-            $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-            $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials($scopes, $credentialsPath);
-            $accessToken = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build())['access_token'];
-
-            $json = json_decode(file_get_contents($credentialsPath), true);
-            $projectId = $json['project_id'];
-
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => 'Bearer ' . $accessToken,
-                'Content-Type'  => 'application/json',
-            ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", [
-                'message' => [
-                    'token' => $driver->fcm_token,
-                    'notification' => ['title' => $title, 'body' => $body],
-                    'data' => array_merge(['click_action' => 'FLUTTER_NOTIFICATION_CLICK'], $data),
-                    'android' => [
-                        'priority' => 'HIGH',
-                        'notification' => [
-                            'channel_id' => 'high_importance_channel',
-                            'default_sound' => true,
-                            'default_vibrate_timings' => true,
-                        ],
-                    ],
-                ],
-            ]);
-
-            Log::info("FCM v1 Response: " . $response->status() . " | " . $response->body());
-        } catch (\Exception $e) {
-            Log::error("FCM v1 Error: " . $e->getMessage());
-        }
+        // Async + retry via queue (lihat App\Jobs\SendFcmNotification).
+        \App\Jobs\SendFcmNotification::dispatch($driver->fcm_token, $title, $body, $data);
     }
 }

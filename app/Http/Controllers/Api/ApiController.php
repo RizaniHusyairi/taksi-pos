@@ -32,7 +32,7 @@ class ApiController extends Controller
 
         // B. Hitung driver yang sedang OnTrip (Ada booking belum selesai)
         // Kita hitung jumlah User ID unik yang memiliki booking aktif
-        $driversOnTrip = Booking::whereIn('status', ['Assigned']) // Sesuaikan status on trip di sistemmu
+        $driversOnTrip = Booking::whereIn('status', ['Assigned', 'OnTrip'])
             ->distinct('driver_id')
             ->count('driver_id');
 
@@ -110,14 +110,23 @@ class ApiController extends Controller
     }
 
     public function adminDestroyZone(Zone $zone) {
+        // Cegah hapus zona yang masih dipakai booking — kalau dihapus, zona pada
+        // riwayat/laporan/struk jadi null (data rusak). Admin cukup mengedit zona.
+        $usedCount = Booking::where('zone_id', $zone->id)->count();
+        if ($usedCount > 0) {
+            return response()->json([
+                'message' => "Zona tidak bisa dihapus karena dipakai oleh {$usedCount} booking. Edit saja zonanya.",
+            ], 422);
+        }
+
         $zone->delete();
         return response()->json(['message' => 'Zone deleted successfully']);
     }
 
     // --- Manajemen Pengguna ---
     public function adminGetUsers() {
-        // Mengambil semua user dengan relasi driverProfile jika ada
-        return response()->json(User::with('driverProfile')->orderBy('name')->get());
+        // Paginasi agar payload tetap terbatas saat jumlah user bertumbuh.
+        return response()->json(User::with('driverProfile')->orderBy('name')->paginate(20));
     }
 
     public function adminStoreUser(Request $request) {
@@ -152,22 +161,14 @@ class ApiController extends Controller
             $newLine = $maxLine + 1;
 
             $user->driverProfile()->create([
-                'car_model' => $validated['car_model'], // Corrected key from 'car' to 'car_model' based on DB
-                'plate_number' => $validated['plate_number'], // Corrected key from 'plate' to 'plate_number' based on DB
+                'car_model' => $validated['car_model'] ?? '',
+                'plate_number' => $validated['plate_number'] ?? '',
                 'line_number' => $newLine
             ]);
 
-            // 2. Auto-add to Queue
-            // Cek jika belum ada di queue (meski ini baru create, safe check)
-            if (!DriverQueue::where('user_id', $user->id)->exists()) {
-                $maxSort = DriverQueue::max('sort_order') ?? 0;
-                DriverQueue::create([
-                    'user_id' => $user->id,
-                    'sort_order' => $maxSort + 1,
-                    'latitude' => 0,
-                    'longitude' => 0
-                ]);
-            }
+            // Driver baru TIDAK langsung dimasukkan antrian — ia baru masuk saat
+            // benar-benar tiba di area bandara (auto-join via updateLocation) atau
+            // lewat rotasi harian. Mencegah "phantom availability" di daftar CSO.
         }
 
         return response()->json($user->load('driverProfile'), 201);
@@ -183,6 +184,17 @@ class ApiController extends Controller
             'plate_number' => 'nullable|string',
         ]);
 
+        // Cegah skenario yang bisa mengunci akses admin saat menurunkan role admin:
+        // (a) menurunkan role akun sendiri, (b) menurunkan admin terakhir.
+        if ($user->role === 'admin' && $validated['role'] !== 'admin') {
+            if ($user->id === Auth::id()) {
+                return response()->json(['message' => 'Tidak bisa menurunkan role akun sendiri.'], 422);
+            }
+            if (User::where('role', 'admin')->count() <= 1) {
+                return response()->json(['message' => 'Tidak bisa menurunkan admin terakhir.'], 422);
+            }
+        }
+
         $user->update([
             'name' => $validated['name'],
             'role' => $validated['role'],
@@ -193,12 +205,25 @@ class ApiController extends Controller
         }
 
         if ($validated['role'] === 'driver') {
+            // Pertahankan line_number lama; kalau belum ada (konversi dari role lain),
+            // beri nomor berikutnya agar driver ikut sistem rotasi antrian
+            // (DailyQueueRotation memakai whereNotNull('line_number')).
+            $profile = $user->driverProfile; // null jika sebelumnya bukan driver
+            $lineNumber = $profile?->line_number;
+            if (empty($lineNumber)) {
+                $maxLine = DriverProfile::pluck('line_number')->map(fn ($l) => (int) $l)->max() ?? 0;
+                $lineNumber = $maxLine + 1;
+            }
+            // car_model & plate_number kolom NOT NULL: kalau tak dikirim, pertahankan
+            // nilai lama (kalau ada) atau pakai string kosong.
             $user->driverProfile()->updateOrCreate([], [
-                'car_model' => $validated['car_model'],
-                'plate_number' => $validated['plate_number'],
+                'car_model'    => $validated['car_model'] ?? $profile?->car_model ?? '',
+                'plate_number' => $validated['plate_number'] ?? $profile?->plate_number ?? '',
+                'line_number'  => $lineNumber,
             ]);
         } else {
-            // Jika bukan driver, hapus profil driver jika ada
+            // Bukan driver lagi: keluarkan dari antrian + hapus profil driver.
+            DriverQueue::where('user_id', $user->id)->delete();
             $user->driverProfile()->delete();
         }
 
@@ -209,61 +234,100 @@ class ApiController extends Controller
     public function adminDestroyUser(User $user) {
         // Prevent deleting self
         if ($user->id === Auth::id()) {
-            return response()->json(['message' => 'Cannot delete yourself'], 403);
+            return response()->json(['message' => 'Tidak bisa menghapus akun sendiri.'], 403);
+        }
+
+        // Cegah hapus user yang punya jejak booking/keuangan — kalau dihapus,
+        // booking/transaksi/withdrawal jadi yatim (data & laporan rusak).
+        // Untuk menghentikan akses, NONAKTIFKAN akunnya (toggle-status), jangan hapus.
+        $hasBookings = Booking::where('driver_id', $user->id)->orWhere('cso_id', $user->id)->exists();
+        $hasWithdrawals = Withdrawals::where('driver_id', $user->id)->exists();
+        if ($hasBookings || $hasWithdrawals) {
+            return response()->json([
+                'message' => 'User ini punya riwayat booking/keuangan, jadi tidak bisa dihapus. Nonaktifkan saja akunnya.',
+            ], 422);
         }
 
         DB::transaction(function() use ($user) {
-            // Delete related profiles
+            // Aman dihapus: belum punya jejak. Bersihkan antrian, token, & profil.
+            DriverQueue::where('user_id', $user->id)->delete();
+            $user->tokens()->delete();
             $user->driverProfile()->delete();
-            // Delete the user
             $user->delete();
         });
 
-        return response()->json(['message' => 'User deleted successfully']);
+        return response()->json(['message' => 'User berhasil dihapus.']);
     }
 
+    /**
+     * Aktif / non-aktifkan akun pengguna (toggle kolom `active`).
+     * Akun non-aktif ditolak saat login (lihat ApiAuthController).
+     */
+    public function adminToggleUserStatus(User $user)
+    {
+        // Cegah admin menonaktifkan akunnya sendiri (bisa terkunci dari panel).
+        if ($user->id === Auth::id()) {
+            return response()->json(['message' => 'Tidak bisa menonaktifkan akun sendiri.'], 403);
+        }
+
+        $user->active = !$user->active;
+        $user->save();
+
+        if (!$user->active) {
+            // Saat dinonaktifkan: putuskan sesi mobile yang sedang berjalan.
+            $user->tokens()->delete();
+
+            // Jika driver: keluarkan dari antrian + blokir auto-join agar tidak
+            // muncul di daftar CSO & tidak bisa dapat order.
+            if ($user->role === 'driver') {
+                DriverQueue::where('user_id', $user->id)->delete();
+                DriverProfile::where('user_id', $user->id)->update([
+                    'status' => 'offline',
+                    'auto_join_blocked' => true,
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => $user->active ? 'Akun diaktifkan.' : 'Akun dinonaktifkan.',
+            'active'  => (bool) $user->active,
+        ]);
+    }
 
     public function adminGetTransactions(Request $request)
     {
-        // Mulai query dengan eager loading untuk data terkait
-        $query = Transaction::with(['booking.zoneTo', 
-            'booking.driver', // Ambil driver lewat booking
-            'booking.cso'     // Ambil cso lewat booking
-            ])->orderBy('created_at', 'desc');
+        $paginated = Transaction::filter($request)
+            ->with(['booking.zoneTo', 'booking.driver', 'booking.cso'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
 
-        // Terapkan filter berdasarkan query string dari URL
-        if ($request->has('date_from')) {
-            $query->whereDate('created_at', '>=', $request->query('date_from'));
-        }
-        if ($request->has('date_to')) {
-            $query->whereDate('created_at', '<=', $request->query('date_to'));
-        }
-        if ($request->has('driver_id')) {
-            // Filter berdasarkan relasi booking
-            $driverId = $request->query('driver_id');
-            $query->whereHas('booking', function ($q) use ($driverId) {
-                $q->where('driver_id', $driverId);
-            });
-        }
-        if ($request->has('cso_id')) {
-            // Filter berdasarkan relasi booking
-            $csoId = $request->query('cso_id');
-            $query->whereHas('booking', function ($q) use ($csoId) {
-                $q->where('cso_id', $csoId);
-            });
-        }
+        // Ringkasan untuk SELURUH hasil filter (bukan hanya halaman ini).
+        $base = Transaction::filter($request);
+        $summary = [
+            'count'       => (clone $base)->count(),
+            'total'       => (float) (clone $base)->sum('amount'),
+            'qris'        => (float) (clone $base)->where('method', 'QRIS')->sum('amount'),
+            'cash_cso'    => (float) (clone $base)->where('method', 'CashCSO')->sum('amount'),
+            'cash_driver' => (float) (clone $base)->where('method', 'CashDriver')->sum('amount'),
+        ];
 
-        $transactions = $query->paginate(50); // Gunakan paginasi untuk data yang banyak
-
-        return response()->json($transactions);
+        return response()->json([
+            'data'    => $paginated->items(),
+            'meta'    => [
+                'current_page' => $paginated->currentPage(),
+                'last_page'    => $paginated->lastPage(),
+                'total'        => $paginated->total(),
+            ],
+            'summary' => $summary,
+        ]);
     }
 
     // Ambil semua withdrawal request dengan data supirnya
     public function adminGetWithdrawals()
     {
-        $withdrawals = Withdrawals::with('driver.driverProfile') 
+        $withdrawals = Withdrawals::with('driver.driverProfile')
                                 ->orderBy('requested_at', 'desc')
-                                ->get();
+                                ->paginate(20);
         return response()->json($withdrawals);
     }
 
@@ -315,7 +379,7 @@ class ApiController extends Controller
 
             // --- KIRIM WHATSAPP ---
             try {
-                $waToken = Setting::where('key', 'wa_token')->value('value');
+                $waToken = Setting::getValue('wa_token');
                 
                 // Pastikan driver punya nomor HP (sesuaikan nama kolom di DB Anda, misal: phone_number)
                 // Jika Anda menyimpan no HP di tabel driver_profiles, sesuaikan kodenya.
@@ -333,7 +397,7 @@ class ApiController extends Controller
                         . "🏦 Bank: Bank BTN\n\n"
                         . "Silakan cek rekening Anda. Terima kasih!";
 
-                    WhatsAppService::send($driverPhone, $message, $waToken);
+                    \App\Jobs\SendWhatsAppMessage::dispatch($driverPhone, $message, $waToken);
                 }
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Gagal kirim WA ke driver: ' . $e->getMessage());
@@ -452,27 +516,38 @@ class ApiController extends Controller
 
     public function adminGetDriverPerformanceReport(Request $request)
     {
-        $sortBy = $request->query('sort_by', 'trips'); // default 'trips'
+        $sortBy = $request->query('sort_by', 'trips'); // trips | revenue | rating
+        $orderCol = match ($sortBy) {
+            'revenue' => 'revenue',
+            'rating'  => 'avg_rating',
+            default   => 'trips',
+        };
 
         $drivers = User::where('role', 'driver')
-            // Menghitung jumlah booking dengan status 'Completed' secara efisien
             ->withCount(['bookings as trips' => function ($query) {
                 $query->where('status', 'Completed');
             }])
-            // Menjumlahkan total pendapatan dari tabel transaksi
             ->withSum('transactions as revenue', 'amount')
-            // Mengurutkan berdasarkan parameter yang diberikan
-            ->orderBy($sortBy === 'revenue' ? 'revenue' : 'trips', 'desc')
+            ->withAvg('ratings as avg_rating', 'stars')   // rata-rata bintang
+            ->withCount('ratings as rating_count')        // jumlah penilaian
+            ->orderByDesc($orderCol)
             ->get();
 
-        // Data yang dikembalikan sudah jadi dan terurut
         return response()->json($drivers);
     }
     public function adminGetSettings()
     {
         // Mengambil semua settings
         $settings = Setting::all()->pluck('value', 'key');
-        
+
+        // JANGAN kirim nilai rahasia ke browser. Redaksi jadi string kosong, tapi
+        // beri flag "<key>_is_set" supaya UI bisa menandai "sudah dikonfigurasi".
+        foreach (['mail_password', 'wa_token'] as $sk) {
+            $hasValue = isset($settings[$sk]) && $settings[$sk] !== null && $settings[$sk] !== '';
+            $settings[$sk] = '';
+            $settings[$sk . '_is_set'] = $hasValue;
+        }
+
         // Format URL untuk gambar
         if (isset($settings['company_qris_path'])) {
             $settings['company_qris_url'] = asset('storage/' . $settings['company_qris_path']);
@@ -483,7 +558,12 @@ class ApiController extends Controller
     
     public function adminUpdateSettings(Request $request)
     {
-        \Illuminate\Support\Facades\Log::info('adminUpdateSettings hit', $request->all());
+        // Audit trail TANPA nilai — jangan pernah log $request->all() di sini:
+        // payload memuat rahasia (mail_password, wa_token) yang kalau di-log akan
+        // tersimpan plaintext di storage/logs. Cukup catat NAMA key yang diubah.
+        \Illuminate\Support\Facades\Log::info('Admin memperbarui pengaturan', [
+            'keys' => array_keys($request->except('company_qris')),
+        ]);
 
         // Validasi input
         $validated = $request->validate([
@@ -503,7 +583,6 @@ class ApiController extends Controller
     
         // 1. Handle File Upload (QRIS)
         if ($request->hasFile('company_qris')) {
-            \Illuminate\Support\Facades\Log::info('File company_qris found');
             try {
                 // Hapus file lama jika ada
                 $oldPath = Setting::where('key', 'company_qris_path')->value('value');
@@ -513,21 +592,28 @@ class ApiController extends Controller
     
                 // Simpan file baru
                 $path = $request->file('company_qris')->store('qris_codes', 'public');
-                \Illuminate\Support\Facades\Log::info('File stored at: ' . $path);
                 
                 // Update DB
-                $setting = Setting::updateOrCreate(['key' => 'company_qris_path'], ['value' => $path]);
-                \Illuminate\Support\Facades\Log::info('DB Updated: ', $setting->toArray());
+                Setting::updateOrCreate(['key' => 'company_qris_path'], ['value' => $path]);
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Upload failed: ' . $e->getMessage());
+                // Jujur: jangan balas "berhasil" kalau upload QRIS gagal.
+                \Illuminate\Support\Facades\Log::error('Gagal upload QRIS: ' . $e->getMessage());
+                return response()->json([
+                    'message' => 'Gagal mengunggah gambar QRIS. Pengaturan belum disimpan, silakan coba lagi.',
+                ], 500);
             }
-        } else {
-            \Illuminate\Support\Facades\Log::info('No file company_qris in request');
         }
 
         // 2. Loop data lain (kecuali file)
         foreach ($validated as $key => $value) {
             if ($key === 'company_qris') continue; // Skip file object
+
+            // Field rahasia yang dibiarkan KOSONG = "jangan ubah" (pertahankan nilai
+            // lama). Mencegah blank-submit menimpa rahasia jadi kosong — penting
+            // karena GET sengaja meredaksi nilainya (lihat adminGetSettings).
+            if (in_array($key, ['mail_password', 'wa_token'], true) && ($value === null || $value === '')) {
+                continue;
+            }
 
             // Konversi khusus untuk rate
             if ($key === 'commission_rate' && !is_null($value)) {
@@ -541,7 +627,10 @@ class ApiController extends Controller
                 Setting::updateOrCreate(['key' => $key], ['value' => $dbValue]);
             }
         }
-    
+
+        // Invalidasi memo agar pembacaan setting berikutnya dapat nilai terbaru.
+        Setting::forgetMemo();
+
         return response()->json(['message' => 'Pengaturan berhasil disimpan.']);
     }
 
@@ -665,6 +754,16 @@ class ApiController extends Controller
             'user_id' => 'required',
             'line_number' => 'required|string|max:10'
         ]);
+
+        // line_number harus unik — kalau dipakai driver lain, rotasi antrian tabrakan.
+        $taken = DriverProfile::where('line_number', $request->line_number)
+            ->where('user_id', '!=', $request->user_id)
+            ->exists();
+        if ($taken) {
+            return response()->json([
+                'message' => "Nomor lambung {$request->line_number} sudah dipakai driver lain.",
+            ], 422);
+        }
 
         DriverProfile::where('user_id', $request->user_id)
             ->update(['line_number' => $request->line_number]);

@@ -137,7 +137,7 @@ class DriverApiController extends Controller
                 // INI ADALAH FIRST JOIN -> HITUNG PRIORITAS BERDASARKAN ROTASI
                 
                 // Ambil Angka Giliran Hari Ini (Default 1 jika error)
-                $dailyStart = (int) Setting::where('key', 'daily_start_line')->value('value') ?: 1;
+                $dailyStart = (int) Setting::getValue('daily_start_line') ?: 1;
                 $myLine = $profile->line_number;
                 $totalDrivers = \App\Models\DriverProfile::max('line_number') ?: 30; // jumlah driver dinamis
 
@@ -307,59 +307,77 @@ class DriverApiController extends Controller
     public function getBalance(Request $request)
     {
         $driver = $request->user();
-        
-        // Ambil Rate Komisi (misal 0.2 untuk 20%)
-        // Pastikan di database settings value-nya desimal (0.2) atau sesuaikan pembagiannya
-        $rate = (float) Setting::where('key', 'commission_rate')->value('value') ?: 0.2;
 
-        // 1. Hitung Pemasukan (Uang di Sistem) - QRIS & CashCSO yang statusnya 'Unpaid'
-        $pendingIncome = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id)
-                  ->where('status', 'Completed');
+        // Rate Komisi (mis. 0.2 = 20%). Disimpan desimal di settings.
+        $rate = (float) Setting::getValue('commission_rate') ?: 0.2;
+        $manualFlat = (int) (Setting::getValue('manual_fee_flat') ?: 10000);
+
+        // === 1. PEMASUKAN (uang ada di sistem → hak driver) ===
+        //     QRIS & CashCSO yang masih 'Unpaid'.
+        $incomeQ = Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)->where('status', 'Completed');
             })
             ->whereIn('method', ['QRIS', 'CashCSO'])
-            ->where('payout_status', 'Unpaid')
-            ->sum('amount');
+            ->where('payout_status', 'Unpaid');
+        $incomeGross = (float) (clone $incomeQ)->sum('amount');
+        $incomeCount = (clone $incomeQ)->count();
+        $commission  = $incomeGross * $rate;          // potongan komisi koperasi
+        $driverShare = $incomeGross - $commission;    // hak bersih driver
 
-        // Hak Driver = Total - Komisi
-        $driverShare = $pendingIncome * (1 - $rate);
-
-        // 2. Hitung Hutang (Uang di Driver) - CashDriver yang statusnya 'Unpaid'
-        
-        // A. Booking via Sistem (Ada Zone ID) -> Kena Rate Komisi
-        $standardDebt = Transaction::whereHas('booking', function ($q) use ($driver) {
+        // === 2. HUTANG (uang dipegang driver → setoran ke koperasi) ===
+        // A. Booking via sistem (ada zona) → kena komisi rate.
+        $stdQ = Transaction::whereHas('booking', function ($q) use ($driver) {
                 $q->where('driver_id', $driver->id)
                   ->where('status', 'Completed')
-                  ->whereNotNull('zone_id'); // Syarat: Ada Zona
+                  ->whereNotNull('zone_id');
             })
             ->where('method', 'CashDriver')
-            ->where('payout_status', 'Unpaid')
-            ->sum('amount');
-        
-        $debtFromStandard = $standardDebt * $rate;
+            ->where('payout_status', 'Unpaid');
+        $standardGross    = (float) (clone $stdQ)->sum('amount');
+        $standardCount    = (clone $stdQ)->count();
+        $debtFromStandard = $standardGross * $rate;
 
-        // B. Booking Manual (Penumpang Sendiri / Zone ID Null) -> Flat Fee 10.000
+        // B. Booking manual (tanpa zona) → fee flat per trip.
         $manualCount = Transaction::whereHas('booking', function ($q) use ($driver) {
                 $q->where('driver_id', $driver->id)
                   ->where('status', 'Completed')
-                  ->whereNull('zone_id'); // Syarat: Tidak Ada Zona (Manual)
+                  ->whereNull('zone_id');
             })
             ->where('method', 'CashDriver')
             ->where('payout_status', 'Unpaid')
             ->count();
-        
-        $debtFromManual = $manualCount * 10000;
+        $debtFromManual = $manualCount * $manualFlat;
 
-        // Total Hutang Driver ke Sistem
         $driverDebt = $debtFromStandard + $debtFromManual;
 
-        // 3. Saldo Bersih
+        // === 3. SALDO BERSIH ===
         $netBalance = $driverShare - $driverDebt;
 
         return response()->json([
-            'balance' => round($netBalance),
-            'income_pending' => $driverShare, // Info tambahan buat UI (opsional)
-            'debt_pending' => $driverDebt // Info tambahan buat UI (opsional)
+            // Kunci lama (kompatibilitas mundur)
+            'balance'        => round($netBalance),
+            'income_pending' => round($driverShare),
+            'debt_pending'   => round($driverDebt),
+            // Rincian lengkap untuk UI dompet yang transparan
+            'breakdown' => [
+                'commission_rate' => $rate,
+                'manual_fee_flat' => $manualFlat,
+                'income' => [
+                    'gross'      => round($incomeGross),
+                    'commission' => round($commission),
+                    'net'        => round($driverShare),
+                    'count'      => $incomeCount,
+                ],
+                'debt' => [
+                    'standard_gross' => round($standardGross),
+                    'standard_fee'   => round($debtFromStandard),
+                    'standard_count' => $standardCount,
+                    'manual_count'   => $manualCount,
+                    'manual_fee'     => round($debtFromManual),
+                    'total'          => round($driverDebt),
+                ],
+                'net' => round($netBalance),
+            ],
         ]);
     }
     
@@ -423,7 +441,7 @@ class DriverApiController extends Controller
             try {
                 // Ambil email admin dari Setting (atau hardcode jika belum ada settingnya)
                 // Pastikan Anda sudah punya setting key 'admin_email' di database
-                $adminEmail = Setting::where('key', 'admin_email')->value('value'); 
+                $adminEmail = Setting::getValue('admin_email'); 
                 
                 // Jika tidak ada di setting, bisa fallback ke email manual (opsional)
                 $adminEmail = $adminEmail ?: 'admin@koperasiangkasa.com'; 
@@ -440,8 +458,8 @@ class DriverApiController extends Controller
 
         // --- NOTIFIKASI WHATSAPP ---
         try {
-            $waToken = Setting::where('key', 'wa_token')->value('value');
-            $adminWa = Setting::where('key', 'admin_wa_number')->value('value');
+            $waToken = Setting::getValue('wa_token');
+            $adminWa = Setting::getValue('admin_wa_number');
 
             if ($waToken && $adminWa && $newWithdrawal) {
                 
@@ -460,7 +478,7 @@ class DriverApiController extends Controller
                     . "Mohon segera cek dashboard admin untuk memproses.";
 
                 // Panggil Service
-                WhatsAppService::send($adminWa, $message, $waToken);
+                \App\Jobs\SendWhatsAppMessage::dispatch($adminWa, $message, $waToken);
             }
         } catch (\Exception $e) {
             // Error WA jangan sampai menggagalkan request driver
@@ -506,7 +524,10 @@ class DriverApiController extends Controller
             $query->whereDate('created_at', '<=', $request->query('date_to'));
         }
         
-        $history = $query->orderBy('created_at', 'desc')->get();
+        // Batasi payload mobile: 200 transaksi terbaru. Data lebih lama tetap bisa
+        // diambil lewat filter date_from/date_to di atas. (Tetap array datar →
+        // tidak memutus parsing di app.)
+        $history = $query->orderBy('created_at', 'desc')->limit(200)->get();
         return response()->json($history);
     }
 
@@ -546,6 +567,17 @@ class DriverApiController extends Controller
 
         $user = $request->user();
         $profile = $user->driverProfile;
+
+        // Selalu simpan lokasi terakhir di profil — termasuk saat driver sedang
+        // OnTrip (tidak ada di tabel antrian). Inilah yang membuat peta CSO bisa
+        // tetap menampilkan & melacak pergerakan driver yang sedang mengantar.
+        if ($profile) {
+            $profile->update([
+                'latitude'            => $request->latitude,
+                'longitude'           => $request->longitude,
+                'location_updated_at' => now(),
+            ]);
+        }
 
         // 1. Cek Antrian
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();

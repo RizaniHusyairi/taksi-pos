@@ -376,10 +376,17 @@ export class AdminApp {
       }
     });
 
-    // Finance filters
-    ['fltDateFrom', 'fltDateTo', 'fltDriver', 'fltCSO'].forEach(id => {
+    // Finance filters (live)
+    ['fltDateFrom', 'fltDateTo', 'fltDriver', 'fltCSO', 'fltMethod'].forEach(id => {
       document.getElementById(id)?.addEventListener('change', () => this.renderTxLog());
     });
+    let _txSearchTimer;
+    document.getElementById('fltSearch')?.addEventListener('input', () => {
+      clearTimeout(_txSearchTimer);
+      _txSearchTimer = setTimeout(() => this.renderTxLog(), 300);
+    });
+    document.getElementById('btnTxExportPdf')?.addEventListener('click', () => this._exportTx('pdf'));
+    document.getElementById('btnTxExportExcel')?.addEventListener('click', () => this._exportTx('excel'));
 
     // Revenue report range
     document.getElementById('revRange')?.addEventListener('change', () => this.renderRevReport());
@@ -566,7 +573,7 @@ export class AdminApp {
               await this.renderZones(); // Panggil lagi untuk me-refresh tabel
             } catch (error) {
               console.error('Gagal menghapus zona:', error);
-              alert('Gagal menghapus zona. Silakan coba lagi.');
+              alert(error.message || 'Gagal menghapus zona. Silakan coba lagi.');
             }
           }
         });
@@ -580,13 +587,33 @@ export class AdminApp {
 
   }
 
+  // Render kontrol pagination (prev/next) di bawah sebuah tabel.
+  _renderPager(pagerId, tbodyEl, meta, onGo) {
+    const wrap = tbodyEl.closest('table')?.parentElement;
+    if (!wrap) return;
+    let pager = document.getElementById(pagerId);
+    if (!pager) {
+      pager = document.createElement('div');
+      pager.id = pagerId;
+      pager.className = 'flex items-center justify-between gap-3 mt-3 px-1 text-xs text-slate-500 dark:text-slate-400';
+      wrap.insertAdjacentElement('afterend', pager);
+    }
+    const cur = meta.current_page || 1, last = meta.last_page || 1, total = meta.total ?? 0;
+    const btn = (dir, label, disabled) => `<button data-pg="${dir}" class="px-3 py-1 rounded-lg border border-slate-200 dark:border-white/10 ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-white/10'}" ${disabled ? 'disabled' : ''}>${label}</button>`;
+    pager.innerHTML = `<span>Total ${total} • Halaman ${cur} / ${last}</span><span class="flex gap-2">${btn('prev', '‹ Sebelumnya', cur <= 1)}${btn('next', 'Berikutnya ›', cur >= last)}</span>`;
+    const prev = pager.querySelector('[data-pg="prev"]');
+    const next = pager.querySelector('[data-pg="next"]');
+    if (prev) prev.onclick = () => { if (cur > 1) onGo(cur - 1); };
+    if (next) next.onclick = () => { if (cur < last) onGo(cur + 1); };
+  }
+
   // ----- Users -----
-  async renderUsers() {
+  async renderUsers(page = 1) {
     try {
-      // 1. GANTI DB.listUsers() DENGAN PANGGILAN API
-      const users = await fetchApi('/admin/users');
       const tbody = document.getElementById('usersTable');
       if (!tbody) return;
+      const _paged = await fetchApi(`/admin/users?page=${page}`);
+      const users = _paged.data || _paged;
 
       tbody.innerHTML = users.map(u => {
         const carInfo = u.role === 'driver'
@@ -599,15 +626,22 @@ export class AdminApp {
         // DELETE ICON (Trash)
         const deleteIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
 
-        return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+        // TOGGLE AKTIF/NONAKTIF
+        const isActive = u.active !== false && u.active !== 0;
+        const powerIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v6a1 1 0 11-2 0V3a1 1 0 011-1zM5.05 6.05a1 1 0 010 1.414 5 5 0 107.9 0 1 1 0 111.414-1.414 7 7 0 11-10.728 0 1 1 0 011.414 0z" clip-rule="evenodd" /></svg>`;
+        const toggleBtn = `<button class="p-2 ${isActive ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'} dark:hover:bg-slate-600 rounded-lg transition-colors" title="${isActive ? 'Nonaktifkan' : 'Aktifkan'}" data-toggle-u="${u.id}" data-active="${isActive}">${powerIcon}</button>`;
+        const statusBadge = isActive ? '' : `<span class="ml-2 align-middle text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">Nonaktif</span>`;
+
+        return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${isActive ? '' : 'opacity-60'}">
           <td class="py-3 px-3">
-            <div class="font-medium text-slate-900 dark:text-slate-100">${u.name}</div>
+            <div class="font-medium text-slate-900 dark:text-slate-100">${u.name}${statusBadge}</div>
             ${carInfo.replace('text-slate-500', 'text-slate-500 dark:text-slate-400')}
           </td>
           <td class="py-3 px-3 capitalize text-slate-600 dark:text-slate-300">${u.role}</td>
           <td class="py-3 px-3 text-slate-600 dark:text-slate-300">${u.username}</td>
           <td class="py-3 px-3">
             <div class="flex items-center gap-2">
+                ${toggleBtn}
                 <button class="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-600 rounded-lg transition-colors" title="Edit" data-edit-u='${JSON.stringify(u)}'>
                     ${editIcon}
                 </button>
@@ -619,11 +653,32 @@ export class AdminApp {
         </tr>`;
       }).join('');
 
+      this._renderPager('usersPager', tbody, _paged, (p) => this.renderUsers(p));
+
       // --- Event Listener untuk Tombol Edit ---
       tbody.querySelectorAll('[data-edit-u]').forEach(btn => {
         btn.addEventListener('click', () => {
           const userData = JSON.parse(btn.dataset.editU);
           this.openUserForm(userData);
+        });
+      });
+
+      // --- Event Listener untuk Tombol Aktif/Nonaktif ---
+      tbody.querySelectorAll('[data-toggle-u]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.toggleU;
+          const isActive = btn.dataset.active === 'true';
+          if (!confirm(isActive
+            ? 'Nonaktifkan pengguna ini? Sesi login & antriannya akan dihentikan.'
+            : 'Aktifkan kembali pengguna ini?')) return;
+          try {
+            await fetchApi(`/admin/users/${id}/toggle-status`, { method: 'POST' });
+            await this.renderUsers();
+            if (this.populateFilterDropdowns) await this.populateFilterDropdowns();
+          } catch (e) {
+            console.error(e);
+            alert('Gagal mengubah status pengguna.');
+          }
         });
       });
 
@@ -746,30 +801,54 @@ export class AdminApp {
 
 
   // ----- Finance: Transaction Log -----
-  async renderTxLog() {
+  // Kumpulkan filter transaksi saat ini → URLSearchParams (dipakai tabel & export).
+  _txParams() {
+    const p = new URLSearchParams();
+    const g = (id) => (document.getElementById(id)?.value || '').trim();
+    if (g('fltDateFrom')) p.append('date_from', g('fltDateFrom'));
+    if (g('fltDateTo')) p.append('date_to', g('fltDateTo'));
+    if (g('fltDriver')) p.append('driver_id', g('fltDriver'));
+    if (g('fltCSO')) p.append('cso_id', g('fltCSO'));
+    if (g('fltMethod')) p.append('method', g('fltMethod'));
+    if (g('fltSearch')) p.append('search', g('fltSearch'));
+    return p;
+  }
+
+  _exportTx(format) {
+    window.open(`/admin/transactions/export/${format}?${this._txParams().toString()}`, '_blank');
+  }
+
+  _renderTxSummary(s) {
+    const el = document.getElementById('txSummary');
+    if (!el) return;
+    if (!s) { el.innerHTML = ''; return; }
+    const rp = (v) => Number(v || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 });
+    const card = (label, val, hi) => `<div class="rounded-xl border px-3 py-2 ${hi ? 'bg-blue-600 border-blue-600' : 'bg-gray-50 border-gray-100 dark:bg-white/5 dark:border-white/10'}">
+        <div class="text-[9px] uppercase tracking-wider ${hi ? 'text-blue-100' : 'text-gray-400'}">${label}</div>
+        <div class="text-sm font-bold ${hi ? 'text-white' : 'text-slate-700 dark:text-slate-100'}">${val}</div>
+      </div>`;
+    el.innerHTML =
+      card('Total Nilai', rp(s.total), true) +
+      card('Transaksi', Number(s.count || 0).toLocaleString('id-ID')) +
+      card('QRIS', rp(s.qris)) +
+      card('Tunai Kasir', rp(s.cash_cso)) +
+      card('Tunai Supir', rp(s.cash_driver));
+  }
+
+  async renderTxLog(page = 1) {
     const tbody = document.getElementById('txTable');
     if (!tbody) return;
 
     try {
-      // 1. Ambil Filter
-      const dateFrom = document.getElementById('fltDateFrom')?.value || '';
-      const dateTo = document.getElementById('fltDateTo')?.value || '';
-      const driverId = document.getElementById('fltDriver')?.value || '';
-      const csoId = document.getElementById('fltCSO')?.value || '';
-
-      // 2. Buat Query URL
-      const params = new URLSearchParams();
-      if (dateFrom) params.append('date_from', dateFrom);
-      if (dateTo) params.append('date_to', dateTo);
-      if (driverId) params.append('driver_id', driverId);
-      if (csoId) params.append('cso_id', csoId);
-
-      // 3. Panggil API
+      const params = this._txParams();
+      params.append('page', page);
       const response = await fetchApi(`/admin/transactions?${params.toString()}`);
-      const transactions = response.data;
+      const transactions = response.data || [];
+      this._renderTxSummary(response.summary);
 
       if (transactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-500">Tidak ada data transaksi yang cocok.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-500">Tidak ada data transaksi yang cocok.</td></tr>';
+        if (response.meta) this._renderPager('txPager', tbody, response.meta, (p) => this.renderTxLog(p));
         return;
       }
 
@@ -846,23 +925,26 @@ export class AdminApp {
         </tr>`;
       }).join('');
 
+      if (response.meta) this._renderPager('txPager', tbody, response.meta, (p) => this.renderTxLog(p));
+
     } catch (error) {
       console.error("Gagal memuat log transaksi:", error);
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">Gagal memuat data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-500">Gagal memuat data.</td></tr>';
     }
   }
 
   // ----- Withdrawals -----
-  async renderWithdrawals() { // <-- Jadikan async
+  async renderWithdrawals(page = 1) {
     const tbody = document.getElementById('wdTable');
     if (!tbody) return;
 
     try {
-      // 1. GANTI DB.list... DENGAN SATU PANGGILAN API
-      const withdrawals = await fetchApi('/admin/withdrawals');
+      const _paged = await fetchApi(`/admin/withdrawals?page=${page}`);
+      const withdrawals = _paged.data || _paged;
 
       if (withdrawals.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Tidak ada permintaan penarikan dana.</td></tr>';
+        this._renderPager('wdPager', tbody, _paged, (p) => this.renderWithdrawals(p));
         return;
       }
 
@@ -918,6 +1000,8 @@ export class AdminApp {
               <td class="py-2 align-top">${actionButtons}</td>
           </tr>`;
       }).join('');
+
+      this._renderPager('wdPager', tbody, _paged, (p) => this.renderWithdrawals(p));
 
       tbody.querySelectorAll('[data-wd-act="reject"]').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -1010,23 +1094,30 @@ export class AdminApp {
       const reportData = await fetchApi(`/admin/reports/driver-performance?sort_by=${sortBy}`);
 
       if (reportData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4">Tidak ada data kinerja supir.</td></tr>';
         return;
       }
 
       // 2. SEMUA LOGIKA .map, .filter, .reduce, .sort DIHAPUS.
       // Langsung render data yang sudah matang dari API.
-      tbody.innerHTML = reportData.map(driver => `
-      <tr class="border-t">
-        <td class="py-2">${driver.name}</td>
-        <td class="py-2">${driver.trips}</td>
-        <td class="py-2">${(driver.revenue || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
-      </tr>
-    `).join('');
+      tbody.innerHTML = reportData.map(driver => {
+        const avg = driver.avg_rating != null ? Number(driver.avg_rating) : null;
+        const cnt = driver.rating_count || 0;
+        const rating = avg
+          ? `<span class="text-amber-500 font-bold">★ ${avg.toFixed(1)}</span> <span class="text-xs text-slate-400">(${cnt})</span>`
+          : '<span class="text-xs text-slate-400">—</span>';
+        return `
+      <tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+        <td class="py-3 px-5 font-medium dark:text-slate-200">${driver.name}</td>
+        <td class="py-3 px-5 text-center dark:text-slate-300">${driver.trips}</td>
+        <td class="py-3 px-5 text-right dark:text-slate-300">${(driver.revenue || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 })}</td>
+        <td class="py-3 px-5 text-center">${rating}</td>
+      </tr>`;
+      }).join('');
 
     } catch (error) {
       console.error("Gagal memuat laporan kinerja supir:", error);
-      tbody.innerHTML = '<tr><td colspan="3" class="text-center py-4">Gagal memuat data.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4">Gagal memuat data.</td></tr>';
     }
   }
 
@@ -1055,10 +1146,20 @@ export class AdminApp {
       if (document.getElementById('mailHost')) document.getElementById('mailHost').value = settings.mail_host || '';
       if (document.getElementById('mailPort')) document.getElementById('mailPort').value = settings.mail_port || '';
       if (document.getElementById('mailUsername')) document.getElementById('mailUsername').value = settings.mail_username || '';
-      if (document.getElementById('mailPassword')) document.getElementById('mailPassword').value = settings.mail_password || ''; // Hati-hati menampilkan password
+      // Field rahasia: server tidak pernah mengirim nilainya. Selalu kosongkan;
+      // placeholder menandai sudah dikonfigurasi (kosongkan untuk mempertahankan).
+      if (document.getElementById('mailPassword')) {
+        const mp = document.getElementById('mailPassword');
+        mp.value = '';
+        mp.placeholder = settings.mail_password_is_set ? '•••••••• (kosongkan untuk tetap)' : 'Belum diatur';
+      }
       if (document.getElementById('mailEncryption')) document.getElementById('mailEncryption').value = settings.mail_encryption || 'tls';
       if (document.getElementById('mailFromName')) document.getElementById('mailFromName').value = settings.mail_from_name || '';
-      if (document.getElementById('waToken')) document.getElementById('waToken').value = settings.wa_token || '';
+      if (document.getElementById('waToken')) {
+        const wt = document.getElementById('waToken');
+        wt.value = '';
+        wt.placeholder = settings.wa_token_is_set ? '•••••••• (kosongkan untuk tetap)' : 'Belum diatur';
+      }
       if (document.getElementById('adminWaNumber')) document.getElementById('adminWaNumber').value = settings.admin_wa_number || '';
 
       // 3. QRIS Preview

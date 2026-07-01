@@ -58,6 +58,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active' => 'boolean',
         ];
     }
 
@@ -114,6 +115,22 @@ class User extends Authenticatable
             'booking_id',       // Foreign key di tabel 'transactions' (menghubungkan ke Booking)
             'id',               // Local key di tabel 'users'
             'id'                // Local key di tabel 'bookings'
+        );
+    }
+
+    /**
+     * Rating dari penumpang untuk trip supir ini (User → bookings → ratings).
+     * Dipakai withAvg('ratings','stars') di laporan kinerja supir.
+     */
+    public function ratings(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            \App\Models\Rating::class,
+            Booking::class,
+            'driver_id',   // FK di bookings → users
+            'booking_id',  // FK di ratings → bookings
+            'id',          // local key users
+            'id'           // local key bookings
         );
     }
 }

@@ -19,6 +19,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::get('/receipt/{uuid}', [PublicReceiptController::class, 'show'])->name('receipt.show');
+Route::post('/receipt/{uuid}/rate', [PublicReceiptController::class, 'rate'])->name('receipt.rate');
 
 
 Route::get('/init-rotation', function () {
@@ -56,4 +57,8 @@ Route::middleware('auth')->group(function () {
     
     // PDF Export Route (Admin Only)
     Route::get('/admin/withdrawals/{id}/export', [ExportController::class, 'exportWithdrawalById'])->middleware('role:admin');
+
+    // Export Log Transaksi (Admin Only) — pakai filter dari query string
+    Route::get('/admin/transactions/export/pdf', [ExportController::class, 'transactionsPdf'])->middleware('role:admin');
+    Route::get('/admin/transactions/export/excel', [ExportController::class, 'transactionsExcel'])->middleware('role:admin');
 });

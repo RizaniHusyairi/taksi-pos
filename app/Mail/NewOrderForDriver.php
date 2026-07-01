@@ -8,7 +8,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Booking;
 
-class NewOrderForDriver extends Mailable
+class NewOrderForDriver extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

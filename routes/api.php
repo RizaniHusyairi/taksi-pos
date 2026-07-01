@@ -30,8 +30,6 @@ Route::middleware('auth:sanctum')->group(function() {
     Route::prefix('admin')->middleware('role:admin')->group(function () {
         // Dashboard
         Route::get('/dashboard-stats', [ApiController::class, 'adminGetDashboardStats']);
-        Route::get('/stats', [ApiController::class, 'getAdminStats']);
-        Route::get('/charts', [ApiController::class, 'getAdminCharts']);
 
         // Manajemen Zona
         Route::get('/zones', [ApiController::class, 'adminGetZones']);
@@ -65,7 +63,6 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/settings/password', [ApiController::class, 'adminChangePassword']);
 
         Route::get('/queue', [ApiController::class, 'adminGetQueue']);
-        Route::post('/queue/remove', [ApiController::class, 'adminRemoveFromQueue']); // Post userId via body or url param logic
         Route::delete('/queue/{userId}', [ApiController::class, 'adminRemoveFromQueue']); // Restful style
         Route::post('/queue/move', [ApiController::class, 'adminMoveQueue']);
         Route::post('/queue/line-number', [ApiController::class, 'adminUpdateLineNumber']);

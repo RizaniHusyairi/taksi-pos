@@ -32,7 +32,7 @@ class PageController extends Controller
     public function showCso(): View
     {
         // Ambil Global QRIS
-        $qrisPath = \App\Models\Setting::where('key', 'company_qris_path')->value('value');
+        $qrisPath = \App\Models\Setting::getValue('company_qris_path');
         $qrisUrl = $qrisPath ? asset('storage/' . $qrisPath) : null;
 
         return view('pages.cso', ['companyQrisUrl' => $qrisUrl]);

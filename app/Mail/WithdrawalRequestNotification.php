@@ -9,7 +9,7 @@ use Illuminate\Queue\SerializesModels;
 use App\Models\Withdrawals;
 use App\Models\User;
 
-class WithdrawalRequestNotification extends Mailable
+class WithdrawalRequestNotification extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

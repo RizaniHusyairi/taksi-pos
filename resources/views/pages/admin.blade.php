@@ -570,6 +570,28 @@
                </div>
            </div>
 
+           <!-- Pencarian + Metode + Export (live) -->
+           <div class="flex flex-col md:flex-row items-stretch gap-3 mb-4">
+             <input id="fltSearch" type="text" placeholder="🔎  Cari supir, CSO, atau destinasi..." class="flex-1 rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-4 focus:ring-primary-500 focus:border-primary-500 transition-colors"/>
+             <select id="fltMethod" class="rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-3 focus:ring-primary-500 focus:border-primary-500 cursor-pointer">
+               <option value="">Semua Metode</option>
+               <option value="QRIS">QRIS</option>
+               <option value="CashCSO">Tunai (Kasir)</option>
+               <option value="CashDriver">Tunai (Supir)</option>
+             </select>
+             <button id="btnTxExportExcel" type="button" class="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition-colors">
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a2 2 0 012-2h10a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V4zm5.1 3a.5.5 0 00-.42.77L9.4 10l-1.72 2.23a.5.5 0 00.42.77h1a.5.5 0 00.42-.23L10.5 11.2l.98 1.57a.5.5 0 00.42.23h1a.5.5 0 00.42-.77L11.6 10l1.72-2.23a.5.5 0 00-.42-.77h-1a.5.5 0 00-.42.23L10.5 8.8l-.98-1.57A.5.5 0 009.1 7h-1z" clip-rule="evenodd"/></svg>
+               Excel
+             </button>
+             <button id="btnTxExportPdf" type="button" class="inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition-colors">
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7.41A2 2 0 0017.41 6L14 2.59A2 2 0 0012.59 2H4zm3 9a1 1 0 100 2h6a1 1 0 100-2H7zm0 3a1 1 0 100 2h4a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+               PDF
+             </button>
+           </div>
+
+           <!-- Ringkasan live (seluruh hasil filter) -->
+           <div id="txSummary" class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4"></div>
+
           <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
             <table class="w-full text-sm text-left whitespace-nowrap">
               <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
@@ -761,36 +783,32 @@
       <!-- REPORT DRIVER -->
       <section id="view-report-driver" class="hidden space-y-6">
         <div class="glass-card rounded-2xl p-5">
-           <div class="flex items-center justify-between mb-6">
+           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-gray-100 dark:border-white/10 pb-6">
                <div>
                   <h3 class="font-bold text-gray-800 dark:text-white text-lg">Laporan Kinerja Supir</h3>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Metrik perjalanan, setoran, dan total trip bulanan.</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total trip, pendapatan, &amp; rating dari penumpang.</p>
+               </div>
+               <div>
+                  <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Urutkan</label>
+                  <select id="driverRankBy" class="rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-3 focus:ring-primary-500 focus:border-primary-500 cursor-pointer">
+                    <option value="trips">Trip Terbanyak</option>
+                    <option value="revenue">Pendapatan Tertinggi</option>
+                    <option value="rating">Rating Tertinggi</option>
+                  </select>
                </div>
            </div>
 
-          <form id="formReportDriver" class="mb-6 border-b border-gray-100 dark:border-white/10 pb-6 flex flex-col md:flex-row items-end gap-3">
-            <div class="flex-1">
-              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Pilih Bulan</label>
-              <input type="month" id="repDrMonth" class="w-full rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-3 focus:ring-primary-500 focus:border-primary-500 transition-colors" required>
-            </div>
-            <button type="submit" class="bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-xl px-6 py-2 h-[42px] font-semibold text-sm shadow-md shadow-primary-500/30 transition-all">
-              Hasilkan Laporan
-            </button>
-          </form>
-
-          <div id="repDrResult" class="hidden animate-fade-in overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
             <table class="w-full text-sm text-left">
               <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
                 <tr>
                   <th class="py-4 px-5">Nama Supir</th>
-                  <th class="py-4 px-5 text-center">Total Tarikan</th>
-                  <th class="py-4 px-5 text-right">Nilai Total Trip (Rp)</th>
-                  <th class="py-4 px-5 text-right">Bagian Koperasi (15%)</th>
-                  <th class="py-4 px-5 text-right">Potongan Antrian</th>
-                  <th class="py-4 px-5 text-right">Piutang (Hutang)</th>
+                  <th class="py-4 px-5 text-center">Total Trip</th>
+                  <th class="py-4 px-5 text-right">Pendapatan</th>
+                  <th class="py-4 px-5 text-center">Rating Penumpang</th>
                 </tr>
               </thead>
-              <tbody id="repDrTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+              <tbody id="driverPerfTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
             </table>
           </div>
         </div>

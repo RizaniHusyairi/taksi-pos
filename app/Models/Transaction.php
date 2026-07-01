@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\Booking;
 use App\Models\User;
+use Illuminate\Http\Request;
 
 
 class Transaction extends Model
@@ -25,7 +26,20 @@ class Transaction extends Model
         'withdrawal_id',
         'payout_status',
         'amount',
+        'receipt_token',
     ];
+
+    /**
+     * Setiap transaksi baru otomatis dapat token acak untuk URL struk.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Transaction $t) {
+            if (empty($t->receipt_token)) {
+                $t->receipt_token = \Illuminate\Support\Str::random(40);
+            }
+        });
+    }
 
     /**
      * Relasi bahwa setiap transaksi dimiliki oleh satu booking.
@@ -49,5 +63,41 @@ class Transaction extends Model
     public function cso(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cso_id');
+    }
+
+    /**
+     * Filter bersama (dipakai daftar transaksi & export) berdasar query string:
+     * date_from, date_to, method, driver_id, cso_id, search.
+     */
+    public function scopeFilter($query, Request $request)
+    {
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->query('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->query('date_to'));
+        }
+        if ($request->filled('method')) {
+            $query->where('method', $request->query('method'));
+        }
+        if ($request->filled('driver_id')) {
+            $query->whereHas('booking', fn ($q) => $q->where('driver_id', $request->query('driver_id')));
+        }
+        if ($request->filled('cso_id')) {
+            $query->whereHas('booking', fn ($q) => $q->where('cso_id', $request->query('cso_id')));
+        }
+        if ($request->filled('search')) {
+            $s = trim($request->query('search'));
+            $query->where(function ($q) use ($s) {
+                $q->whereHas('booking.driver', fn ($d) => $d->where('name', 'like', "%{$s}%"))
+                  ->orWhereHas('booking.cso', fn ($c) => $c->where('name', 'like', "%{$s}%"))
+                  ->orWhereHas('booking.zoneTo', fn ($z) => $z->where('name', 'like', "%{$s}%"))
+                  ->orWhereHas('booking', fn ($b) => $b->where('manual_destination', 'like', "%{$s}%"));
+                if (is_numeric($s)) {
+                    $q->orWhere('booking_id', (int) $s);
+                }
+            });
+        }
+        return $query;
     }
 }
