@@ -67,10 +67,11 @@ class NotificationService {
     // Create High Importance Channel explicitly
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
       'high_importance_channel', // id
-      'High Importance Notifications', // title
-      description: 'This channel is used for important notifications.',
+      'Order & Notifikasi Penting', // title (tampil di Pengaturan Android)
+      description: 'Notifikasi order baru dan info penting lainnya.',
       importance: Importance.max,
       playSound: true,
+      enableVibration: true,
     );
 
     await _localNotifications
@@ -88,7 +89,6 @@ class NotificationService {
       print('Message data: ${message.data}');
 
       RemoteNotification? notification = message.notification;
-      AndroidNotification? android = message.notification?.android;
 
       // Show Local Notification
       if (notification != null) {
@@ -97,14 +97,20 @@ class NotificationService {
           notification.hashCode,
           notification.title,
           notification.body,
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
               'high_importance_channel', // id
-              'High Importance Notifications', // title
+              'Order & Notifikasi Penting', // title
               importance: Importance.max,
               priority: Priority.high,
               playSound: true,
+              enableVibration: true,
               icon: '@mipmap/ic_launcher',
+              ticker: 'Order baru masuk',
+              styleInformation: BigTextStyleInformation(
+                notification.body ?? '',
+                contentTitle: notification.title,
+              ),
             ),
           ),
           payload:

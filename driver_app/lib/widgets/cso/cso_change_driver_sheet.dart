@@ -1,8 +1,8 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../models/queue_driver.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/api_error.dart';
 
 /// Bottom sheet untuk mengalihkan sebuah booking ke supir lain.
 /// Mengembalikan `true` lewat Navigator.pop bila berhasil.
@@ -49,7 +49,7 @@ class _CsoChangeDriverSheetState extends State<CsoChangeDriverSheet> {
           .toList();
       if (mounted) setState(() => _drivers = list);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Gagal memuat supir.');
+      if (mounted) setState(() => _error = apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -80,10 +80,7 @@ class _CsoChangeDriverSheetState extends State<CsoChangeDriverSheet> {
       await _api.csoChangeDriver(widget.bookingId, driver.id);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      var msg = 'Gagal mengganti supir.';
-      if (e is DioException && e.response?.data is Map) {
-        msg = (e.response!.data['message'] ?? msg).toString();
-      }
+      final msg = apiErrorMessage(e);
       if (mounted) {
         setState(() => _submitting = false);
         ScaffoldMessenger.of(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/notification_service.dart';
 import '../services/api_service.dart';
-import 'package:dio/dio.dart';
+import '../utils/api_error.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -67,18 +67,10 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on DioException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      if (e.response != null) {
-         return "Api Error: ${e.response?.statusCode} - ${e.response?.data}";
-      } else {
-         return "Network Error: ${e.type.toString()} | ${e.error.toString()}";
-      }
     } catch (e) {
       _isLoading = false;
       notifyListeners();
-      return "Sistem Error: $e";
+      return apiErrorMessage(e);
     }
   }
 

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../utils/api_error.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/fade_in.dart';
+import '../widgets/error_state.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -16,6 +18,7 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
+  String? _error;
   List<dynamic> _history = [];
 
   @override
@@ -30,11 +33,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (mounted) {
         setState(() {
           _history = response.data;
+          _error = null;
           _isLoading = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _error = apiErrorMessage(e);
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -59,7 +68,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _history.isEmpty
-                    ? _emptyState()
+                    ? (_error != null ? _errorBody() : _emptyState())
                     : RefreshIndicator(
                         color: AppColors.skyBlue,
                         onRefresh: _fetchHistory,
@@ -78,6 +87,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           },
                         ),
                       ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _errorBody() {
+    return RefreshIndicator(
+      color: AppColors.skyBlue,
+      onRefresh: _fetchHistory,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 420,
+            child: ErrorState(message: _error!, onRetry: _fetchHistory),
           ),
         ],
       ),

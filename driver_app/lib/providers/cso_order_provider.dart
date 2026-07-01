@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
+import '../utils/api_error.dart';
 import '../models/zone.dart';
 import '../models/queue_driver.dart';
 
@@ -64,7 +65,7 @@ class CsoOrderProvider with ChangeNotifier {
           .map((e) => Zone.fromJson((e as Map).cast<String, dynamic>()))
           .toList();
     } catch (e) {
-      zonesError = 'Gagal memuat tujuan.';
+      zonesError = apiErrorMessage(e);
     } finally {
       loadingZones = false;
       notifyListeners();
@@ -115,7 +116,7 @@ class CsoOrderProvider with ChangeNotifier {
           .map((e) => QueueDriver.fromJson((e as Map).cast<String, dynamic>()))
           .toList();
     } catch (e) {
-      driversError = 'Gagal memuat antrian.';
+      driversError = apiErrorMessage(e);
     } finally {
       loadingDrivers = false;
       notifyListeners();

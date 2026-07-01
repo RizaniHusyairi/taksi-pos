@@ -3,6 +3,7 @@ import '../../models/cso_transaction.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
+import '../../utils/api_error.dart';
 import '../../widgets/cso/cso_receipt_sheet.dart';
 import '../../widgets/cso/cso_change_driver_sheet.dart';
 
@@ -54,7 +55,7 @@ class _CsoHistoryScreenState extends State<CsoHistoryScreen> {
           .toList();
       if (mounted) setState(() => _txs = list);
     } catch (e) {
-      if (mounted) setState(() => _error = 'Gagal memuat riwayat.');
+      if (mounted) setState(() => _error = apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

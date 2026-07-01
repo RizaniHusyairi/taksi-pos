@@ -1,9 +1,9 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/api_error.dart';
 
 /// Tab Profil CSO — desain bold & interaktif: hero gradien dengan avatar
 /// (ring + indikator online berdenyut), animasi masuk fade/slide, kartu
@@ -55,13 +55,6 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  String _apiError(Object e, String fallback) {
-    if (e is DioException && e.response?.data is Map) {
-      return (e.response!.data['message'] ?? fallback).toString();
-    }
-    return fallback;
-  }
-
   Future<void> _saveProfile() async {
     final name = _nameCtrl.text.trim();
     final username = _usernameCtrl.text.trim();
@@ -75,7 +68,7 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
       if (mounted) await context.read<AuthProvider>().fetchProfile();
       _toast('Profil berhasil diperbarui.');
     } catch (e) {
-      _toast(_apiError(e, 'Gagal memperbarui profil.'));
+      _toast(apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _savingProfile = false);
     }
@@ -107,7 +100,7 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
       _toast('Password berhasil diubah.');
       if (mounted) setState(() => _passOpen = false);
     } catch (e) {
-      _toast(_apiError(e, 'Gagal mengubah password.'));
+      _toast(apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _savingPass = false);
     }

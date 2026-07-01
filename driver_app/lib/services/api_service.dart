@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'connectivity_service.dart';
 
 class ApiService {
   // Testing via USB: phone reaches the PC server through `adb reverse tcp:8000 tcp:8000`,
@@ -51,10 +52,16 @@ class ApiService {
           }
           return handler.next(options);
         },
+        onResponse: (response, handler) {
+          // Respons sukses => tandai online (sembunyikan banner offline global).
+          AppConnectivity.instance.reportSuccess();
+          return handler.next(response);
+        },
         onError: (DioException e, handler) {
-          // Handle 401 Unauthorized globally if needed
+          // Error koneksi => tandai offline (tampilkan banner global).
+          AppConnectivity.instance.reportError(e);
           if (e.response?.statusCode == 401) {
-            // Trigger logout or storage clear logic here?
+            // Token invalid/sesi berakhir — penanganan logout per-pemanggil.
           }
           return handler.next(e);
         },

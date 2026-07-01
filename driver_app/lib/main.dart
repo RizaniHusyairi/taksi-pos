@@ -10,6 +10,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'services/api_service.dart';
 import 'services/background_service.dart';
+import 'widgets/offline_banner.dart';
 
 // Key Global untuk Navigasi tanpa Context
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -49,6 +50,8 @@ class DriverApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey, // Pasang navigatorKey
       theme: AppTheme.light(context),
+      builder: (context, child) =>
+          GlobalOfflineWrapper(child: child ?? const SizedBox.shrink()),
       home: const AuthWrapper(),
     );
   }

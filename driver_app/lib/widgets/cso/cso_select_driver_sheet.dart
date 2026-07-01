@@ -1,9 +1,9 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/queue_driver.dart';
 import '../../providers/cso_order_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/api_error.dart';
 
 /// Bottom sheet pemilihan supir (langkah 3). Hanya menampilkan supir yang
 /// standby/available. Saat dipilih → finalisasi order (process-order).
@@ -63,10 +63,7 @@ class _CsoSelectDriverSheetState extends State<CsoSelectDriverSheet> {
       final data = await provider.finalizeOrder(driver.id);
       if (mounted) Navigator.of(context).pop(data);
     } catch (e) {
-      var msg = 'Gagal memproses order.';
-      if (e is DioException && e.response?.data is Map) {
-        msg = (e.response!.data['message'] ?? msg).toString();
-      }
+      final msg = apiErrorMessage(e);
       if (mounted) {
         ScaffoldMessenger.of(
           context,

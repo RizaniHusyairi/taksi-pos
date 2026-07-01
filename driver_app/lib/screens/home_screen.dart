@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../utils/api_error.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
@@ -130,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Gagal: $e"),
+            content: Text(apiErrorMessage(e)),
             backgroundColor: AppColors.danger,
           ),
         );
@@ -203,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Gagal memulai perjalanan")),
+          SnackBar(content: Text(apiErrorMessage(e))),
         );
       }
     }
@@ -222,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Gagal menyelesaikan perjalanan")),
+          SnackBar(content: Text(apiErrorMessage(e))),
         );
       }
     }
@@ -343,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           if (mounted) {
                             // Use PARENT context for SnackBar
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Error: $e")),
+                              SnackBar(content: Text(apiErrorMessage(e))),
                             );
                           }
                         }

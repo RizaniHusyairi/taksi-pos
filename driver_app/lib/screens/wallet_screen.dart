@@ -9,6 +9,8 @@ import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
+import '../widgets/error_state.dart';
+import '../utils/api_error.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -20,7 +22,9 @@ class WalletScreen extends StatefulWidget {
 class _WalletScreenState extends State<WalletScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
+  String? _error;
   double _balance = 0;
+  Map<String, dynamic>? _breakdown; // rincian saldo (income/debt) dari API
   List<dynamic> _history = [];
 
   // Bank Info
@@ -52,18 +56,23 @@ class _WalletScreenState extends State<WalletScreen> {
       if (mounted) {
         setState(() {
           _balance = double.parse(balRes.data['balance'].toString());
+          _breakdown = balRes.data['breakdown'] is Map
+              ? Map<String, dynamic>.from(balRes.data['breakdown'])
+              : null;
           _history = histRes.data;
 
           // Set bank details from profile
           _bankName = profile?['bank_name'] ?? 'Bank BTN'; // Default to BTN
           _accountNumber = profile?['account_number'] ?? '';
 
+          _error = null;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
+          _error = apiErrorMessage(e);
           _isLoading = false;
         });
       }
@@ -125,7 +134,7 @@ class _WalletScreenState extends State<WalletScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal mengajukan penarikan')),
+          SnackBar(content: Text(apiErrorMessage(e))),
         );
       }
     }
@@ -220,7 +229,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Gagal menyimpan rekening')),
+                      SnackBar(content: Text(apiErrorMessage(e))),
                     );
                   }
                 }
@@ -252,6 +261,21 @@ class _WalletScreenState extends State<WalletScreen> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? RefreshIndicator(
+                    color: AppColors.skyBlue,
+                    onRefresh: _fetchData,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: 460,
+                          child: ErrorState(
+                              message: _error!, onRetry: _fetchData),
+                        ),
+                      ],
+                    ),
+                  )
                 : RefreshIndicator(
                     color: AppColors.skyBlue,
                     onRefresh: _fetchData,
@@ -260,6 +284,9 @@ class _WalletScreenState extends State<WalletScreen> {
                       children: [
                         // === Balance hero ===
                         FadeInUp(child: _balanceCard(currencyFormat)),
+                        const SizedBox(height: 16),
+                        // === Rincian saldo (transparansi keuangan) ===
+                        _breakdownCard(currencyFormat),
                         const SizedBox(height: 18),
                         // === Bank account ===
                         FadeInUp(delayMs: 90, child: _bankCard()),
@@ -296,6 +323,15 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Widget _balanceCard(NumberFormat currency) {
     final canWithdraw = _balance >= 10000;
+    final b = _breakdown;
+    final hak = b != null
+        ? ((b['income']?['net'] ?? 0) as num).toDouble()
+        : (_balance > 0 ? _balance : 0.0);
+    final debt =
+        b != null ? ((b['debt']?['total'] ?? 0) as num).toDouble() : 0.0;
+    final denom = hak + debt;
+    final greenFrac = denom > 0 ? (hak / denom) : 1.0;
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -323,20 +359,41 @@ class _WalletScreenState extends State<WalletScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const Icon(Icons.account_balance_wallet_rounded,
-                  color: Colors.white),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.account_balance_wallet_rounded,
+                    color: Colors.white, size: 20),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            currency.format(_balance),
+          _AnimatedMoney(
+            value: _balance,
+            currency: currency,
             style: GoogleFonts.outfit(
               fontSize: 36,
               fontWeight: FontWeight.w900,
               color: Colors.white,
+              height: 1.0,
             ),
           ),
-          const SizedBox(height: 22),
+          if (b != null) ...[
+            const SizedBox(height: 18),
+            _RatioBar(greenFrac: greenFrac),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _miniStat('Hak Anda', currency.format(hak), isHak: true),
+                _miniStat('Setoran', currency.format(debt), isHak: false),
+              ],
+            ),
+          ],
+          const SizedBox(height: 20),
           _WhiteButton(
             label: 'TARIK DANA',
             icon: Icons.arrow_outward_rounded,
@@ -347,7 +404,9 @@ class _WalletScreenState extends State<WalletScreen> {
               padding: const EdgeInsets.only(top: 12),
               child: Center(
                 child: Text(
-                  "Minimal penarikan Rp 10.000",
+                  _balance < 0
+                      ? 'Saldo minus — ada setoran yang belum dilunasi'
+                      : 'Minimal penarikan Rp 10.000',
                   style: GoogleFonts.outfit(
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.85),
@@ -359,6 +418,317 @@ class _WalletScreenState extends State<WalletScreen> {
       ),
     );
   }
+
+  Widget _miniStat(String label, String value, {required bool isHak}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isHak ? Colors.white : Colors.white.withValues(alpha: 0.4),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              value,
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Kartu rincian: menjelaskan dari mana saldo bersih berasal (transparan).
+  Widget _breakdownCard(NumberFormat currency) {
+    final b = _breakdown;
+    if (b == null) return const SizedBox.shrink();
+
+    num n(dynamic v) => (v ?? 0) as num;
+    final income = (b['income'] ?? const {}) as Map;
+    final debt = (b['debt'] ?? const {}) as Map;
+    final ratePct = (n(b['commission_rate']) * 100).round();
+    final flat = n(b['manual_fee_flat']);
+
+    final gross = n(income['gross']);
+    final commission = n(income['commission']);
+    final netIncome = n(income['net']);
+    final incomeCount = n(income['count']).toInt();
+
+    final stdFee = n(debt['standard_fee']);
+    final stdCount = n(debt['standard_count']).toInt();
+    final manualCount = n(debt['manual_count']).toInt();
+    final manualFee = n(debt['manual_fee']);
+    final debtTotal = n(debt['total']);
+    final tripCount = stdCount + manualCount;
+
+    final netBal = n(b['net']).toDouble();
+
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Rincian Saldo',
+                style: GoogleFonts.outfit(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.ink,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.paleBlue,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.verified_rounded,
+                        size: 13, color: AppColors.skyBlue),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Transparan',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.skyBlue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Begini saldo bersih Anda dihitung',
+            style:
+                GoogleFonts.outfit(fontSize: 12.5, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 18),
+
+          // === PEMASUKAN ===
+          FadeInUp(
+            delayMs: 60,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionHeader(Icons.trending_up_rounded, 'Pemasukan',
+                    '$incomeCount transaksi', AppColors.success),
+                const SizedBox(height: 6),
+                _lineRow('Pendapatan kotor', currency.format(gross)),
+                _lineRow('Komisi koperasi ($ratePct%)',
+                    '− ${currency.format(commission)}',
+                    valueColor: AppColors.danger),
+                _divider(),
+                _lineRow('Hak bersih Anda', currency.format(netIncome),
+                    bold: true, valueColor: AppColors.success),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // === SETORAN KE KOPERASI ===
+          FadeInUp(
+            delayMs: 150,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sectionHeader(Icons.account_balance_rounded,
+                    'Setoran ke Koperasi', '$tripCount trip',
+                    AppColors.warning),
+                const SizedBox(height: 6),
+                if (stdCount > 0)
+                  _lineRow('Setoran komisi tunai', currency.format(stdFee),
+                      sub: '$stdCount trip order sistem'),
+                if (manualCount > 0)
+                  _lineRow('Biaya order manual', currency.format(manualFee),
+                      sub: '$manualCount trip × ${currency.format(flat)}'),
+                if (tripCount == 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text(
+                      'Tidak ada setoran tertunda 🎉',
+                      style: GoogleFonts.outfit(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                _divider(),
+                _lineRow('Total setoran', currency.format(debtTotal),
+                    bold: true, valueColor: AppColors.warning),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // === HASIL: SALDO BERSIH ===
+          FadeInUp(
+            delayMs: 240,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.paleBlue,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: AppColors.skyBlue.withValues(alpha: 0.18)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Saldo Bersih',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.deepBlue,
+                        ),
+                      ),
+                      _AnimatedMoney(
+                        value: netBal,
+                        currency: currency,
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.deepBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Hak Anda ${currency.format(netIncome)}  −  Setoran ${currency.format(debtTotal)}',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11.5,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(
+      IconData icon, String title, String trailing, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, color: color, size: 16),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.ink,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          trailing,
+          style: GoogleFonts.outfit(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.inkFaint,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _lineRow(String label, String value,
+      {String? sub, Color? valueColor, bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    color: bold ? AppColors.ink : AppColors.inkSoft,
+                    fontSize: 13.5,
+                    fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+                if (sub != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      sub,
+                      style: GoogleFonts.outfit(
+                        color: AppColors.inkFaint,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              color: valueColor ?? (bold ? AppColors.ink : AppColors.inkSoft),
+              fontSize: bold ? 15 : 13.5,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider() => Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(vertical: 7),
+        color: AppColors.inkFaint.withValues(alpha: 0.22),
+      );
 
   Widget _bankCard() {
     return AppCard(
@@ -585,6 +955,70 @@ class _WalletScreenState extends State<WalletScreen> {
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Teks nominal yang menghitung naik dari 0 (efek count-up) saat muncul.
+class _AnimatedMoney extends StatelessWidget {
+  final double value;
+  final NumberFormat currency;
+  final TextStyle style;
+  const _AnimatedMoney({
+    required this.value,
+    required this.currency,
+    required this.style,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: value),
+      duration: const Duration(milliseconds: 850),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, _) => Text(currency.format(v), style: style),
+    );
+  }
+}
+
+/// Bar rasio "Hak Anda" (putih solid) vs "Setoran" (putih transparan),
+/// mengisi dengan animasi saat kartu muncul.
+class _RatioBar extends StatelessWidget {
+  final double greenFrac;
+  const _RatioBar({required this.greenFrac});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 9,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(color: Colors.white.withValues(alpha: 0.25)),
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: greenFrac.clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 950),
+              curve: Curves.easeOutCubic,
+              builder: (_, f, _) => Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: f <= 0 ? 0.0 : f,
+                  heightFactor: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
