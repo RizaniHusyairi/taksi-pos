@@ -20,10 +20,16 @@ class DriverProfile extends Model
         'latitude',
         'longitude',
         'location_updated_at',
+        'last_in_area',
+        'airport_entries',
+        'airport_exits',
+        'track_lat',
+        'track_lng',
     ];
 
     protected $casts = [
         'location_updated_at' => 'datetime',
+        'last_in_area' => 'boolean',
     ];
 
     public function user()

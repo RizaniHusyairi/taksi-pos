@@ -553,6 +553,13 @@ class ApiController extends Controller
             $settings['company_qris_url'] = asset('storage/' . $settings['company_qris_path']);
         }
 
+        // Radius area bandara — selalu kirim nilai efektif (setting || config default)
+        // agar field di UI tidak pernah kosong.
+        $settings['airport_radius_km'] = (float) $settings->get(
+            'airport_radius_km',
+            config('taksi.driver_queue.radius_km')
+        );
+
         return response()->json($settings);
     }
     
@@ -579,6 +586,7 @@ class ApiController extends Controller
             'mail_from_name'    => 'nullable|string',
             'wa_token'          => 'nullable|string',
             'admin_wa_number'   => 'nullable|string',
+            'airport_radius_km' => 'nullable|numeric|min:0.1|max:50',
         ]);
     
         // 1. Handle File Upload (QRIS)
@@ -743,6 +751,174 @@ class ApiController extends Controller
             ->get();
 
         return response()->json($logs);
+    }
+
+    /**
+     * Titik-titik jejak lokasi seorang supir untuk menggambar RUTE di peta admin.
+     * Default rentang: hari ini. Bisa override lewat ?from=&to= (datetime).
+     */
+    public function adminGetDriverRoute(Request $request, $userId)
+    {
+        $from = $request->query('from')
+            ? \Illuminate\Support\Carbon::parse($request->query('from'))
+            : now()->startOfDay();
+        $to = $request->query('to')
+            ? \Illuminate\Support\Carbon::parse($request->query('to'))
+            : now();
+
+        $points = \App\Models\DriverLocationLog::where('user_id', $userId)
+            ->whereBetween('recorded_at', [$from, $to])
+            ->orderBy('recorded_at')
+            ->limit(2000)
+            ->get(['latitude', 'longitude', 'recorded_at'])
+            ->map(fn ($p) => [
+                'lat' => (float) $p->latitude,
+                'lng' => (float) $p->longitude,
+                'at'  => optional($p->recorded_at)->toIso8601String(),
+            ]);
+
+        return response()->json([
+            'driver' => optional(\App\Models\User::find($userId))->name,
+            'from'   => $from->toIso8601String(),
+            'to'     => $to->toIso8601String(),
+            'count'  => $points->count(),
+            'points' => $points->values(),
+        ]);
+    }
+
+    /**
+     * Peta supir + rekap keluar-masuk bandara untuk panel Admin.
+     * - `drivers`: supir aktif (standby/ontrip) berlokasi valid → marker peta.
+     * - `ranking`: SEMUA supir dgn hitungan masuk/keluar, urut terbanyak → tabel.
+     */
+    public function adminGetDriverLocations()
+    {
+        $queueScores = \App\Models\DriverQueue::pluck('sort_order', 'user_id');
+
+        $drivers = \App\Models\DriverProfile::with('user:id,name')
+            ->whereIn('status', ['standby', 'ontrip'])
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->where('latitude', '!=', 0)
+            ->where('longitude', '!=', 0)
+            ->get()
+            ->map(function ($p) use ($queueScores) {
+                $user = $p->user;
+                if (!$user) {
+                    return null;
+                }
+                return [
+                    'id'              => $user->id,
+                    'name'            => $user->name,
+                    'line_number'     => $p->line_number,
+                    'car_model'       => $p->car_model,
+                    'plate_number'    => $p->plate_number,
+                    'status'          => $p->status,
+                    'queue_score'     => $queueScores[$user->id] ?? null,
+                    'latitude'        => (float) $p->latitude,
+                    'longitude'       => (float) $p->longitude,
+                    'updated_at'      => optional($p->location_updated_at)->toIso8601String(),
+                    'in_area'         => (bool) $p->last_in_area,
+                    'airport_entries' => (int) $p->airport_entries,
+                    'airport_exits'   => (int) $p->airport_exits,
+                ];
+            })
+            ->filter()
+            ->values();
+
+        $ranking = \App\Models\DriverProfile::with('user:id,name')
+            ->get()
+            ->map(function ($p) {
+                $user = $p->user;
+                if (!$user) {
+                    return null;
+                }
+                return [
+                    'id'          => $user->id,
+                    'name'        => $user->name,
+                    'line_number' => $p->line_number,
+                    'status'      => $p->status,
+                    'in_area'     => (bool) $p->last_in_area,
+                    'entries'     => (int) $p->airport_entries,
+                    'exits'       => (int) $p->airport_exits,
+                ];
+            })
+            ->filter()
+            ->sortByDesc('entries')
+            ->values();
+
+        return response()->json([
+            'base' => [
+                'latitude'  => (float) config('taksi.driver_queue.latitude'),
+                'longitude' => (float) config('taksi.driver_queue.longitude'),
+                'radius_km' => Setting::airportRadiusKm(),
+            ],
+            'drivers' => $drivers,
+            'ranking' => $ranking,
+        ]);
+    }
+
+    // =========================================================
+    // === MANAGEMENT API KEYS (akses sistem eksternal koperasi) ===
+    // =========================================================
+
+    public function adminGetApiClients()
+    {
+        $clients = \App\Models\ApiClient::orderByDesc('created_at')->get()->map(fn ($c) => [
+            'id'           => $c->id,
+            'name'         => $c->name,
+            'key_prefix'   => $c->key_prefix,
+            'active'       => (bool) $c->active,
+            'last_used_at' => optional($c->last_used_at)->toIso8601String(),
+            'created_at'   => optional($c->created_at)->toIso8601String(),
+        ]);
+        return response()->json($clients);
+    }
+
+    public function adminStoreApiClient(Request $request)
+    {
+        $validated = $request->validate(['name' => 'required|string|max:100']);
+        [$plain, $client] = \App\Models\ApiClient::generate($validated['name']);
+        return response()->json([
+            'message' => 'API key dibuat. Salin sekarang — kunci lengkap tidak akan ditampilkan lagi.',
+            'key'     => $plain,
+            'client'  => [
+                'id'         => $client->id,
+                'name'       => $client->name,
+                'key_prefix' => $client->key_prefix,
+            ],
+        ], 201);
+    }
+
+    public function adminRevokeApiClient($id)
+    {
+        $client = \App\Models\ApiClient::find($id);
+        if (!$client) {
+            return response()->json(['message' => 'API key tidak ditemukan.'], 404);
+        }
+        $client->delete();
+        return response()->json(['message' => 'API key dicabut.']);
+    }
+
+    /**
+     * Pratinjau response Management API dari panel admin (auth pakai sesi admin,
+     * bukan API key). Meneruskan ke ManagementApiController agar admin bisa lihat
+     * BENTUK & ISI data yang sama dengan yang diterima sistem eksternal.
+     */
+    public function adminApiPreview(Request $request, ManagementApiController $mgmt)
+    {
+        return match ((string) $request->query('endpoint', 'me')) {
+            'transactions'    => $mgmt->transactions($request),
+            'revenue/summary' => $mgmt->revenueSummary($request),
+            'drivers'         => $mgmt->drivers($request),
+            'withdrawals'     => $mgmt->withdrawals($request),
+            default           => response()->json([
+                'system'      => config('app.name'),
+                'client'      => '(pratinjau via akun admin)',
+                'scope'       => 'read-only',
+                'server_time' => now()->toIso8601String(),
+            ]),
+        };
     }
 
     /**

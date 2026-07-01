@@ -186,7 +186,7 @@ class CsoApiController extends Controller
             'base' => [
                 'latitude'  => (float) config('taksi.driver_queue.latitude'),
                 'longitude' => (float) config('taksi.driver_queue.longitude'),
-                'radius_km' => (float) config('taksi.driver_queue.radius_km'),
+                'radius_km' => Setting::airportRadiusKm(),
             ],
             'drivers' => $drivers,
         ]);

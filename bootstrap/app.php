@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
         'role' => RoleMiddleware::class,
+        'management.api' => \App\Http\Middleware\ManagementApiKey::class,
         ]);
 
         // =========================================================

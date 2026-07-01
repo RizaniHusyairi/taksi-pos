@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
 use App\Http\Controllers\Api\ApiAuthController; // <-- Arahkan ke ApiAuthController
+use App\Http\Controllers\Api\ManagementApiController; // Management API (read-only) utk sistem eksternal
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -15,6 +16,16 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 // Public Routes
 Route::post('/login', [ApiAuthController::class, 'login']);
+
+// === MANAGEMENT API (read-only) — untuk website manajemen koperasi eksternal ===
+// Auth via API key (bukan login user). Header: Authorization: Bearer <api_key>.
+Route::prefix('v1/management')->middleware('management.api')->group(function () {
+    Route::get('/me', [ManagementApiController::class, 'me']);
+    Route::get('/transactions', [ManagementApiController::class, 'transactions']);
+    Route::get('/revenue/summary', [ManagementApiController::class, 'revenueSummary']);
+    Route::get('/drivers', [ManagementApiController::class, 'drivers']);
+    Route::get('/withdrawals', [ManagementApiController::class, 'withdrawals']);
+});
 
 // === Rute API untuk Aplikasi POS Taksi ===
 Route::middleware('auth:sanctum')->group(function() {
@@ -56,6 +67,16 @@ Route::middleware('auth:sanctum')->group(function() {
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);
         Route::get('/reports/driver-performance', [ApiController::class, 'adminGetDriverPerformanceReport']);
+
+        // Peta supir + rekap keluar-masuk bandara
+        Route::get('/driver-locations', [ApiController::class, 'adminGetDriverLocations']);
+        Route::get('/drivers/{userId}/route', [ApiController::class, 'adminGetDriverRoute']);
+
+        // Management API keys (kelola akses sistem eksternal koperasi)
+        Route::get('/api-clients', [ApiController::class, 'adminGetApiClients']);
+        Route::post('/api-clients', [ApiController::class, 'adminStoreApiClient']);
+        Route::delete('/api-clients/{id}', [ApiController::class, 'adminRevokeApiClient']);
+        Route::get('/api-preview', [ApiController::class, 'adminApiPreview']); // pratinjau response API dari panel
 
         // Pengaturan
         Route::get('/settings', [ApiController::class, 'adminGetSettings']);

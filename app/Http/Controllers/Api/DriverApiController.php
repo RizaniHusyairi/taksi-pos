@@ -579,6 +579,28 @@ class DriverApiController extends Controller
             ]);
         }
 
+        // Rekam jejak pergerakan (breadcrumb) untuk gambaran RUTE di panel admin.
+        // Throttle per jarak (~20 m) agar trail rapi & hemat storage.
+        if ($profile) {
+            $movedFar = $profile->track_lat === null
+                || $this->calculateDistance(
+                        (float) $profile->track_lat, (float) $profile->track_lng,
+                        $request->latitude, $request->longitude
+                   ) >= 0.02;
+            if ($movedFar) {
+                \App\Models\DriverLocationLog::create([
+                    'user_id'     => $user->id,
+                    'latitude'    => $request->latitude,
+                    'longitude'   => $request->longitude,
+                    'recorded_at' => now(),
+                ]);
+                $profile->update([
+                    'track_lat' => $request->latitude,
+                    'track_lng' => $request->longitude,
+                ]);
+            }
+        }
+
         // 1. Cek Antrian
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
         
@@ -586,9 +608,27 @@ class DriverApiController extends Controller
         $airportLat = config('taksi.driver_queue.latitude');
         $airportLng = config('taksi.driver_queue.longitude');
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-        $radius = config('taksi.driver_queue.radius_km');
+        $radius = Setting::airportRadiusKm();
         $inArea = ($distance <= $radius);
-        
+
+        // Hitung berapa kali supir KELUAR-MASUK area bandara (independen dari
+        // status antrian) — bandingkan dengan state in_area sebelumnya.
+        if ($profile) {
+            $prev = $profile->last_in_area; // null (baseline) | bool
+            if ($prev === null) {
+                $profile->update(['last_in_area' => $inArea]);
+            } elseif ((bool) $prev !== $inArea) {
+                if ($inArea) {
+                    $profile->increment('airport_entries');
+                    $this->logActivity($user->id, 'AIRPORT_ENTER', 'Masuk area bandara');
+                } else {
+                    $profile->increment('airport_exits');
+                    $this->logActivity($user->id, 'AIRPORT_EXIT', 'Keluar area bandara');
+                }
+                $profile->update(['last_in_area' => $inArea]);
+            }
+        }
+
         // 3. Logika Auto-Join & Grace Period
         // Global Warning: Jika diluar area saat standby -> Cek Grace Period
         $remainingTime = null;

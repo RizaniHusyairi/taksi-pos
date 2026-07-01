@@ -38,4 +38,14 @@ class Setting extends Model
     {
         static::$memo = null;
     }
+
+    /**
+     * Radius area bandara (km) yang bisa diatur admin lewat Pengaturan.
+     * Fallback ke nilai config bila belum diatur / di-set tidak valid.
+     */
+    public static function airportRadiusKm(): float
+    {
+        $v = (float) static::getValue('airport_radius_km');
+        return $v > 0 ? $v : (float) config('taksi.driver_queue.radius_km');
+    }
 }
