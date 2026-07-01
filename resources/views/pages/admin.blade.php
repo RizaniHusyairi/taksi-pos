@@ -69,12 +69,104 @@
       transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
     
-    .nav-btn.active {
-      background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(56, 189, 248, 0.1));
-      border-right: 3px solid #14b8a6;
-      color: #38bdf8;
-      font-weight: 600;
+    /* ================= SIDEBAR ================= */
+    /* Panel kaca: cukup opak agar teks tajam & terbaca di light/dark. */
+    .sidebar-glass {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
     }
+    .dark .sidebar-glass {
+      background: rgba(13, 18, 30, 0.88);
+      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+    }
+
+    /* Area scroll nav: overscroll-contain => scroll di sidebar TIDAK merembet
+       ke body/konten kanan (ini akar bug sebelumnya). */
+    .sidebar-scroll { overscroll-behavior: contain; }
+    .sidebar-scroll::-webkit-scrollbar { width: 5px; }
+    .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-scroll::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #2dd4bf, #38bdf8); border-radius: 999px;
+    }
+
+    /* Logo glow saat hover */
+    .brand-logo { position: relative; transition: transform .35s cubic-bezier(.25,.8,.25,1); }
+    .brand-logo:hover { transform: rotate(-4deg) scale(1.05); }
+    .brand-logo::after {
+      content:''; position:absolute; inset:-5px; border-radius:1.1rem; z-index:-1;
+      background: radial-gradient(circle, rgba(45,212,191,.55), transparent 70%);
+      opacity:0; filter: blur(7px); transition: opacity .4s;
+    }
+    .brand-logo:hover::after { opacity:1; }
+
+    /* Label seksi */
+    .nav-section {
+      display:flex; align-items:center; gap:.5rem;
+      padding: 1rem .9rem .4rem; font-size:.63rem; font-weight:700;
+      letter-spacing:.1em; text-transform:uppercase; color:#94a3b8;
+    }
+    .dark .nav-section { color:#64748b; }
+    .nav-section::before {
+      content:''; width:14px; height:2px; border-radius:2px; flex-shrink:0;
+      background: linear-gradient(90deg, #14b8a6, transparent);
+    }
+
+    /* Item nav */
+    .nav-link {
+      position:relative; display:flex; align-items:center; gap:.7rem;
+      margin:.12rem 0; padding:.6rem .7rem; border-radius:.85rem;
+      color:#475569; font-weight:500; overflow:hidden; cursor:pointer;
+      transition: color .25s, background .25s, transform .22s cubic-bezier(.25,.8,.25,1);
+    }
+    .dark .nav-link { color:#cbd5e1; }
+    .nav-link:hover { color:#0d9488; background: rgba(20,184,166,.08); transform: translateX(5px); }
+    .dark .nav-link:hover { color:#5eead4; background: rgba(20,184,166,.12); }
+
+    /* Bar indikator kiri yang tumbuh (animatif) */
+    .nav-link::before {
+      content:''; position:absolute; left:0; top:50%; width:3px; height:0;
+      transform: translateY(-50%); border-radius:0 4px 4px 0;
+      background: linear-gradient(180deg, #2dd4bf, #38bdf8);
+      transition: height .28s cubic-bezier(.25,.8,.25,1);
+    }
+    .nav-link:hover::before { height:45%; }
+
+    /* Ikon jadi "chip" tanpa wrapper — padding + bg langsung di <svg>. */
+    .nav-link svg {
+      width:34px; height:34px; padding:7px; box-sizing:border-box; flex-shrink:0;
+      border-radius:.7rem; color:inherit;
+      transition: transform .25s cubic-bezier(.25,.8,.25,1), background .25s, color .25s, box-shadow .25s;
+    }
+    .nav-link:hover svg { background: rgba(20,184,166,.12); transform: scale(1.08) rotate(-4deg); }
+
+    /* Status AKTIF */
+    .nav-link.active {
+      color:#0f766e; font-weight:600;
+      background: linear-gradient(135deg, rgba(20,184,166,.16), rgba(56,189,248,.10));
+      box-shadow: 0 6px 16px -6px rgba(20,184,166,.45);
+    }
+    .dark .nav-link.active {
+      color:#5eead4;
+      background: linear-gradient(135deg, rgba(20,184,166,.24), rgba(56,189,248,.12));
+      box-shadow: 0 6px 20px -8px rgba(45,212,191,.5);
+    }
+    .nav-link.active::before { height:66%; }
+    .nav-link.active svg {
+      background: linear-gradient(135deg, #14b8a6, #38bdf8); color:#fff;
+      box-shadow: 0 6px 14px -3px rgba(20,184,166,.6);
+    }
+
+    /* Entrance staggered */
+    @keyframes navIn { from{opacity:0; transform:translateX(-14px);} to{opacity:1; transform:translateX(0);} }
+    #sidebar nav > * { animation: navIn .45s both; }
+    #sidebar nav>*:nth-child(1){animation-delay:.03s}  #sidebar nav>*:nth-child(2){animation-delay:.06s}
+    #sidebar nav>*:nth-child(3){animation-delay:.09s}  #sidebar nav>*:nth-child(4){animation-delay:.12s}
+    #sidebar nav>*:nth-child(5){animation-delay:.15s}  #sidebar nav>*:nth-child(6){animation-delay:.18s}
+    #sidebar nav>*:nth-child(7){animation-delay:.21s}  #sidebar nav>*:nth-child(8){animation-delay:.24s}
+    #sidebar nav>*:nth-child(9){animation-delay:.27s}  #sidebar nav>*:nth-child(10){animation-delay:.30s}
+    #sidebar nav>*:nth-child(11){animation-delay:.33s} #sidebar nav>*:nth-child(12){animation-delay:.36s}
+    #sidebar nav>*:nth-child(13){animation-delay:.39s} #sidebar nav>*:nth-child(14){animation-delay:.42s}
+    #sidebar nav>*:nth-child(n+15){animation-delay:.45s}
     
     .animated-bg {
       position: fixed;
@@ -125,9 +217,11 @@
 <body class="bg-gray-50 text-gray-800 dark:bg-bgDark dark:text-gray-200 antialiased selection:bg-primary-500 selection:text-white font-sans">
   <div class="animated-bg dark:block hidden"></div>
 
-  <div id="app" class="flex">
+  <div id="app" class="flex h-screen overflow-hidden">
+    <!-- Backdrop drawer (mobile) -->
+    <div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden hidden"></div>
     <!-- Sidebar -->
-    <aside class="w-64 glass-card border-r border-gray-200 dark:border-white/10 min-h-screen hidden md:flex flex-col relative z-10 transition-all duration-300">
+    <aside id="sidebar" class="sidebar-glass w-64 h-screen flex flex-col fixed md:static inset-y-0 left-0 z-40 -translate-x-full md:translate-x-0 transition-transform duration-300 border-r border-gray-200 dark:border-white/10">
       <div class="p-6 flex items-center gap-4 border-b border-gray-200 dark:border-white/10">
         <img src="{{ asset('pos-assets/img/logo_taksi.png') }}" alt="Logo" class="w-12 h-12 object-contain bg-white rounded-xl shadow-lg p-1" />
         <div>
@@ -136,76 +230,76 @@
         </div>
       </div>
       
-      <div class="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
+      <div class="flex-1 overflow-y-auto sidebar-scroll py-4 px-3">
         <nav class="space-y-1">
           <!-- Dashboard -->
-          <a href="#dashboard" class="nav-link nav-btn active flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+          <a href="#dashboard" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
             <span class="font-medium">Dashboard</span>
           </a>
 
-          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Operasional</div>
+          <div class="nav-section">Operasional</div>
           
-          <a href="#queue" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+          <a href="#queue" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             <span class="font-medium">Manajemen Antrian</span>
           </a>
           
-          <a href="#zones" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <a href="#zones" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <span class="font-medium">Zona & Tarif</span>
           </a>
           
-          <a href="#users" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <a href="#users" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
             <span class="font-medium">Pengguna</span>
           </a>
 
-          <a href="#settings" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <a href="#settings" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <span class="font-medium">Pengaturan</span>
           </a>
 
-          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Keuangan</div>
+          <div class="nav-section">Keuangan</div>
           
-          <a href="#finance-log" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+          <a href="#finance-log" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
             <span class="font-medium">Log Transaksi</span>
           </a>
           
-          <a href="#withdrawals" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <a href="#withdrawals" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             <span class="font-medium">Pencairan Dana</span>
           </a>
 
-          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Laporan</div>
+          <div class="nav-section">Laporan</div>
           
-          <a href="#report-revenue" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+          <a href="#report-revenue" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
             <span class="font-medium">Pendapatan</span>
           </a>
           
-          <a href="#report-driver" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+          <a href="#report-driver" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
             <span class="font-medium">Kinerja Supir</span>
           </a>
 
-          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Live</div>
+          <div class="nav-section">Live</div>
 
-          <a href="#driver-map" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <a href="#driver-map" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <span class="font-medium">Peta Supir</span>
           </a>
 
-          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sistem</div>
+          <div class="nav-section">Sistem</div>
 
-          <a href="#api" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+          <a href="#api" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
             <span class="font-medium">API Integrasi</span>
           </a>
 
-          <a href="#wa" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
-            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+          <a href="#wa" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             <span class="font-medium">WhatsApp Gateway</span>
           </a>
         </nav>
@@ -767,7 +861,7 @@
           </form>
 
           <div id="repRevResult" class="hidden animate-fade-in">
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <div class="bg-primary-50 dark:bg-primary-500/10 p-4 rounded-xl border border-primary-100 dark:border-primary-500/20">
                 <div class="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-1">Tunai CSO</div>
                 <div id="repRevCashCSO" class="text-xl font-extrabold text-gray-800 dark:text-white">Rp 0</div>
@@ -775,10 +869,6 @@
               <div class="bg-green-50 dark:bg-emerald-500/10 p-4 rounded-xl border border-green-100 dark:border-emerald-500/20">
                 <div class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Tunai Supir</div>
                 <div id="repRevCashDriver" class="text-xl font-extrabold text-gray-800 dark:text-white">Rp 0</div>
-              </div>
-              <div class="bg-blue-50 dark:bg-blue-500/10 p-4 rounded-xl border border-blue-100 dark:border-blue-500/20">
-                <div class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Transfer</div>
-                <div id="repRevTransfer" class="text-xl font-extrabold text-gray-800 dark:text-white">Rp 0</div>
               </div>
               <div class="bg-purple-50 dark:bg-purple-500/10 p-4 rounded-xl border border-purple-100 dark:border-purple-500/20">
                 <div class="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider mb-1">QRIS</div>
@@ -789,7 +879,7 @@
             <!-- Tambahan: Potongan Supir -->
             <div class="flex justify-end gap-6 border-t border-gray-100 dark:border-white/10 pt-4 px-2">
                <div>
-                  <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 text-right">Potongan Sistem 15%</div>
+                  <div id="repRevFeeLabel" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 text-right">Potongan Sistem</div>
                   <div id="repRevFee" class="text-lg font-bold text-red-500 dark:text-red-400 text-right">Rp 0</div>
                </div>
                <div>
@@ -981,8 +1071,9 @@
               <input type="text" id="waToken" placeholder="wag_xxx.yyy" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
             </div>
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Device ID</label>
-              <input type="number" id="waDeviceId" min="1" placeholder="1" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Device ID <span class="font-normal text-slate-400">(opsional)</span></label>
+              <input type="number" id="waDeviceId" min="1" placeholder="Kosongkan = device bawaan API Key" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+              <p class="text-[10px] text-slate-400 mt-1">Kosongkan bila API Key terikat ke satu device (menghindari error 403 &ldquo;device lain&rdquo;).</p>
             </div>
             <div class="md:col-span-2">
               <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Gateway URL</label>

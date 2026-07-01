@@ -100,6 +100,25 @@ export class AdminApp {
     this.populateFilterDropdowns();
     this.initCommon();
     this.initTheme(); // Initialize Theme
+    this.initSidebar(); // Drawer mobile + tutup saat pilih menu
+  }
+
+  // Sidebar: buka/tutup drawer di mobile. Di desktop selalu tampil (md:translate-x-0),
+  // jadi menambah/menghapus '-translate-x-full' hanya berpengaruh di layar < md.
+  initSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const btn = document.getElementById('mobileMenu');
+    if (!sidebar || !backdrop) return;
+    const open = () => { sidebar.classList.remove('-translate-x-full'); backdrop.classList.remove('hidden'); };
+    const close = () => { sidebar.classList.add('-translate-x-full'); backdrop.classList.add('hidden'); };
+    btn?.addEventListener('click', open);
+    backdrop.addEventListener('click', close);
+    sidebar.querySelectorAll('.nav-link').forEach(a =>
+      a.addEventListener('click', () => {
+        if (window.matchMedia('(max-width: 767px)').matches) close();
+      })
+    );
   }
 
   // --- Theme Logic ---
@@ -401,7 +420,7 @@ export class AdminApp {
     document.getElementById('btnTxExportExcel')?.addEventListener('click', () => this._exportTx('excel'));
 
     // Revenue report range
-    document.getElementById('revRange')?.addEventListener('change', () => this.renderRevReport());
+    document.getElementById('formReportRevenue')?.addEventListener('submit', (e) => { e.preventDefault(); this.renderRevReport(); });
     document.getElementById('driverRankBy')?.addEventListener('change', () => this.renderDriverReport());
     document.getElementById('btnRefreshMap')?.addEventListener('click', () => this.renderDriverMap());
     document.getElementById('btnClearRoute')?.addEventListener('click', () => this.clearRoute());
@@ -473,8 +492,7 @@ export class AdminApp {
     });
     document.querySelectorAll('.nav-link').forEach(a => {
       const target = a.getAttribute('href').replace('#', '');
-      if (target === hash) a.classList.add('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
-      else a.classList.remove('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
+      a.classList.toggle('active', target === hash);
     });
 
     // Peta supir: render + auto-refresh tiap 15 dtk saat aktif, berhenti saat pindah.
@@ -1075,49 +1093,33 @@ export class AdminApp {
     return `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}">${s}</span>`;
   }
   // ----- Reports -----
-  async renderRevReport() { // <-- Jadikan async
+  async renderRevReport() {
+    const monthEl = document.getElementById('repRevMonth');
+    if (!monthEl) return;
+
+    // Default: bulan berjalan → laporan langsung tampil, tidak kosong.
+    if (!monthEl.value) {
+      const d = new Date();
+      monthEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+
     try {
-      const range = document.getElementById('revRange')?.value || 'daily';
+      const r = await fetchApi(`/admin/reports/revenue?month=${monthEl.value}`);
+      const rp = (n) => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
 
-      // 1. PANGGIL API UNTUK MENDAPATKAN DATA LAPORAN YANG SUDAH JADI
-      const reportData = await fetchApi(`/admin/reports/revenue?range=${range}`);
+      set('repRevCashCSO', rp(r.cash_cso));
+      set('repRevCashDriver', rp(r.cash_driver));
+      set('repRevQris', rp(r.qris));
+      set('repRevFee', rp(r.fee));
+      set('repRevTotal', rp(r.total));
 
-      const labels = reportData.labels;
-      const data = reportData.values;
+      // Label potongan mengikuti rate komisi aktual (bukan "15%" statis).
+      if (r.fee_rate != null) set('repRevFeeLabel', `Potongan Sistem ${Math.round(r.fee_rate * 100)}%`);
 
-      // 2. SEMUA LOGIKA LOOPING DAN HELPER DIHAPUS.
-      // Langsung render grafik dengan data dari API.
-      const ctx = document.getElementById('revChart');
-      if (!ctx) return;
-
-      if (this.charts['revChart']) {
-        this.charts['revChart'].destroy();
-      }
-
-      this.charts['revChart'] = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Pendapatan',
-            data: data,
-            tension: 0.3,
-            borderColor: '#3b82f6', //tailwind primary-500
-            backgroundColor: '#dbeafe' //tailwind primary-100
-          }]
-        },
-        options: {
-          scales: {
-            y: {
-              beginAtZero: true
-            }
-          }
-        }
-      });
-
+      document.getElementById('repRevResult')?.classList.remove('hidden');
     } catch (error) {
       console.error("Gagal memuat laporan pendapatan:", error);
-      // Mungkin tampilkan pesan error di canvas
     }
   }
 
@@ -1425,7 +1427,7 @@ export class AdminApp {
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
       set('adminWaNumber', s.admin_wa_number || '');
       set('waEndpoint', s.wa_endpoint || '');
-      set('waDeviceId', s.wa_device_id || 1);
+      set('waDeviceId', s.wa_device_id || ''); // opsional — kosong = device bawaan key
     } catch (e) {
       console.error('Gagal memuat konfigurasi WA:', e);
     }
@@ -1438,7 +1440,7 @@ export class AdminApp {
     fd.append('wa_token', document.getElementById('waToken').value.trim());
     fd.append('admin_wa_number', document.getElementById('adminWaNumber').value.trim());
     fd.append('wa_endpoint', document.getElementById('waEndpoint').value.trim());
-    fd.append('wa_device_id', document.getElementById('waDeviceId').value.trim() || '1');
+    fd.append('wa_device_id', document.getElementById('waDeviceId').value.trim()); // boleh kosong
     try {
       await fetchApi('/admin/settings', { method: 'POST', body: fd });
       alert('Konfigurasi WhatsApp Gateway disimpan!');

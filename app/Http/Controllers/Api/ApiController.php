@@ -459,6 +459,13 @@ class ApiController extends Controller
 
     public function adminGetRevenueReport(Request $request)
     {
+        // MODE BARU (dipakai halaman Laporan Pendapatan): ?month=YYYY-MM →
+        // rincian pendapatan 1 bulan per metode bayar. Tanpa month → tetap
+        // time-series lama (kompatibilitas).
+        if ($request->filled('month')) {
+            return $this->revenueByMethod($request->query('month'));
+        }
+
         $range = $request->query('range', 'daily'); // default 'daily'
         $endDate = now();
         $data = [];
@@ -514,6 +521,44 @@ class ApiController extends Controller
         return response()->json($response);
     }
 
+    /**
+     * Rincian pendapatan 1 bulan per metode bayar (CashCSO / CashDriver / QRIS)
+     * + potongan komisi koperasi. Metode 'Transfer' tidak ada di sistem, jadi
+     * tidak disertakan. Dipakai halaman Laporan Pendapatan admin.
+     */
+    private function revenueByMethod(?string $month)
+    {
+        try {
+            $start = \Carbon\Carbon::createFromFormat('Y-m', (string) $month)->startOfMonth();
+        } catch (\Throwable $e) {
+            $start = now()->startOfMonth();
+        }
+        $end = (clone $start)->endOfMonth();
+
+        $rows = Transaction::whereBetween('created_at', [$start, $end])
+            ->selectRaw('method, SUM(amount) as total')
+            ->groupBy('method')
+            ->pluck('total', 'method');
+
+        $cashCso    = (float) ($rows['CashCSO'] ?? 0);
+        $cashDriver = (float) ($rows['CashDriver'] ?? 0);
+        $qris       = (float) ($rows['QRIS'] ?? 0);
+        $total      = $cashCso + $cashDriver + $qris;
+
+        $rate = (float) Setting::getValue('commission_rate') ?: 0.2;
+        $fee  = $total * $rate;
+
+        return response()->json([
+            'month'       => $start->format('Y-m'),
+            'cash_cso'    => round($cashCso),
+            'cash_driver' => round($cashDriver),
+            'qris'        => round($qris),
+            'total'       => round($total),
+            'fee'         => round($fee),
+            'fee_rate'    => $rate,
+        ]);
+    }
+
     public function adminGetDriverPerformanceReport(Request $request)
     {
         $sortBy = $request->query('sort_by', 'trips'); // trips | revenue | rating
@@ -563,7 +608,9 @@ class ApiController extends Controller
         // WhatsApp Gateway — kirim nilai efektif (default sesuai dokumentasi gateway).
         $settings['wa_endpoint'] = $settings->get('wa_endpoint')
             ?: 'https://wg.aptpairport.id/api/v1/messages/send';
-        $settings['wa_device_id'] = (int) ($settings->get('wa_device_id') ?: 1);
+        // Device ID opsional — kirim apa adanya ('' bila belum diatur), JANGAN
+        // paksa jadi 1 (memaksa device bisa memicu 403 dari gateway).
+        $settings['wa_device_id'] = (string) $settings->get('wa_device_id', '');
 
         // Jam operasi pelacakan lokasi — kirim nilai efektif (setting || config)
         // agar field di UI tidak pernah kosong.
@@ -651,6 +698,16 @@ class ApiController extends Controller
             }
         }
 
+        // Device ID WA boleh DIKOSONGKAN. Middleware mengubah '' → null sehingga
+        // loop di atas melewatinya (null di-skip); simpan eksplisit di sini agar
+        // admin bisa mengosongkannya (gateway lalu pakai device bawaan API Key).
+        if ($request->has('wa_device_id')) {
+            Setting::updateOrCreate(
+                ['key' => 'wa_device_id'],
+                ['value' => trim((string) $request->input('wa_device_id'))]
+            );
+        }
+
         // Invalidasi memo agar pembacaan setting berikutnya dapat nilai terbaru.
         Setting::forgetMemo();
 
@@ -675,17 +732,22 @@ class ApiController extends Controller
 
         $endpoint = Setting::getValue('wa_endpoint')
             ?: 'https://wg.aptpairport.id/api/v1/messages/send';
-        $deviceId = (int) (Setting::getValue('wa_device_id') ?: 1);
+
+        // Device ID opsional (lihat SendWhatsAppMessage): kirim hanya bila diisi.
+        $payload = [
+            'to'   => $validated['to'],
+            'body' => 'Tes notifikasi WhatsApp Gateway — Koperasi Angkasa Jaya. Jika pesan ini diterima, konfigurasi sudah benar.',
+        ];
+        $deviceRaw = trim((string) Setting::getValue('wa_device_id'));
+        if ($deviceRaw !== '') {
+            $payload['deviceId'] = (int) $deviceRaw;
+        }
 
         try {
             $response = \Illuminate\Support\Facades\Http::withHeaders(['X-API-Key' => $token])
                 ->acceptJson()
                 ->timeout(15)
-                ->post($endpoint, [
-                    'deviceId' => $deviceId,
-                    'to'       => $validated['to'],
-                    'body'     => 'Tes notifikasi WhatsApp Gateway — Koperasi Angkasa Jaya. Jika pesan ini diterima, konfigurasi sudah benar.',
-                ]);
+                ->post($endpoint, $payload);
 
             return response()->json([
                 'ok'      => $response->successful(),

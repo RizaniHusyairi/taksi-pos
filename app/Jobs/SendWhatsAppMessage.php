@@ -46,15 +46,19 @@ class SendWhatsAppMessage implements ShouldQueue
 
         $endpoint = Setting::getValue('wa_endpoint')
             ?: 'https://wg.aptpairport.id/api/v1/messages/send';
-        $deviceId = (int) (Setting::getValue('wa_device_id') ?: 1);
+
+        // Device ID OPSIONAL: hanya kirim bila diisi. Bila kosong, gateway
+        // memakai device bawaan API Key — mencegah HTTP 403 "API Key tidak
+        // diizinkan memakai device lain" saat key terikat ke satu device.
+        $payload = ['to' => $this->target, 'body' => $this->message];
+        $deviceRaw = trim((string) Setting::getValue('wa_device_id'));
+        if ($deviceRaw !== '') {
+            $payload['deviceId'] = (int) $deviceRaw;
+        }
 
         $response = Http::withHeaders(['X-API-Key' => $this->token])
             ->acceptJson()
-            ->post($endpoint, [
-                'deviceId' => $deviceId,
-                'to'       => $this->target,
-                'body'     => $this->message,
-            ]);
+            ->post($endpoint, $payload);
 
         if ($response->failed()) {
             // 5xx / transient → lempar agar di-retry. 4xx (key/nomor invalid) → catat.
