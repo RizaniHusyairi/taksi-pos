@@ -202,7 +202,7 @@ class _Fields {
       methodLabel: methodLabel,
       dateTimeStr: dateTimeStr,
       amount: amount,
-      publicUrl: '${ApiService.assetBaseUrl}/receipt/$code',
+      publicUrl: '${ApiService.assetBaseUrl}/receipt/${s(tx['receipt_token'], code)}',
     );
   }
 }

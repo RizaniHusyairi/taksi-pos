@@ -9,6 +9,12 @@
     <!-- Minta pengecualian optimasi baterai (OEM agresif spt MIUI/Redmi suka membunuh service latar) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Bluetooth: cetak karcis ke printer thermal (ESC/POS) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+
     <application
         android:label="Taxi Angkasa Jaya"
         android:name="${applicationName}"

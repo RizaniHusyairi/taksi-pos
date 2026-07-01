@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../services/receipt_service.dart';
+import '../../services/thermal_printer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
+import 'cso_printer_picker_sheet.dart';
 
 /// Ringkasan struk setelah order berhasil dibuat, dengan QR ke struk publik.
 /// Tombol "Cetak/Simpan" & "Bagikan" menghasilkan PDF struk (share ke WhatsApp dll).
@@ -179,13 +181,41 @@ class CsoReceiptSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
+            // Cetak karcis ke printer thermal Bluetooth (aksi utama).
+            SizedBox(
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () => _printThermal(context),
+                icon: const Icon(Icons.receipt_long_rounded, size: 20),
+                label: const Text(
+                  'Cetak Karcis',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.deepBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => CsoPrinterPickerSheet.show(context),
+                icon: const Icon(Icons.bluetooth_rounded, size: 15),
+                label: const Text('Pilih / ganti printer'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.inkSoft),
+              ),
+            ),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _print(context),
-                    icon: const Icon(Icons.print_rounded, size: 18),
-                    label: const Text('Cetak / Simpan'),
+                    onPressed: () => _share(context),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Bagikan'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.deepBlue,
                       side: const BorderSide(color: AppColors.skyBlue),
@@ -198,13 +228,14 @@ class CsoReceiptSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _share(context),
-                    icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('Bagikan'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.deepBlue,
-                      foregroundColor: Colors.white,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _print(context),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                    label: const Text('Simpan PDF'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.inkSoft,
+                      side: BorderSide(
+                          color: AppColors.inkFaint.withValues(alpha: 0.5)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -220,7 +251,7 @@ class CsoReceiptSheet extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.deepBlue,
+                  backgroundColor: AppColors.success,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -288,6 +319,37 @@ class CsoReceiptSheet extends StatelessWidget {
           const SnackBar(content: Text('Gagal menyiapkan struk.')),
         );
       }
+    }
+  }
+
+  /// Cetak karcis ke printer thermal Bluetooth. Kalau belum ada printer terpilih,
+  /// buka pemilih dulu. Semua kegagalan tampil sebagai pesan ramah.
+  Future<void> _printThermal(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final mac = await ThermalPrinterService.savedMac();
+      if (mac == null || mac.isEmpty) {
+        if (!context.mounted) return;
+        final picked = await CsoPrinterPickerSheet.show(context);
+        if (picked != true) return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Mencetak karcis…')),
+      );
+      await ThermalPrinterService.printReceipt(booking);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Karcis tercetak ✓'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: AppColors.danger,
+        ),
+      );
     }
   }
 }
