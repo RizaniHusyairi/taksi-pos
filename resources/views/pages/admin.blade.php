@@ -45,6 +45,8 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <link rel="stylesheet" href="{{ asset('pos-assets/css/style.css') }}">
   <style>
     /* Premium Glassmorphism & Animations */
@@ -186,6 +188,20 @@
           <a href="#report-driver" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
             <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
             <span class="font-medium">Kinerja Supir</span>
+          </a>
+
+          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Live</div>
+
+          <a href="#driver-map" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
+            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            <span class="font-medium">Peta Supir</span>
+          </a>
+
+          <div class="pt-6 pb-2 px-4 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Sistem</div>
+
+          <a href="#api" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 group">
+            <svg class="w-5 h-5 opacity-70 group-hover:opacity-100 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+            <span class="font-medium">API Integrasi</span>
           </a>
         </nav>
       </div>
@@ -813,6 +829,140 @@
           </div>
         </div>
       </section>
+      <!-- DRIVER MAP VIEW -->
+      <section id="view-driver-map" class="hidden space-y-6">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="glass-card rounded-2xl p-5">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Supir Aktif di Peta</p>
+            <p id="mapStatOnMap" class="text-3xl font-extrabold text-gray-800 dark:text-white mt-1">0</p>
+          </div>
+          <div class="glass-card rounded-2xl p-5">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Total Masuk Bandara</p>
+            <p id="mapStatEntries" class="text-3xl font-extrabold text-green-600 mt-1">0</p>
+          </div>
+          <div class="glass-card rounded-2xl p-5">
+            <p class="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Total Keluar Bandara</p>
+            <p id="mapStatExits" class="text-3xl font-extrabold text-amber-500 mt-1">0</p>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-2 relative">
+          <div class="absolute top-4 right-4 z-[500] flex gap-3 text-[10px] font-bold bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full px-3 py-1.5 shadow">
+            <span class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Menunggu</span>
+            <span class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>Mengantar</span>
+            <span class="flex items-center gap-1 text-gray-600 dark:text-gray-300"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>Luar Area</span>
+          </div>
+          <button id="btnClearRoute" type="button" class="hidden absolute top-4 left-4 z-[500] flex items-center gap-1.5 text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-full px-3 py-1.5 shadow transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            Bersihkan Rute
+          </button>
+          <div id="adminDriverMap" style="height: 460px; z-index: 1;" class="rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20"></div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-4 border-b border-gray-100 dark:border-white/10 pb-4">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Rekap Keluar-Masuk Bandara</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Berapa kali tiap supir masuk &amp; keluar area bandara (akumulatif).</p>
+            </div>
+            <button id="btnRefreshMap" type="button" class="text-xs font-semibold text-primary-600 hover:text-primary-800 flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              Segarkan
+            </button>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5 text-center">#</th>
+                  <th class="py-4 px-5">Nama Supir</th>
+                  <th class="py-4 px-5 text-center">Masuk</th>
+                  <th class="py-4 px-5 text-center">Keluar</th>
+                  <th class="py-4 px-5 text-center">Posisi</th>
+                </tr>
+              </thead>
+              <tbody id="airportRankTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- API INTEGRATION VIEW -->
+      <section id="view-api" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 border-b border-gray-100 dark:border-white/10 pb-5">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">API Integrasi Koperasi</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Kelola API key agar website manajemen koperasi menarik data (read-only) dari sistem ini.</p>
+            </div>
+            <button id="btnNewApiKey" type="button" class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2.5 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              Buat API Key
+            </button>
+          </div>
+
+          <div id="newApiKeyBox" class="hidden mb-5 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4">
+            <p class="text-xs font-bold text-amber-700 dark:text-amber-400 mb-2">⚠ Salin sekarang — kunci lengkap TIDAK akan ditampilkan lagi.</p>
+            <div class="flex items-center gap-2">
+              <code id="newApiKeyValue" class="flex-1 text-sm font-mono bg-white dark:bg-black/30 rounded-lg px-3 py-2 break-all text-gray-800 dark:text-gray-100"></code>
+              <button id="btnCopyApiKey" type="button" class="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-2 transition-colors">Salin</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Nama Klien</th>
+                  <th class="py-4 px-5">Prefix Key</th>
+                  <th class="py-4 px-5">Terakhir Dipakai</th>
+                  <th class="py-4 px-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="apiClientsTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5">
+          <h3 class="font-bold text-gray-800 dark:text-white text-lg mb-1">Dokumentasi Endpoint</h3>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Berikan info ini ke developer sistem koperasi. Semua endpoint <b>read-only</b>.</p>
+          <div class="space-y-3">
+            <div class="rounded-lg bg-gray-50 dark:bg-black/20 p-3">
+              <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">Base URL</p>
+              <code class="font-mono text-sm text-primary-600 dark:text-primary-400 break-all">{{ url('/api/v1/management') }}</code>
+            </div>
+            <div class="rounded-lg bg-gray-50 dark:bg-black/20 p-3">
+              <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold mb-1">Autentikasi (header tiap request)</p>
+              <code class="font-mono text-sm text-gray-700 dark:text-gray-200 break-all">Authorization: Bearer &lt;api_key&gt;</code>
+            </div>
+            <div class="rounded-lg bg-gray-50 dark:bg-black/20 p-3 divide-y divide-gray-200/70 dark:divide-white/5">
+              @foreach ([
+                ['me', '/me', '— cek koneksi'],
+                ['transactions', '/transactions', '?date_from=&date_to=&per_page='],
+                ['revenue/summary', '/revenue/summary', '?date_from=&date_to='],
+                ['drivers', '/drivers', '— daftar supir'],
+                ['withdrawals', '/withdrawals', '?status='],
+              ] as $ep)
+              <div class="flex items-center justify-between gap-3 py-1.5">
+                <p class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate"><span class="text-green-600 font-bold">GET</span> {{ $ep[1] }} <span class="text-gray-400">{{ $ep[2] }}</span></p>
+                <button data-try="{{ $ep[0] }}" type="button" class="shrink-0 text-[11px] font-semibold text-primary-600 hover:text-white hover:bg-primary-600 border border-primary-300 dark:border-primary-500/40 rounded-md px-2.5 py-1 transition-colors">Coba ▸</button>
+              </div>
+              @endforeach
+            </div>
+
+            <div id="apiPreviewPanel" class="hidden">
+              <div class="flex items-center justify-between mb-1.5">
+                <p class="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Response <span id="apiPreviewEp" class="text-primary-500 font-mono normal-case"></span></p>
+                <span id="apiPreviewStatus" class="text-xs font-bold"></span>
+              </div>
+              <pre id="apiPreviewBody" class="text-xs font-mono leading-relaxed bg-slate-900 text-green-300 rounded-lg p-3.5 overflow-auto max-h-96 whitespace-pre"></pre>
+              <p class="text-[10px] text-gray-400 mt-1.5">Pratinjau lewat akun admin — datanya sama dengan yang diterima sistem eksternal (yang wajib memakai API key).</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- SETTINGS VIEW -->
       <section id="view-settings" class="hidden space-y-6">
         <div class="glass-card rounded-2xl p-5 max-w-2xl mx-auto">
@@ -883,6 +1033,11 @@
                 <div>
                     <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Komisi Koperasi (%)</label>
                     <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Radius Area Bandara (km)</label>
+                    <input type="number" id="airportRadiusKm" min="0.1" max="50" step="0.1" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
+                    <p class="text-[10px] text-gray-400 mt-1">Jangkauan geofence auto-antrian &amp; peta supir.</p>
                 </div>
               </div>
               

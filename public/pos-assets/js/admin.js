@@ -91,7 +91,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp {
   constructor() {
-    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'settings'];
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'report-revenue', 'report-driver', 'driver-map', 'api', 'settings'];
     this.charts = {};
   }
   init() {
@@ -197,6 +197,10 @@ export class AdminApp {
       formData.append('mail_from_name', document.getElementById('mailFromName').value.trim());
       formData.append('wa_token', document.getElementById('waToken').value.trim());
       formData.append('admin_wa_number', document.getElementById('adminWaNumber').value.trim());
+      const radiusEl = document.getElementById('airportRadiusKm');
+      if (radiusEl && radiusEl.value.trim() !== '') {
+        formData.append('airport_radius_km', radiusEl.value.trim());
+      }
 
       // FILE UPLOAD
       const fileInput = document.getElementById('companyQris');
@@ -391,6 +395,18 @@ export class AdminApp {
     // Revenue report range
     document.getElementById('revRange')?.addEventListener('change', () => this.renderRevReport());
     document.getElementById('driverRankBy')?.addEventListener('change', () => this.renderDriverReport());
+    document.getElementById('btnRefreshMap')?.addEventListener('click', () => this.renderDriverMap());
+    document.getElementById('btnClearRoute')?.addEventListener('click', () => this.clearRoute());
+    document.getElementById('btnNewApiKey')?.addEventListener('click', () => this.createApiKey());
+    document.getElementById('btnCopyApiKey')?.addEventListener('click', () => this.copyNewApiKey());
+    document.getElementById('apiClientsTable')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-revoke]');
+      if (btn) this.revokeApiKey(btn.getAttribute('data-revoke'));
+    });
+    document.getElementById('view-api')?.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-try]');
+      if (t) this.tryApiEndpoint(t.getAttribute('data-try'));
+    });
 
     this.renderAll();
 
@@ -430,6 +446,7 @@ export class AdminApp {
     this.renderRevReport();
     this.renderDriverReport();
     this.renderSettings();
+    this.renderApiClients();
     this.renderQueue();
   }
 
@@ -446,6 +463,13 @@ export class AdminApp {
       if (target === hash) a.classList.add('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
       else a.classList.remove('bg-primary-50', 'text-primary-700', 'dark:bg-slate-700', 'dark:text-primary-400');
     });
+
+    // Peta supir: render + auto-refresh tiap 15 dtk saat aktif, berhenti saat pindah.
+    clearInterval(this._mapPoll);
+    if (hash === 'driver-map') {
+      this.renderDriverMap();
+      this._mapPoll = setInterval(() => this.renderDriverMap(), 15000);
+    }
   }
   titleOf(v) {
     return {
@@ -458,6 +482,8 @@ export class AdminApp {
       'withdrawals': 'Withdrawal Requests',
       'report-revenue': 'Laporan Pendapatan',
       'report-driver': 'Laporan Kinerja Supir',
+      'driver-map': 'Peta Supir',
+      'api': 'API Integrasi',
       'settings': 'Pengaturan'
     }[v] || 'Dashboard';
   }
@@ -1121,6 +1147,229 @@ export class AdminApp {
     }
   }
 
+  // ----- Peta Supir + Rekap Keluar-Masuk Bandara -----
+  async renderDriverMap() {
+    const mapEl = document.getElementById('adminDriverMap');
+    if (!mapEl || typeof L === 'undefined') return;
+
+    let data;
+    try {
+      data = await fetchApi('/admin/driver-locations');
+    } catch (e) {
+      console.error('Gagal memuat peta supir:', e);
+      return;
+    }
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const base = data.base || {};
+    const drivers = data.drivers || [];
+    const ranking = data.ranking || [];
+    const centerLat = base.latitude || -0.371975;
+    const centerLng = base.longitude || 117.257919;
+
+    // Inisialisasi peta sekali saja.
+    if (!this._driverMap) {
+      this._driverMap = L.map(mapEl, { zoomControl: true }).setView([centerLat, centerLng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(this._driverMap);
+      this._driverMarkers = L.layerGroup().addTo(this._driverMap);
+      if (base.radius_km) {
+        L.circle([centerLat, centerLng], {
+          radius: base.radius_km * 1000,
+          color: '#2563eb', weight: 2, fillColor: '#3b82f6', fillOpacity: 0.07,
+        }).addTo(this._driverMap);
+      }
+      L.marker([centerLat, centerLng]).addTo(this._driverMap).bindPopup('<b>Bandara APT Pranoto</b>');
+      // Sambungkan tombol "Lihat Rute" di dalam popup marker supir.
+      this._driverMap.on('popupopen', (e) => {
+        const el = e.popup.getElement();
+        const btn = el && el.querySelector('[data-route]');
+        if (btn) btn.onclick = () => this.showDriverRoute(btn.getAttribute('data-route'));
+      });
+    }
+    // Peta mungkin dibuat saat container tersembunyi → perbaiki ukurannya.
+    setTimeout(() => { if (this._driverMap) this._driverMap.invalidateSize(); }, 60);
+
+    // Refresh marker supir.
+    this._driverMarkers.clearLayers();
+    drivers.forEach(d => {
+      const color = d.status === 'ontrip' ? '#0ea5e9' : (d.in_area ? '#22c55e' : '#94a3b8');
+      const icon = L.divIcon({
+        className: 'aj-driver-marker',
+        html: `<div style="background:${color};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:800;">${d.line_number ?? ''}</span></div>`,
+        iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30],
+      });
+      L.marker([d.latitude, d.longitude], { icon }).addTo(this._driverMarkers)
+        .bindPopup(
+          `<div style="min-width:180px;font-family:system-ui,sans-serif">
+            <div style="font-weight:800;font-size:14px;color:#0f172a">${esc(d.name)}</div>
+            <div style="font-size:12px;color:#64748b;margin:2px 0 7px">${esc(d.car_model || '-')} &bull; ${esc(d.plate_number || '-')}</div>
+            <span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 9px;border-radius:12px;background:${color}22;color:${color}">${esc((d.status || '').toUpperCase())}</span>
+            <div style="margin-top:9px;padding-top:8px;border-top:1px solid #eef2f7;display:flex;gap:14px;font-size:12px;color:#334155">
+              <span>Masuk: <b style="color:#16a34a">${d.airport_entries}</b>x</span>
+              <span>Keluar: <b style="color:#d97706">${d.airport_exits}</b>x</span>
+            </div>
+            <button data-route="${d.id}" style="margin-top:10px;width:100%;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer">Lihat Rute Hari Ini</button>
+          </div>`
+        );
+    });
+
+    // Statistik ringkas.
+    const totEntries = ranking.reduce((s, r) => s + (r.entries || 0), 0);
+    const totExits = ranking.reduce((s, r) => s + (r.exits || 0), 0);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('mapStatOnMap', drivers.length);
+    set('mapStatEntries', totEntries);
+    set('mapStatExits', totExits);
+
+    // Tabel rekap keluar-masuk (semua supir).
+    const rankBody = document.getElementById('airportRankTable');
+    if (rankBody) {
+      rankBody.innerHTML = ranking.length
+        ? ranking.map((r, i) => {
+            const badge = r.in_area
+              ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">DI AREA</span>'
+              : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">LUAR</span>';
+            const line = r.line_number ? `<span class="text-xs text-slate-400 ml-1">#${esc(r.line_number)}</span>` : '';
+            return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors">
+              <td class="py-3 px-5 text-center text-slate-400">${i + 1}</td>
+              <td class="py-3 px-5 font-medium text-slate-700 dark:text-slate-200">${esc(r.name)}${line}</td>
+              <td class="py-3 px-5 text-center font-bold text-green-600">${r.entries}</td>
+              <td class="py-3 px-5 text-center font-bold text-amber-600">${r.exits}</td>
+              <td class="py-3 px-5 text-center">${badge}</td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="5" class="text-center py-6 text-slate-400">Belum ada data.</td></tr>';
+    }
+  }
+
+  // ----- Rute pergerakan supir (polyline di peta) -----
+  async showDriverRoute(id) {
+    if (!this._driverMap) return;
+    try {
+      const res = await fetchApi('/admin/drivers/' + id + '/route');
+      this.clearRoute();
+      const pts = (res.points || []).map(p => [p.lat, p.lng]);
+      if (pts.length < 2) {
+        alert('Belum ada cukup jejak rute untuk supir ini hari ini.');
+        return;
+      }
+      this._routeLayer = L.layerGroup().addTo(this._driverMap);
+      L.polyline(pts, { color: '#7c3aed', weight: 4, opacity: 0.85 }).addTo(this._routeLayer);
+      L.circleMarker(pts[0], { radius: 6, weight: 2, color: '#fff', fillColor: '#16a34a', fillOpacity: 1 })
+        .bindPopup('Awal rute').addTo(this._routeLayer);
+      L.circleMarker(pts[pts.length - 1], { radius: 6, weight: 2, color: '#fff', fillColor: '#dc2626', fillOpacity: 1 })
+        .bindPopup('Posisi terakhir').addTo(this._routeLayer);
+      this._driverMap.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+      document.getElementById('btnClearRoute')?.classList.remove('hidden');
+    } catch (e) {
+      console.error('Gagal memuat rute:', e);
+      alert('Gagal memuat rute supir.');
+    }
+  }
+
+  clearRoute() {
+    if (this._routeLayer && this._driverMap) {
+      this._driverMap.removeLayer(this._routeLayer);
+      this._routeLayer = null;
+    }
+    document.getElementById('btnClearRoute')?.classList.add('hidden');
+  }
+
+  // ----- API Integrasi (Management API keys) -----
+  async renderApiClients() {
+    const tbody = document.getElementById('apiClientsTable');
+    if (!tbody) return;
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    try {
+      const clients = await fetchApi('/admin/api-clients');
+      tbody.innerHTML = clients.length
+        ? clients.map(c => {
+            const used = c.last_used_at
+              ? new Date(c.last_used_at).toLocaleString('id-ID')
+              : '<span class="text-slate-400">belum pernah</span>';
+            return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors">
+              <td class="py-3 px-5 font-medium text-slate-700 dark:text-slate-200">${esc(c.name)}</td>
+              <td class="py-3 px-5 font-mono text-xs text-slate-500">${esc(c.key_prefix)}…</td>
+              <td class="py-3 px-5 text-xs text-slate-500">${used}</td>
+              <td class="py-3 px-5 text-right"><button data-revoke="${c.id}" class="text-red-600 hover:text-red-800 text-xs font-semibold">Cabut</button></td>
+            </tr>`;
+          }).join('')
+        : '<tr><td colspan="4" class="text-center py-6 text-slate-400">Belum ada API key. Klik "Buat API Key".</td></tr>';
+    } catch (e) {
+      console.error('Gagal memuat API clients:', e);
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Gagal memuat.</td></tr>';
+    }
+  }
+
+  async createApiKey() {
+    const name = prompt('Nama klien (mis. "Website Koperasi Pusat"):');
+    if (!name || !name.trim()) return;
+    try {
+      const res = await fetchApi('/admin/api-clients', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const box = document.getElementById('newApiKeyBox');
+      const val = document.getElementById('newApiKeyValue');
+      if (box && val && res.key) {
+        val.textContent = res.key;
+        box.classList.remove('hidden');
+      }
+      this.renderApiClients();
+    } catch (e) {
+      alert('Gagal membuat API key.');
+    }
+  }
+
+  copyNewApiKey() {
+    const val = document.getElementById('newApiKeyValue');
+    if (!val || !val.textContent) return;
+    navigator.clipboard?.writeText(val.textContent).then(() => {
+      const btn = document.getElementById('btnCopyApiKey');
+      if (btn) {
+        const t = btn.textContent;
+        btn.textContent = 'Tersalin!';
+        setTimeout(() => { btn.textContent = t; }, 1500);
+      }
+    });
+  }
+
+  async revokeApiKey(id) {
+    if (!confirm('Cabut API key ini? Sistem yang memakainya langsung kehilangan akses.')) return;
+    try {
+      await fetchApi('/admin/api-clients/' + id, { method: 'DELETE' });
+      document.getElementById('newApiKeyBox')?.classList.add('hidden');
+      this.renderApiClients();
+    } catch (e) {
+      alert('Gagal mencabut API key.');
+    }
+  }
+
+  // Pratinjau response endpoint Management API langsung dari panel.
+  async tryApiEndpoint(ep) {
+    const panel = document.getElementById('apiPreviewPanel');
+    const body = document.getElementById('apiPreviewBody');
+    if (!panel || !body) return;
+    const epLabel = document.getElementById('apiPreviewEp');
+    const status = document.getElementById('apiPreviewStatus');
+    panel.classList.remove('hidden');
+    if (epLabel) epLabel.textContent = '/' + ep;
+    if (status) { status.textContent = 'memuat…'; status.className = 'text-xs font-bold text-slate-400'; }
+    body.textContent = '';
+    try {
+      const res = await fetchApi('/admin/api-preview?endpoint=' + encodeURIComponent(ep));
+      body.textContent = JSON.stringify(res, null, 2);
+      if (status) { status.textContent = '200 OK'; status.className = 'text-xs font-bold text-green-500'; }
+    } catch (err) {
+      body.textContent = 'Gagal memuat response.' + (err && err.message ? ' ' + err.message : '');
+      if (status) { status.textContent = 'error'; status.className = 'text-xs font-bold text-red-500'; }
+    }
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   // ----- Settings -----
   // ----- Settings -----
   async renderSettings() {
@@ -1132,6 +1381,12 @@ export class AdminApp {
       if (rateInput && settings.commission_rate !== undefined) {
         const rate = parseFloat(settings.commission_rate);
         rateInput.value = (rate * 100);
+      }
+
+      // Radius area bandara
+      const radiusInput = document.getElementById('airportRadiusKm');
+      if (radiusInput && settings.airport_radius_km !== undefined) {
+        radiusInput.value = settings.airport_radius_km;
       }
 
       // 2. Render Email (BARU)
