@@ -65,7 +65,10 @@ void onStart(ServiceInstance service) async {
 
   StreamSubscription<Position>? posSub;
   Timer? heartbeat;
+  Timer? pasangUlang; // jadwal memasang ulang stream setelah stream mati
+  int percobaanUlang = 0; // untuk menjarangkan percobaan bila gagal terus
   Position? lastPos;
+  int gagalKirim = 0; // kegagalan kirim BERTURUT-TURUT (0 = sehat)
   // Mode akurasi: 'ontrip' (mengantar → mulus & sering) vs 'idle' (standby/offline → hemat).
   String mode = 'idle';
 
@@ -94,8 +97,15 @@ void onStart(ServiceInstance service) async {
   push = (Position pos) async {
     lastPos = pos;
     try {
-      final response =
-          await apiService.updateLocation(pos.latitude, pos.longitude);
+      // Akurasi ikut dikirim: radius area cuma 2,6 km, jadi fix yang meleset
+      // ratusan meter tidak boleh dipakai memutuskan supir di dalam/luar area.
+      final response = await apiService.updateLocation(
+        pos.latitude,
+        pos.longitude,
+        accuracy: pos.accuracy,
+      );
+
+      gagalKirim = 0; // berhasil → pulih dari kegagalan sebelumnya
 
       final data = Map<String, dynamic>.from(response.data);
       data['latitude'] = pos.latitude;
@@ -125,7 +135,15 @@ void onStart(ServiceInstance service) async {
         subscribe(); // re-subscribe dengan setting baru
       }
     } catch (e) {
-      print("Location push failed: $e");
+      // Diam-diam gagal adalah hal terburuk yang bisa terjadi di sini: notifikasi
+      // tetap memajang stempel waktu lama, supir mengira dirinya terpantau,
+      // padahal server tidak menerima apa-apa — dan sejak ada penyapu supir
+      // basi, itu berarti antriannya bisa hangus. Jadi hitung kegagalannya,
+      // tampilkan di notifikasi, dan beri tahu layar beranda.
+      gagalKirim++;
+      print("Location push failed ($gagalKirim): $e");
+      _updateNotif(notifPlugin, service, {'status': 'error', 'gagal': gagalKirim});
+      service.invoke('locationError', {'jenis': 'kirim', 'gagal': gagalKirim, 'pesan': '$e'});
     }
 
     // Heartbeat: saat DIAM (stream tak emit), tetap kirim posisi terakhir tiap
@@ -138,16 +156,39 @@ void onStart(ServiceInstance service) async {
 
   subscribe = () {
     posSub?.cancel();
+    pasangUlang?.cancel();
     posSub = Geolocator.getPositionStream(locationSettings: settingsFor(mode))
         .listen(
-      (pos) => push(pos),
-      onError: (e) => print("Location stream error: $e"),
+      (pos) {
+        percobaanUlang = 0; // stream sehat lagi
+        push(pos);
+      },
+      onError: (e) {
+        // Stream bisa mati di tengah jalan: GPS perangkat dimatikan, izin
+        // dicabut lewat Pengaturan, atau plugin lokasi bermasalah. Dulu ini
+        // cuma di-print — layanan jadi ZOMBI: notifikasi menyala, tapi tidak
+        // ada satu pun titik yang terkirim lagi dan tak seorang pun tahu.
+        print("Location stream error: $e");
+        _updateNotif(notifPlugin, service, {'status': 'gps_error'});
+        service.invoke('locationError', {'jenis': 'stream', 'pesan': '$e'});
+
+        // Pasang ulang dengan jeda: kalau penyebabnya sementara (GPS sempat
+        // dimatikan lalu dinyalakan lagi) pelacakan pulih sendiri.
+        // Jarangkan percobaan bila penyebabnya ternyata permanen (izin dicabut)
+        // supaya tidak jadi loop 15 detik yang menggerogoti baterai: 15, 30,
+        // 45... maksimal 2 menit.
+        percobaanUlang++;
+        final jeda = Duration(seconds: (15 * percobaanUlang).clamp(15, 120));
+        pasangUlang?.cancel();
+        pasangUlang = Timer(jeda, () => subscribe());
+      },
     );
   };
 
   service.on('stopService').listen((event) {
     posSub?.cancel();
     heartbeat?.cancel();
+    pasangUlang?.cancel();
     service.stopSelf();
   });
 
@@ -160,7 +201,11 @@ void onStart(ServiceInstance service) async {
     );
     await push(first);
   } catch (e) {
+    // Fix awal gagal (GPS baru menyala / di dalam gedung). Bukan alasan
+    // berhenti — stream di bawah tetap dipasang — tapi supir perlu tahu
+    // kenapa layar beranda masih kosong.
     print("Initial fix failed: $e");
+    service.invoke('locationError', {'jenis': 'fix_awal', 'pesan': '$e'});
   }
   subscribe();
 }
@@ -182,6 +227,13 @@ void _updateNotif(
     statusText = "Mengantar penumpang | $timestamp";
   } else if (status == 'closed') {
     statusText = "Di luar jam operasi — pelacakan nonaktif";
+  } else if (status == 'error') {
+    // Notifikasi adalah SATU-SATUNYA tempat supir bisa melihat pelacakannya
+    // bermasalah saat aplikasi tertutup — jangan diam.
+    final n = data['gagal'] ?? '';
+    statusText = "Lokasi gagal terkirim ${n}x — periksa koneksi | $timestamp";
+  } else if (status == 'gps_error') {
+    statusText = "GPS terputus — mencoba menyambung ulang | $timestamp";
   }
 
   if (service is AndroidServiceInstance) {

@@ -133,4 +133,31 @@ class User extends Authenticatable
             'id'           // local key bookings
         );
     }
+
+    /**
+     * Sisi CSO: booking yang DIBUAT oleh user ini (bukan yang dikerjakannya
+     * sebagai supir). Kembarannya [bookings] yang memakai 'driver_id'.
+     * Dipakai withCount() di laporan Performa CSO.
+     */
+    public function csoBookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'cso_id');
+    }
+
+    /**
+     * Sisi CSO: transaksi dari booking yang dibuat user ini (User → bookings →
+     * transactions). Kembarannya [transactions] yang lewat 'driver_id'.
+     * Dipakai withSum('csoTransactions', 'amount') di laporan Performa CSO.
+     */
+    public function csoTransactions(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            Transaction::class, // Model tujuan akhir
+            Booking::class,     // Model perantara
+            'cso_id',           // FK di tabel 'bookings' (menghubungkan ke User)
+            'booking_id',       // FK di tabel 'transactions' (menghubungkan ke Booking)
+            'id',               // Local key di tabel 'users'
+            'id'                // Local key di tabel 'bookings'
+        );
+    }
 }

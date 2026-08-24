@@ -27,6 +27,11 @@ class Transaction extends Model
         'payout_status',
         'amount',
         'receipt_token',
+        // Buku besar KEDUA: setoran tunai CSO ke admin. Sengaja terpisah dari
+        // payout_status/withdrawal_id yang mengurus hak supir — lihat migrasi
+        // 2026_08_24_000002_add_deposit_columns_to_transactions_table.
+        'cso_deposit_id',
+        'deposit_status',
     ];
 
     /**
@@ -47,6 +52,32 @@ class Transaction extends Model
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    /**
+     * Setoran CSO yang mencakup transaksi ini (null = belum pernah disetor).
+     */
+    public function csoDeposit(): BelongsTo
+    {
+        return $this->belongsTo(CsoDeposit::class, 'cso_deposit_id');
+    }
+
+    /**
+     * Tunai yang MASIH dipegang CSO dan wajib disetor ke admin.
+     *
+     * Satu-satunya definisi "belum disetor" di seluruh aplikasi — dipakai
+     * rekap per tanggal maupun saat setoran dibuat, supaya angka yang dilihat
+     * CSO dan angka yang dikunci server tidak mungkin berbeda aturan.
+     *
+     * Booking 'Cancelled' dikeluarkan: uangnya tidak pernah jadi milik koperasi.
+     */
+    public function scopeCashCsoBelumSetor($query, int $csoId)
+    {
+        return $query->where('method', 'CashCSO')
+            ->where('deposit_status', 'Unsettled')
+            ->whereHas('booking', function ($b) use ($csoId) {
+                $b->where('cso_id', $csoId)->where('status', '!=', 'Cancelled');
+            });
     }
 
     /**

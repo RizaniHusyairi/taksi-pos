@@ -8,6 +8,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Zone extends Model
 {
     use HasFactory;
-    protected $fillable = ['name', 'price'];
+    protected $fillable = ['name', 'price', 'category', 'description'];
     
 }

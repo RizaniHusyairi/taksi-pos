@@ -2,24 +2,23 @@
 
 namespace App\Jobs;
 
-use App\Models\Setting;
+use App\Services\WhatsAppService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Kirim pesan WhatsApp via WhatsApp Gateway (wg.aptpairport.id) secara async + retry.
  *
- * Format gateway:
- *   POST {wa_endpoint}   header: X-API-Key: <key>
- *   body: { deviceId, to, body }
+ * Format request/respons dan resolusi URL ditangani [WhatsAppService] agar
+ * hanya ada SATU tempat yang tahu bentuk API gateway.
  *
- * `$token` = API Key gateway (setting `wa_token`). Endpoint & deviceId dibaca dari
- * setting (`wa_endpoint`, `wa_device_id`) dengan default sesuai dokumentasi gateway.
+ * `$token` masih diterima demi kompatibilitas pemanggil lama, tapi hanya dipakai
+ * sebagai penanda "WA aktif" — kunci sebenarnya dibaca service dari setting,
+ * supaya job yang sudah mengantre tidak memakai key basi setelah admin menggantinya.
  */
 class SendWhatsAppMessage implements ShouldQueue
 {
@@ -30,7 +29,7 @@ class SendWhatsAppMessage implements ShouldQueue
     public function __construct(
         public ?string $target,
         public string $message,
-        public ?string $token,
+        public ?string $token = null,
     ) {}
 
     public function backoff(): array
@@ -40,32 +39,23 @@ class SendWhatsAppMessage implements ShouldQueue
 
     public function handle(): void
     {
-        if (!$this->target || !$this->token) {
+        if (!$this->target || !WhatsAppService::apiKey()) {
             return;
         }
 
-        $endpoint = Setting::getValue('wa_endpoint')
-            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        $hasil = WhatsAppService::send($this->target, $this->message);
 
-        // Device ID OPSIONAL: hanya kirim bila diisi. Bila kosong, gateway
-        // memakai device bawaan API Key — mencegah HTTP 403 "API Key tidak
-        // diizinkan memakai device lain" saat key terikat ke satu device.
-        $payload = ['to' => $this->target, 'body' => $this->message];
-        $deviceRaw = trim((string) Setting::getValue('wa_device_id'));
-        if ($deviceRaw !== '') {
-            $payload['deviceId'] = (int) $deviceRaw;
+        if ($hasil['ok']) {
+            return;
         }
 
-        $response = Http::withHeaders(['X-API-Key' => $this->token])
-            ->acceptJson()
-            ->post($endpoint, $payload);
-
-        if ($response->failed()) {
-            // 5xx / transient → lempar agar di-retry. 4xx (key/nomor invalid) → catat.
-            if ($response->serverError()) {
-                throw new \RuntimeException("WA Gateway 5xx: {$response->status()}");
-            }
-            Log::warning("WA Gateway gagal (tidak di-retry): {$response->status()} {$response->body()}");
+        // 5xx / gangguan jaringan → lempar agar di-retry.
+        // 4xx & success:false (key/nomor/scope salah) → percuma diulang, cukup dicatat.
+        $status = $hasil['status'];
+        if ($status === null || $status >= 500) {
+            throw new \RuntimeException('WA Gateway tidak dapat dihubungi: ' . $hasil['message']);
         }
+
+        Log::warning("WA Gateway gagal (tidak di-retry): HTTP {$status} — {$hasil['message']}");
     }
 }

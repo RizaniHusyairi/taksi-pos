@@ -15,7 +15,6 @@ use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\WithdrawalRequestNotification;
-use App\Services\WhatsAppService;
 
 class DriverApiController extends Controller
 {
@@ -79,8 +78,19 @@ class DriverApiController extends Controller
         if ($driver->driverProfile && $driver->driverProfile->status === 'standby') {
             $myQueue = DriverQueue::where('user_id', $driver->id)->first();
             if ($myQueue) {
-                // Posisi = Jumlah antrian dengan sort_order lebih kecil + 1
-                $position = DriverQueue::where('sort_order', '<', $myQueue->sort_order)->count() + 1;
+                // Posisi = jumlah antrian yang berada DI DEPAN saya + 1.
+                // Pemecah seri created_at wajib ada: seluruh supir rejoin
+                // berbagi sort_order 1000, jadi tanpa ini mereka semua melihat
+                // nomor yang sama — dan berbeda dari urutan yang benar-benar
+                // dipakai CSO (lihat CsoApiController::readyQueueQuery:
+                // sort_order ASC, lalu created_at ASC).
+                $position = DriverQueue::where(function ($q) use ($myQueue) {
+                        $q->where('sort_order', '<', $myQueue->sort_order)
+                          ->orWhere(function ($sama) use ($myQueue) {
+                              $sama->where('sort_order', $myQueue->sort_order)
+                                   ->where('created_at', '<', $myQueue->created_at);
+                          });
+                    })->count() + 1;
                 $driver->queue_position = $position;
             } else {
                 $driver->queue_position = null;
@@ -110,8 +120,8 @@ class DriverApiController extends Controller
         // ... (Validasi tetap sama) ...
         $validated = $request->validate([
             'action' => 'required|in:join,leave',
-            'latitude'  => 'required_if:action,join|numeric',
-            'longitude' => 'required_if:action,join|numeric',
+            'latitude'  => 'required_if:action,join|numeric|between:-90,90',
+            'longitude' => 'required_if:action,join|numeric|between:-180,180',
             'reason'             => 'required_if:action,leave|in:self,other',
             'manual_destination' => 'required_if:reason,self|string|nullable',
             'manual_price'       => 'required_if:reason,self|numeric|min:0',
@@ -123,43 +133,24 @@ class DriverApiController extends Controller
 
         if ($validated['action'] === 'join') {
             // ... (Logika Join Tetap Sama) ...
-            $airportLat = config('taksi.driver_queue.latitude');
-            $airportLng = config('taksi.driver_queue.longitude');
+            $airportLat = Setting::airportLatitude();
+            $airportLng = Setting::airportLongitude();
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
-            
-            // RESET BLOCKED STATUS
-            $profile->update(['auto_join_blocked' => false]);
 
-            // Ganti 2.0 dengan 10000.0 untuk testing
-            if ($distance > config('taksi.driver_queue.radius_km')) { 
+            // Radius dari Pengaturan admin (bukan config mentah) supaya jalur
+            // join memakai geofence yang sama dengan pengecekan in_area.
+            if ($distance > Setting::airportRadiusKm()) {
                 return response()->json(['message' => 'Terlalu jauh dari bandara.'], 422);
             }
 
-            $sortOrder = 1000; // Default untuk Re-join (Antrian Belakang)
+            // RESET BLOCKED STATUS — sengaja SETELAH pemeriksaan jarak. Kalau
+            // dibersihkan lebih dulu, permintaan join yang ditolak pun tetap
+            // mematikan blokir, sehingga supir yang tadi dikeluarkan otomatis
+            // bisa tertarik masuk lagi oleh auto-join tanpa tindakan sadar.
+            $profile->update(['auto_join_blocked' => false]);
+
             $today = now()->toDateString();
-            
-            // Cek apakah ini pertama kali masuk hari ini?
-            // Syarat: Tanggal terakhir masuk BUKAN hari ini
-            $isFirstJoinToday = ($profile->last_queue_date !== $today);
-
-            if ($isFirstJoinToday && $profile->line_number) {
-                // INI ADALAH FIRST JOIN -> HITUNG PRIORITAS BERDASARKAN ROTASI
-                
-                // Ambil Angka Giliran Hari Ini (Default 1 jika error)
-                $dailyStart = (int) Setting::getValue('daily_start_line') ?: 1;
-                $myLine = $profile->line_number;
-                $totalDrivers = \App\Models\DriverProfile::max('line_number') ?: 30; // jumlah driver dinamis
-
-                // Rumus Matematika Rotasi
-                if ($myLine >= $dailyStart) {
-                    // Kasus Normal: Giliran 5, Saya 6. Posisi = 6 - 5 = 1 (Urutan ke-2 karena index 0)
-                    $sortOrder = $myLine - $dailyStart;
-                } else {
-                    // Kasus Wrapping: Giliran 28, Saya 2. Saya harus di bawah 30.
-                    // Posisi = (30 - 28) + 2 = 4.
-                    $sortOrder = ($totalDrivers - $dailyStart) + $myLine;
-                }
-            }
+            $sortOrder = $this->queueSortOrderFor($profile);
 
             // Simpan ke antrian memakai sort_order hasil ROTASI:
             //  - first-join hari ini  -> posisi giliran (mis. 0,1,2,... berdasar line_number)
@@ -181,7 +172,14 @@ class DriverApiController extends Controller
 
             $profile->update([
                 'last_queue_date' => $today,
-                'status' => 'standby' // Update status jadi standby
+                'status' => 'standby', // Update status jadi standby
+                // Koordinat join ADALAH bukti kehadiran terbaru. Wajib dicatat:
+                // penyapu `queue:sweep-stale` menilai kehadiran dari
+                // location_updated_at, jadi tanpa ini supir yang baru saja
+                // menekan "Masuk Antrian" bisa langsung tersapu keluar.
+                'latitude'            => $request->latitude,
+                'longitude'           => $request->longitude,
+                'location_updated_at' => now(),
             ]);
             
             // LOG ACTIVITY
@@ -238,6 +236,41 @@ class DriverApiController extends Controller
             'message' => $msg,
             'data' => $userWithStatus
         ]);
+    }
+
+    /**
+     * Posisi antrian untuk supir yang BARU masuk — dipakai jalur join manual
+     * MAUPUN auto-join, supaya kedua pintu masuk tidak pernah lagi memakai
+     * aturan berbeda (dulu auto-join memakai max+1 sehingga rotasi harian
+     * tidak pernah berlaku, bahkan bisa menaruh first-join di belakang grup
+     * rejoin yang ber-sort_order 1000).
+     *
+     *  - kedatangan PERTAMA hari ini -> urutan giliran hasil rotasi
+     *    (line_number vs daily_start_line), bernilai 0..jumlah_supir
+     *  - kedatangan berikutnya       -> 1000 (grup "Rejoin", antrian belakang)
+     */
+    private function queueSortOrderFor($profile): int
+    {
+        $isFirstJoinToday = ($profile->last_queue_date !== now()->toDateString());
+
+        if (!$isFirstJoinToday || !$profile->line_number) {
+            return 1000;
+        }
+
+        // Ambil Angka Giliran Hari Ini (Default 1 jika error)
+        $dailyStart = (int) Setting::getValue('daily_start_line') ?: 1;
+        $myLine = (int) $profile->line_number;
+        $totalDrivers = \App\Models\DriverProfile::max('line_number') ?: 30; // jumlah driver dinamis
+
+        // Rumus Matematika Rotasi
+        if ($myLine >= $dailyStart) {
+            // Kasus Normal: Giliran 5, Saya 6. Posisi = 6 - 5 = 1 (Urutan ke-2 karena index 0)
+            return $myLine - $dailyStart;
+        }
+
+        // Kasus Wrapping: Giliran 28, Saya 2. Saya harus di bawah 30.
+        // Posisi = (30 - 28) + 2 = 4.
+        return ($totalDrivers - $dailyStart) + $myLine;
     }
 
     /**
@@ -566,13 +599,48 @@ class DriverApiController extends Controller
         ]);
     }
 
+    /**
+     * Titik pusat & radius area bandara untuk peta di beranda supir.
+     *
+     * Dipisah dari updateLocation() yang punya belasan titik keluar berbeda —
+     * peta hanya butuh geofence-nya, dan datanya nyaris tak pernah berubah
+     * sehingga aman diambil sekali lalu di-cache aplikasi.
+     * Bentuk `base` sengaja disamakan dengan endpoint peta CSO & admin.
+     */
+    public function getAirportArea()
+    {
+        return response()->json([
+            'base' => [
+                'latitude'  => Setting::airportLatitude(),
+                'longitude' => Setting::airportLongitude(),
+                'radius_km' => Setting::airportRadiusKm(),
+            ],
+        ]);
+    }
+
     public function updateLocation(Request $request)
     {
         // ... (Validasi & Cek Queue tetap sama) ...
         $request->validate([
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
+            // Rentang WAJIB dibatasi: tanpa ini, fix cacat (0,0) diterima apa
+            // adanya dan menghasilkan jarak ~12.000 km — supir langsung
+            // dinyatakan di luar area dan jam tenggangnya mulai berjalan.
+            'latitude'  => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            // Akurasi (meter) dari perangkat. Opsional supaya versi aplikasi
+            // lama tetap jalan — bila tidak dikirim, fix dianggap layak.
+            'accuracy'  => 'nullable|numeric|min:0',
         ]);
+
+        // (0,0) bukan lokasi nyata — itu sentinel "belum ada fix" yang memang
+        // muncul di sistem ini (lihat catatan pre-fill rotasi di
+        // CsoApiController::readyQueueQuery). Kalau diterima, jaraknya ke
+        // bandara ~12.000 km dan supir langsung dinyatakan di luar area.
+        // Ditolak SEBELUM disimpan supaya tidak ikut menyegarkan bukti
+        // kehadiran (location_updated_at) juga.
+        if ((float) $request->latitude === 0.0 && (float) $request->longitude === 0.0) {
+            return response()->json(['message' => 'Koordinat tidak valid (0,0).'], 422);
+        }
 
         $user = $request->user();
         $profile = $user->driverProfile;
@@ -614,11 +682,36 @@ class DriverApiController extends Controller
         $isInQueue = DriverQueue::where('user_id', $user->id)->exists();
         
         // 2. Cek Jarak
-        $airportLat = config('taksi.driver_queue.latitude');
-        $airportLng = config('taksi.driver_queue.longitude');
+        $airportLat = Setting::airportLatitude();
+        $airportLng = Setting::airportLongitude();
         $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
         $radius = Setting::airportRadiusKm();
-        $inArea = ($distance <= $radius);
+        $prevInArea = $profile ? $profile->last_in_area : null; // null = belum ada baseline
+
+        // Fix yang akurasinya buruk TIDAK dipakai untuk memutuskan geofence:
+        // posisinya sudah terlanjur disimpan di atas (peta CSO tetap hidup dan
+        // supir tetap terhitung "mengirim kabar"), tapi status di dalam/luar
+        // area dipertahankan apa adanya sampai datang fix yang layak.
+        $accuracy = $request->filled('accuracy') ? (float) $request->accuracy : null;
+        $batasAkurasi = (float) config('taksi.driver_queue.poor_accuracy_meters');
+        $fixMeragukan = $accuracy !== null && $batasAkurasi > 0 && $accuracy > $batasAkurasi;
+
+        if ($fixMeragukan && $prevInArea !== null) {
+            $inArea = (bool) $prevInArea;
+        } else {
+            // Histeresis: sekali di DALAM, baru dianggap keluar setelah melewati
+            // radius + sabuk. Mencegah supir yang parkir di tepi lingkaran
+            // bolak-balik "masuk-keluar" hanya karena jitter GPS.
+            $sabuk = (float) config('taksi.driver_queue.geofence_hysteresis_km');
+            $ambang = $prevInArea === true ? $radius + $sabuk : $radius;
+            $inArea = ($distance <= $ambang);
+        }
+
+        // Tenggang "di luar area" (detik) dari Pengaturan admin. 0 = auto-keluar
+        // antrian dinonaktifkan: supir tetap ditandai di luar area & tercatat di
+        // log, tapi antriannya tidak pernah hangus sendiri.
+        $graceMinutes = Setting::outOfAreaGraceMinutes();
+        $graceSeconds = $graceMinutes * 60;
 
         // Gerbang jam operasi: app akan mematikan layanan lokasi bila false
         // & tidak sedang mengantar (lihat background_service.dart).
@@ -627,7 +720,7 @@ class DriverApiController extends Controller
         // Hitung berapa kali supir KELUAR-MASUK area bandara (independen dari
         // status antrian) — bandingkan dengan state in_area sebelumnya.
         if ($profile) {
-            $prev = $profile->last_in_area; // null (baseline) | bool
+            $prev = $prevInArea; // null (baseline) | bool — dibaca sebelum histeresis
             if ($prev === null) {
                 $profile->update(['last_in_area' => $inArea]);
             } elseif ((bool) $prev !== $inArea) {
@@ -646,22 +739,32 @@ class DriverApiController extends Controller
         // Global Warning: Jika diluar area saat standby -> Cek Grace Period
         $remainingTime = null;
         
-        if ($profile->status === 'standby' && !$inArea) {
+        if ($profile->status === 'standby' && !$inArea && $graceSeconds === 0) {
+             // Auto-keluar dimatikan admin. Penanda TETAP diisi — CSO memakai
+             // `out_of_area_since` untuk menyaring supir yang tak boleh dapat
+             // order (lihat CsoApiController::readyQueueQuery) — tapi selalu
+             // disegarkan ke SEKARANG supaya jam tenggang tidak diam-diam
+             // menumpuk. Kalau admin menyalakan lagi auto-keluar, hitung mundur
+             // mulai dari nol, bukan dari saat supir keluar area berjam-jam lalu.
+             if (!$profile->out_of_area_since) {
+                 $this->logActivity($user->id, 'AREA_LEAVE_WARNING', 'Keluar Area (auto-keluar nonaktif)');
+             }
+             $profile->update(['out_of_area_since' => now()]);
+        } elseif ($profile->status === 'standby' && !$inArea) {
              // Jika baru saja keluar area (out_of_area_since masih null)
              if (!$profile->out_of_area_since) {
                  $profile->update(['out_of_area_since' => now()]);
                  // LOG ACTIVITY
                  $this->logActivity($user->id, 'AREA_LEAVE_WARNING', 'Keluar Area (Peringatan dimulai)');
-                 $remainingTime = 3600; // Full 60 minutes
-             } else {
+                 $remainingTime = $graceSeconds > 0 ? $graceSeconds : null;
+             } elseif ($graceSeconds > 0) {
                  // Cek durasi
                  $outSince = \Carbon\Carbon::parse($profile->out_of_area_since);
                  
                  // Gunakan timestamp agar hasil pasti integer dan positif
                  $diffInSeconds = now()->timestamp - $outSince->timestamp;
-                 $gracePeriodSeconds = 3600; 
                  
-                 if ($diffInSeconds >= $gracePeriodSeconds) {
+                 if ($diffInSeconds >= $graceSeconds) {
                      // AUTO KICK
                      DriverQueue::where('user_id', $user->id)->delete();
                      $profile->update([
@@ -671,17 +774,18 @@ class DriverApiController extends Controller
                      ]);
 
                      // LOG ACTIVITY
-                     $this->logActivity($user->id, 'QUEUE_LEAVE_AUTO', 'Dikeluarkan dari antrian (Timeout: >1 Jam diluar area)');
+                     $this->logActivity($user->id, 'QUEUE_LEAVE_AUTO', "Dikeluarkan dari antrian (Timeout: >{$graceMinutes} menit diluar area)");
                      
                      return response()->json([
                          'status' => 'offline',
                          'in_area' => false,
                          'tracking_open' => $trackingOpen,
-                         'message' => 'Antrian hangus karena diluar area lebih dari 60 menit.'
+                         'grace_enabled' => true,
+                         'message' => "Antrian hangus karena diluar area lebih dari {$graceMinutes} menit."
                      ]);
                  }
                  
-                 $remainingTime = (int) ($gracePeriodSeconds - $diffInSeconds);
+                 $remainingTime = (int) ($graceSeconds - $diffInSeconds);
              }
         } elseif ($profile->status === 'standby' && $inArea) {
              // Jika kembali ke area -> Reset Grace Period
@@ -706,11 +810,12 @@ class DriverApiController extends Controller
             }
 
             if (!$isInQueue) {
-                // Skenario Normal: Masuk Antrian Baru
-                $maxSort = DriverQueue::max('sort_order') ?? 0;
+                // Skenario Normal: Masuk Antrian Baru.
+                // Urutan memakai rumus rotasi yang SAMA dengan join manual —
+                // lihat queueSortOrderFor().
                 DriverQueue::create([
                     'user_id' => $user->id,
-                    'sort_order' => $maxSort + 1,
+                    'sort_order' => $this->queueSortOrderFor($profile),
                     'latitude' => $request->latitude,
                     'longitude' => $request->longitude
                 ]);
@@ -766,6 +871,9 @@ class DriverApiController extends Controller
             'status' => $profile->status,
             'in_area' => $inArea,
             'remaining_time' => $remainingTime,
+            // false = admin mematikan auto-keluar antrian; app menampilkan
+            // status "aman" alih-alih hitung mundur kosong.
+            'grace_enabled' => $graceSeconds > 0,
             'line_number' => $lineNumber,
             'tracking_open' => $trackingOpen,
         ]);

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../widgets/sky_backdrop.dart';
+import '../widgets/splash_backdrop.dart';
 
 /// Layar pembuka beranimasi (logo muncul perlahan) di atas langit beranimasi.
 class SplashScreen extends StatefulWidget {
@@ -31,7 +31,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SkyBackdrop(
+      body: SplashBackdrop(
         child: Center(
           child: FadeTransition(
             opacity: _fade,

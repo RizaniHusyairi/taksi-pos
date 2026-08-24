@@ -14,11 +14,16 @@ class QueueDriver {
   final String status; // standby / available / offline
   final int queueScore;
 
+  /// Ditentukan backend (`is_next` di level teratas objek user): supir inilah
+  /// yang sedang mendapat giliran. Jangan ditebak di sisi klien.
+  final bool isNext;
+
   const QueueDriver({
     required this.id,
     required this.name,
     required this.status,
     required this.queueScore,
+    this.isNext = false,
     this.carModel,
     this.plateNumber,
     this.lineNumber,
@@ -43,6 +48,7 @@ class QueueDriver {
       lineNumber: toInt(profile['line_number']),
       status: (profile['status'] ?? 'offline').toString(),
       queueScore: toInt(profile['queue_score']) ?? 0,
+      isNext: json['is_next'] == true,
     );
   }
 }

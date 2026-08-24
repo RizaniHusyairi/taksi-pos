@@ -212,6 +212,90 @@
     ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); rounded: auto; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* ================= ZONA & TARIF ================= */
+    .zona-input{width:100%;border-radius:.75rem;font-size:.875rem;padding:.6rem .75rem;background:rgba(255,255,255,.6);border:1px solid #e5e7eb;color:#1f2937;transition:border-color .2s,box-shadow .2s,background .2s}
+    .dark .zona-input{background:rgba(0,0,0,.25);border-color:rgba(255,255,255,.1);color:#e5e7eb}
+    .zona-input::placeholder{color:#9ca3af}
+    .zona-input:focus{outline:none;border-color:#14b8a6;box-shadow:0 0 0 3px rgba(20,184,166,.18);background:#fff}
+    .dark .zona-input:focus{background:rgba(0,0,0,.4)}
+    .sort-th{cursor:pointer;transition:color .2s,background .2s;white-space:nowrap}
+    .sort-th:hover{color:#0d9488;background:rgba(20,184,166,.06)}
+    .dark .sort-th:hover{color:#5eead4;background:rgba(20,184,166,.08)}
+    .sort-ind::after{content:'\2195';opacity:.4;margin-left:5px;font-size:11px;display:inline-block;transition:opacity .2s}
+    .sort-th.sort-asc .sort-ind::after{content:'\2191';opacity:1;color:#14b8a6}
+    .sort-th.sort-desc .sort-ind::after{content:'\2193';opacity:1;color:#14b8a6}
+    @keyframes zoneRowIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+    #zonesTable tr{animation:zoneRowIn .32s both;transition:background .18s}
+    #zonesTable tr:not(.zona-group):hover{background:rgba(20,184,166,.06)}
+    .dark #zonesTable tr:not(.zona-group):hover{background:rgba(20,184,166,.09)}
+    .zona-act{width:32px;height:32px;display:inline-grid;place-items:center;border-radius:.6rem;transition:background .2s,transform .2s,color .2s}
+    .zona-act:hover{transform:translateY(-1px)}
+    .zona-act svg{width:16px;height:16px}
+    .zona-edit{color:#0d9488}
+    .zona-edit:hover{background:rgba(20,184,166,.14)}
+    .zona-del{color:#ef4444}
+    .zona-del:hover{background:rgba(239,68,68,.14)}
+    /* Toggle kategori (Dalam/Luar Kota) di form */
+    .zona-cat{display:flex;align-items:center;justify-content:center;gap:6px;padding:.55rem .5rem;border-radius:.75rem;font-size:.78rem;font-weight:600;color:#6b7280;background:rgba(148,163,184,.12);border:1px solid transparent;cursor:pointer;transition:color .2s,background .2s,box-shadow .2s,transform .15s}
+    .dark .zona-cat{color:#94a3b8;background:rgba(148,163,184,.09)}
+    .zona-cat svg{width:15px;height:15px}
+    .zona-cat:hover{transform:translateY(-1px)}
+    .zona-cat.active[data-cat="dalam"]{color:#fff;background:linear-gradient(135deg,#0284c7,#38bdf8);box-shadow:0 5px 14px -4px rgba(56,189,248,.55)}
+    .zona-cat.active[data-cat="luar"]{color:#78350f;background:linear-gradient(135deg,#fbbf24,#f59e0b);box-shadow:0 5px 14px -4px rgba(245,158,11,.55)}
+    /* Baris header grup pada tabel (Dalam/Luar Kota — warna ala poster) */
+    .zona-group td{padding:.55rem 1.25rem;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+    .zona-group td svg{width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-right:6px}
+    .zona-group.g-dalam td{background:rgba(56,189,248,.12);color:#0369a1}
+    .dark .zona-group.g-dalam td{background:rgba(56,189,248,.10);color:#7dd3fc}
+    .zona-group.g-luar td{background:rgba(245,158,11,.12);color:#b45309}
+    .dark .zona-group.g-luar td{background:rgba(245,158,11,.10);color:#fbbf24}
+
+    /* ===== Halaman Pengaturan ===== */
+    /* Dipakai juga oleh #repRevResult yang sudah memakai kelas ini sejak lama
+       tapi belum pernah didefinisikan — sekarang animasinya benar-benar jalan. */
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+    .animate-fade-in{animation:fadeInUp .28s ease both}
+
+    /* Tab */
+    .stab{
+      display:flex;align-items:center;gap:.45rem;white-space:nowrap;
+      padding:.6rem .95rem;border-bottom:2px solid transparent;border-radius:.6rem .6rem 0 0;
+      font-size:.82rem;font-weight:600;color:#64748b;cursor:pointer;
+      transition:color .2s,background .2s,border-color .2s;
+    }
+    .dark .stab{color:#94a3b8}
+    .stab svg{width:16px;height:16px}
+    .stab:hover{color:#0d9488;background:rgba(20,184,166,.07)}
+    .dark .stab:hover{color:#5eead4;background:rgba(20,184,166,.10)}
+    .stab.active{color:#0d9488;border-bottom-color:#14b8a6;background:rgba(20,184,166,.08)}
+    .dark .stab.active{color:#5eead4;background:rgba(20,184,166,.12)}
+
+    /* Label & isian */
+    .stlabel{display:block;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:.4rem}
+    .dark .stlabel{color:#94a3b8}
+    .stlabel-sm{display:block;font-size:.72rem;font-weight:600;color:#64748b;margin-bottom:.3rem}
+    .dark .stlabel-sm{color:#94a3b8}
+    .sthint{font-size:.69rem;line-height:1.5;color:#94a3b8}
+    .dark .sthint{color:#64748b}
+    .stinput{
+      width:100%;border-radius:.75rem;border:1px solid #e5e7eb;background:#f9fafb;
+      font-size:.875rem;padding:.62rem .75rem;color:#0f172a;
+      transition:border-color .2s,box-shadow .2s,background .2s;
+    }
+    .stinput:focus{outline:none;border-color:#14b8a6;box-shadow:0 0 0 3px rgba(20,184,166,.18);background:#fff}
+    .dark .stinput{border-color:rgba(255,255,255,.10);background:rgba(0,0,0,.22);color:#e2e8f0}
+    .dark .stinput:focus{background:rgba(0,0,0,.30)}
+    .steye{
+      position:absolute;right:.6rem;top:50%;transform:translateY(-50%);
+      color:#94a3b8;cursor:pointer;transition:color .2s;line-height:0;
+    }
+    .steye:hover{color:#475569}
+    .dark .steye:hover{color:#e2e8f0}
+    .steye svg{width:18px;height:18px}
+
+    /* Wadah unggah QRIS saat berkas diseret ke atasnya */
+    #qrisDrop.dragover{border-color:#14b8a6;background:rgba(20,184,166,.07)}
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800 dark:bg-bgDark dark:text-gray-200 antialiased selection:bg-primary-500 selection:text-white font-sans">
@@ -272,6 +356,11 @@
             <span class="font-medium">Pencairan Dana</span>
           </a>
 
+          <a href="#cso-deposits" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+            <span class="font-medium">Setoran CSO</span>
+          </a>
+
           <div class="nav-section">Laporan</div>
           
           <a href="#report-revenue" class="nav-link">
@@ -282,6 +371,11 @@
           <a href="#report-driver" class="nav-link">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
             <span class="font-medium">Kinerja Supir</span>
+          </a>
+
+          <a href="#cso-performance" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 18v-6a6 6 0 10-12 0v6M4 14h2a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm16 0v4a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3a1 1 0 011-1h2z"></path></svg>
+            <span class="font-medium">Performa CSO</span>
           </a>
 
           <div class="nav-section">Live</div>
@@ -387,6 +481,7 @@
                 </div>
               </div>
               <div id="metricRevenueToday" class="text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight">Rp0</div>
+              <div id="metricRevenueDelta" class="mt-1.5 text-[11px] font-semibold text-gray-400">&nbsp;</div>
             </div>
 
             <!-- Metric 2 -->
@@ -402,6 +497,7 @@
                 </div>
               </div>
               <div id="metricTxCount" class="text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight">0</div>
+              <div id="metricTxDelta" class="mt-1.5 text-[11px] font-semibold text-gray-400">&nbsp;</div>
             </div>
 
             <!-- Metric 3 -->
@@ -419,6 +515,7 @@
                 </div>
               </div>
               <div id="metricActiveDrivers" class="text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight">0</div>
+              <div id="metricDriversBreakdown" class="mt-1.5 text-[11px] font-semibold text-gray-400">&nbsp;</div>
             </div>
 
              <!-- Metric 4 -->
@@ -434,6 +531,66 @@
                 </div>
               </div>
               <div id="metricPendingWd" class="text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight">0</div>
+              <div id="metricPendingWdAmount" class="mt-1.5 text-[11px] font-semibold text-gray-400">&nbsp;</div>
+            </div>
+          </div>
+
+          <!-- Gambaran operasional hari ini: uang masuk + denyut aktivitas -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Uang masuk hari ini -->
+            <div class="glass-card rounded-2xl p-5">
+              <div class="flex items-start justify-between mb-4">
+                <div>
+                  <h3 class="font-bold text-gray-800 dark:text-white text-lg">Uang Masuk Hari Ini</h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">Rincian per metode pembayaran</p>
+                </div>
+                <div id="payTotal" class="text-xl font-extrabold text-gray-800 dark:text-white">Rp 0</div>
+              </div>
+
+              <div class="h-3 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden flex">
+                <div id="payBarCashCso" class="h-full bg-emerald-500 transition-all duration-500" style="width:0%"></div>
+                <div id="payBarCashDriver" class="h-full bg-amber-500 transition-all duration-500" style="width:0%"></div>
+                <div id="payBarQris" class="h-full bg-violet-500 transition-all duration-500" style="width:0%"></div>
+              </div>
+              <p id="payEmpty" class="hidden text-[11px] text-gray-400 mt-2">Belum ada transaksi hari ini.</p>
+
+              <div class="grid grid-cols-3 gap-3 mt-4">
+                <div>
+                  <p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Tunai CSO</p>
+                  <p id="payCashCso" class="text-sm font-bold text-gray-800 dark:text-gray-100 mt-1">Rp 0</p>
+                </div>
+                <div>
+                  <p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Tunai Supir</p>
+                  <p id="payCashDriver" class="text-sm font-bold text-gray-800 dark:text-gray-100 mt-1">Rp 0</p>
+                </div>
+                <div>
+                  <p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider"><span class="w-2 h-2 rounded-full bg-violet-500"></span>QRIS</p>
+                  <p id="payQris" class="text-sm font-bold text-gray-800 dark:text-gray-100 mt-1">Rp 0</p>
+                </div>
+              </div>
+
+              <div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/10 flex items-center justify-between gap-3">
+                <div>
+                  <p class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Hutang Setoran Supir</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">Tunai yang masih dipegang supir &amp; belum disetor</p>
+                </div>
+                <p id="payDriverDebt" class="text-lg font-extrabold text-amber-600 dark:text-amber-400 shrink-0">Rp 0</p>
+              </div>
+            </div>
+
+            <!-- Aktivitas terbaru -->
+            <div class="glass-card rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-bold text-gray-800 dark:text-white text-lg">Aktivitas Terbaru</h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">8 transaksi terakhir</p>
+                </div>
+                <div class="p-1.5 bg-gray-100 dark:bg-white/5 rounded-lg text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+              </div>
+              <div id="recentActivity" class="divide-y divide-gray-100 dark:divide-white/5 -my-2"></div>
             </div>
           </div>
 
@@ -449,7 +606,7 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
                  </div>
               </div>
-              <canvas id="weeklyChart" height="100"></canvas>
+              <div class="relative" style="height: 210px;"><canvas id="weeklyChart"></canvas></div>
             </div>
             
             <div class="glass-card rounded-2xl p-5">
@@ -462,7 +619,48 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                  </div>
               </div>
-              <canvas id="monthlyChart" height="100"></canvas>
+              <div class="relative" style="height: 210px;"><canvas id="monthlyChart"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Performa Supir & CSO -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- Papan peringkat supir -->
+            <div class="glass-card rounded-2xl p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="font-bold text-gray-800 dark:text-white text-lg">Papan Peringkat Supir</h3>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">6 supir teratas sepanjang waktu</p>
+                </div>
+                <select id="dashDriverMetric" class="rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-xs py-1.5 px-2.5 focus:ring-primary-500 focus:border-primary-500 cursor-pointer">
+                  <option value="revenue">Pendapatan</option>
+                  <option value="trips">Jumlah Trip</option>
+                  <option value="rating">Rating</option>
+                </select>
+              </div>
+              <div class="relative" style="height: 240px;">
+                <canvas id="driverPerfChart"></canvas>
+              </div>
+              <p id="driverPerfEmpty" class="hidden text-center text-xs text-gray-400 py-10">Belum ada data kinerja supir.</p>
+            </div>
+
+            <!-- Kontribusi CSO -->
+            <div class="glass-card rounded-2xl p-5">
+              <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 class="font-bold text-gray-800 dark:text-white text-lg">Kontribusi Pesanan CSO</h3>
+                  <p id="csoChartPeriod" class="text-xs text-gray-500 dark:text-gray-400">Bulan berjalan</p>
+                </div>
+                <div class="p-1.5 bg-gray-100 dark:bg-white/5 rounded-lg text-gray-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+                </div>
+              </div>
+              <div class="relative" style="height: 240px;">
+                <canvas id="csoPerfChart"></canvas>
+              </div>
+              <div id="csoChartLegend" class="flex flex-wrap gap-x-4 gap-y-1.5 mt-4 text-xs"></div>
+              <p id="csoPerfEmpty" class="hidden text-center text-xs text-gray-400 py-10">Belum ada pesanan bulan ini.</p>
             </div>
           </div>
         </section>
@@ -502,37 +700,84 @@
       <!-- ZONES VIEW -->
       <section id="view-zones" class="hidden space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div class="glass-card rounded-2xl p-5 lg:col-span-1">
-            <h3 class="font-bold text-gray-800 dark:text-white text-lg mb-6">Data Zona Tujuan</h3>
-            <form id="formZone" class="space-y-4">
+          <!-- FORM ZONA -->
+          <div class="glass-card rounded-2xl p-6 lg:col-span-1 self-start">
+            <div class="flex items-center gap-3 mb-6">
+              <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-accent text-white grid place-items-center shadow-lg shadow-primary-500/30">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              </div>
+              <div>
+                <h3 class="font-bold text-gray-800 dark:text-white text-lg leading-tight">Data Zona Tujuan</h3>
+                <p id="zoneFormMode" class="text-xs text-gray-500 dark:text-gray-400">Tambah zona &amp; tarif baru</p>
+              </div>
+            </div>
+            <form id="formZone" class="space-y-5">
               <input type="hidden" id="zoneId">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Nama Zona</label>
-                <input id="zoneName" class="w-full rounded-xl border-gray-200 bg-white/50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors" required>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg></span>
+                  <input id="zoneName" placeholder="mis. Samboja" class="zona-input pl-10" required>
+                </div>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Tarif (Rp)</label>
-                <input id="zonePrice" type="number" min="0" class="w-full rounded-xl border-gray-200 bg-white/50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors" required>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold pointer-events-none">Rp</span>
+                  <input id="zonePrice" type="number" min="0" placeholder="0" class="zona-input pl-10" required>
+                </div>
               </div>
-              <div class="flex gap-3 pt-2">
-                <button class="flex-1 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-xl py-2.5 font-semibold text-sm shadow-md shadow-primary-500/30 transition-all">Simpan</button>
-                <button type="button" id="zoneReset" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 font-medium text-sm transition-colors border border-transparent dark:border-white/5">Reset</button>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Kategori</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button type="button" class="zona-cat active" data-cat="dalam">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    Dalam Kota
+                  </button>
+                  <button type="button" class="zona-cat" data-cat="luar">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Luar Kota
+                  </button>
+                </div>
+                <input type="hidden" id="zoneCategory" value="dalam">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Keterangan Area <span class="font-normal normal-case tracking-normal text-gray-400">(opsional)</span></label>
+                <input id="zoneDescription" placeholder="mis. Depan Bandara" class="zona-input">
+              </div>
+              <div class="flex gap-3 pt-1">
+                <button class="flex-1 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-xl py-2.5 font-semibold text-sm shadow-md shadow-primary-500/30 transition-all hover:shadow-lg hover:shadow-primary-500/40 hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                  <span id="zoneSubmitText">Simpan</span>
+                </button>
+                <button type="button" id="zoneReset" class="px-5 bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 font-medium text-sm transition-colors">Reset</button>
               </div>
             </form>
           </div>
 
-          <div class="glass-card rounded-2xl p-5 lg:col-span-2">
-            <div class="mb-6">
-              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Daftar Tarif Zona</h3>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Perkiraan biaya dari titik awal (Bandara).</p>
+          <!-- TABEL ZONA -->
+          <div class="glass-card rounded-2xl p-6 lg:col-span-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+              <div>
+                <h3 class="font-bold text-gray-800 dark:text-white text-lg flex items-center gap-2">
+                  Daftar Tarif Zona
+                  <span id="zoneCount" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-500/20 dark:text-primary-300">0</span>
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Perkiraan biaya dari titik awal (Bandara).</p>
+              </div>
+              <div class="relative sm:w-60">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></span>
+                <input id="zoneSearch" type="text" placeholder="Cari zona..." class="zona-input pl-9 pr-8 py-2">
+                <button type="button" id="zoneSearchClear" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hidden"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+              </div>
             </div>
-            <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/40 dark:bg-black/20 backdrop-blur-sm">
               <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider select-none">
                   <tr>
-                    <th class="py-4 px-5">Tujuan</th>
-                    <th class="py-4 px-5 text-right">Tarif Dasar</th>
-                    <th class="py-4 px-5 text-center w-32">Opsi</th>
+                    <th class="py-3.5 px-5 sort-th" data-sort="name">Tujuan<span class="sort-ind"></span></th>
+                    <th class="py-3.5 px-5 text-right sort-th" data-sort="price">Tarif Dasar<span class="sort-ind"></span></th>
+                    <th class="py-3.5 px-5 text-center w-28">Opsi</th>
                   </tr>
                 </thead>
                 <tbody id="zonesTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
@@ -751,6 +996,69 @@
           </div>
         </div>
       </section>
+      <!-- ===== Setoran tunai CSO ke admin ===== -->
+      <section id="view-cso-deposits" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Setoran Tunai CSO</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Uang tunai penumpang (metode <b>Tunai ke Kasir</b>) yang diserahkan CSO ke admin.</p>
+            </div>
+            <select id="depFilterStatus" class="zona-input" style="width:auto;min-width:170px">
+              <option value="Pending">Menunggu Verifikasi</option>
+              <option value="Approved">Disetujui</option>
+              <option value="Rejected">Ditolak</option>
+              <option value="">Semua Status</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Waktu Setor</th>
+                  <th class="py-4 px-5">CSO</th>
+                  <th class="py-4 px-5">Tanggal Dicakup</th>
+                  <th class="py-4 px-5 text-right">Nilai Setoran</th>
+                  <th class="py-4 px-5 text-center">Status</th>
+                  <th class="py-4 px-5 text-right w-56">Respons</th>
+                </tr>
+              </thead>
+              <tbody id="depTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+          <div id="depPager" class="mt-4"></div>
+        </div>
+      </section>
+
+      <div id="modalDepDetails" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
+          <div class="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-700 dark:border-slate-600 rounded-t-xl">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Rincian Setoran</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="depDetailSub">Transaksi tunai yang tercakup dalam setoran ini.</p>
+            </div>
+            <button id="btnCloseDepDetails" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 text-2xl">&times;</button>
+          </div>
+          <div class="p-0 overflow-y-auto flex-1">
+            <table class="w-full text-sm text-left">
+              <thead class="text-slate-500 dark:text-slate-400 sticky top-0 bg-slate-50 dark:bg-slate-700">
+                <tr>
+                  <th class="px-4 py-3">Waktu</th>
+                  <th class="px-4 py-3">Rute</th>
+                  <th class="px-4 py-3">Supir</th>
+                  <th class="px-4 py-3 text-right">Nominal</th>
+                </tr>
+              </thead>
+              <tbody id="depDetailBody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+            </table>
+          </div>
+          <div class="p-4 border-t dark:border-slate-600 flex justify-between items-center">
+            <span class="text-sm text-slate-500 dark:text-slate-400">Total</span>
+            <span id="depDetailTotal" class="font-bold text-lg text-slate-800 dark:text-slate-100">-</span>
+          </div>
+        </div>
+      </div>
+
       <div id="modalUploadProof" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg p-5 max-w-sm w-full">
             <h3 class="font-bold text-lg mb-2">Setujui Pencairan</h3>
@@ -924,6 +1232,66 @@
           </div>
         </div>
       </section>
+
+      <!-- CSO PERFORMANCE VIEW -->
+      <section id="view-cso-performance" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 border-b border-gray-100 dark:border-white/10 pb-6">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Performa CSO</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Pesanan yang dibuat tiap CSO beserta nilainya, per bulan.</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3">
+              <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Bulan</label>
+                <input type="month" id="csoPerfMonth" class="w-full rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-3 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Urutkan</label>
+                <select id="csoRankBy" class="rounded-xl border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-black/20 dark:text-gray-200 text-sm py-2 px-3 focus:ring-primary-500 focus:border-primary-500 cursor-pointer">
+                  <option value="orders">Pesanan Terbanyak</option>
+                  <option value="revenue">Nilai Tertinggi</option>
+                  <option value="cancelled">Pembatalan Terbanyak</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div class="bg-primary-50 dark:bg-primary-500/10 p-4 rounded-xl border border-primary-100 dark:border-primary-500/20">
+              <div class="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-1">Total Pesanan</div>
+              <div id="csoSumOrders" class="text-2xl font-extrabold text-gray-800 dark:text-white">0</div>
+            </div>
+            <div class="bg-green-50 dark:bg-emerald-500/10 p-4 rounded-xl border border-green-100 dark:border-emerald-500/20">
+              <div class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Nilai Transaksi</div>
+              <div id="csoSumRevenue" class="text-2xl font-extrabold text-gray-800 dark:text-white">Rp 0</div>
+            </div>
+            <div class="bg-red-50 dark:bg-red-500/10 p-4 rounded-xl border border-red-100 dark:border-red-500/20">
+              <div class="text-[10px] font-bold text-red-500 dark:text-red-400 uppercase tracking-wider mb-1">Dibatalkan</div>
+              <div id="csoSumCancelled" class="text-2xl font-extrabold text-gray-800 dark:text-white">0</div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Nama CSO</th>
+                  <th class="py-4 px-5 text-center">Pesanan</th>
+                  <th class="py-4 px-5 text-center">Selesai</th>
+                  <th class="py-4 px-5 text-center">Dibatalkan</th>
+                  <th class="py-4 px-5 text-right">Nilai Transaksi</th>
+                  <th class="py-4 px-5 text-right">Rata-rata/Pesanan</th>
+                  <th class="py-4 px-5 text-center">Aktivitas Terakhir</th>
+                </tr>
+              </thead>
+              <tbody id="csoPerfTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+          <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-3">&ldquo;Selesai&rdquo; = trip sudah dirampungkan supir. Pesanan yang masih berjalan (belum/baru dibayar) ikut dihitung di kolom Pesanan, jadi Selesai + Dibatalkan tidak selalu sama dengan Pesanan. Aktivitas terakhir dihitung sepanjang waktu, bukan hanya bulan terpilih.</p>
+        </div>
+      </section>
+
       <!-- DRIVER MAP VIEW -->
       <section id="view-driver-map" class="hidden space-y-6">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1067,21 +1435,18 @@
           </div>
           <form id="formWaConfig" class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">API Key (X-API-Key)</label>
-              <input type="text" id="waToken" placeholder="wag_xxx.yyy" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">API Key (header <code class="font-mono">X-API-Key</code>)</label>
+              <input type="text" id="waToken" placeholder="wag_&lt;prefix&gt;.&lt;secret&gt;" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+              <p class="text-[10px] text-slate-400 mt-1">Buat di menu <b>API Keys</b> gateway. Pastikan key punya scope <code class="font-mono">message.send</code>.</p>
             </div>
             <div>
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Device ID <span class="font-normal text-slate-400">(opsional)</span></label>
-              <input type="number" id="waDeviceId" min="1" placeholder="Kosongkan = device bawaan API Key" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-              <p class="text-[10px] text-slate-400 mt-1">Kosongkan bila API Key terikat ke satu device (menghindari error 403 &ldquo;device lain&rdquo;).</p>
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Gateway URL</label>
-              <input type="text" id="waEndpoint" placeholder="https://wg.aptpairport.id/api/v1/messages/send" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-            </div>
-            <div class="md:col-span-2">
               <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Nomor WA Admin (penerima notifikasi)</label>
               <input type="text" id="adminWaNumber" placeholder="0812xxxxxxxx" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1">Base URL Gateway</label>
+              <input type="text" id="waEndpoint" placeholder="https://wg.aptpairport.id/api/v1" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
+              <p class="text-[10px] text-slate-400 mt-1">Cukup base URL-nya; sistem menambahkan sendiri <code class="font-mono">/messages/send</code> untuk mengirim dan <code class="font-mono">/messages</code> untuk log. URL kirim lengkap juga masih diterima.</p>
             </div>
             <div class="md:col-span-2">
               <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2.5 w-full font-bold shadow transition-transform active:scale-95">Simpan Konfigurasi</button>
@@ -1153,170 +1518,271 @@
 
       <!-- SETTINGS VIEW -->
       <section id="view-settings" class="hidden space-y-6">
-        <div class="glass-card rounded-2xl p-5 max-w-2xl mx-auto">
-          <div class="mb-8 border-b border-gray-100 dark:border-white/10 pb-6">
-            <h3 class="font-bold text-gray-800 dark:text-white text-xl">Pengaturan Sistem</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Konfigurasi akun admin, komisi, dan parameter sistem lainnya.</p>
-          </div>
-          
-          <form id="formAdminPassword" class="space-y-5 mb-8 border-b border-gray-100 dark:border-white/10 pb-8">
-            <h4 class="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
-               <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-               Ganti Kata Sandi Admin
-            </h4>
-            <div class="space-y-4">
+        <div class="glass-card rounded-2xl max-w-5xl mx-auto overflow-hidden">
+
+          <!-- ===== Kepala + navigasi tab ===== -->
+          <div class="px-6 pt-6 bg-gradient-to-br from-primary-500/[0.07] to-transparent dark:from-primary-500/10 border-b border-gray-100 dark:border-white/10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
               <div>
-                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Kata Sandi Saat Ini</label>
-                  <div class="relative">
-                    <input type="password" id="currentPassword" required class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 pl-3 pr-10 transition-colors">
-                    <button type="button" onclick="const pass=document.getElementById('currentPassword'); if(pass.type==='password'){pass.type='text';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21\'></path></svg>';}else{pass.type='password';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\'></path><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z\'></path></svg>';}" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                      </svg>
-                    </button>
+                <h3 class="font-bold text-gray-800 dark:text-white text-xl">Pengaturan Sistem</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Konfigurasi tarif, area operasi, notifikasi, dan keamanan akun admin.</p>
+              </div>
+              <div id="settingsDirtyChip" class="hidden items-center gap-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-full px-3 py-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                Ada perubahan belum disimpan
+              </div>
+            </div>
+
+            <nav id="settingsTabs" class="flex gap-1 overflow-x-auto -mb-px mt-5 pb-0" role="tablist">
+              <button type="button" class="stab" data-stab="umum" role="tab">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Umum
+              </button>
+              <button type="button" class="stab" data-stab="area" role="tab">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                Area &amp; Jam
+              </button>
+              <button type="button" class="stab" data-stab="pembayaran" role="tab">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 6v12a1 1 0 001 1h14a1 1 0 001-1V6M9 10h2v2H9v-2zm4 4h2v2h-2v-2z"></path></svg>
+                Pembayaran
+              </button>
+              <button type="button" class="stab" data-stab="email" role="tab">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                Email
+                <span id="smtpStatusDot" class="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-white/20"></span>
+              </button>
+              <button type="button" class="stab" data-stab="keamanan" role="tab">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                Keamanan
+              </button>
+            </nav>
+          </div>
+
+          <!-- ===== Panel yang dikelola formSettings ===== -->
+          <form id="formSettings">
+            <div class="p-6 space-y-6">
+
+              <!-- ---- UMUM ---- -->
+              <div data-spanel="umum" class="space-y-5 animate-fade-in">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label for="adminEmail" class="stlabel">Email Notifikasi Admin</label>
+                    <input type="email" id="adminEmail" placeholder="admin@koperasi.id" class="stinput">
+                    <p class="sthint">Tujuan pemberitahuan penarikan dana &amp; peringatan sistem.</p>
                   </div>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Kata Sandi Baru</label>
+                  <div>
+                    <label for="commissionRate" class="stlabel">Komisi Koperasi (%)</label>
                     <div class="relative">
-                      <input type="password" id="newPassword" required minlength="6" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 pl-3 pr-10 transition-colors">
-                      <button type="button" onclick="const pass=document.getElementById('newPassword'); if(pass.type==='password'){pass.type='text';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21\'></path></svg>';}else{pass.type='password';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\'></path><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z\'></path></svg>';}" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                      </button>
+                      <input type="number" id="commissionRate" min="0" max="100" step="0.1" class="stinput pr-9">
+                      <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">%</span>
                     </div>
+                    <p class="sthint">Potongan dari setiap transaksi supir.</p>
+                  </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Ulangi Kata Sandi Baru</label>
-                    <div class="relative">
-                      <input type="password" id="confirmNewPassword" required minlength="6" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 pl-3 pr-10 transition-colors">
-                      <button type="button" onclick="const pass=document.getElementById('confirmNewPassword'); if(pass.type==='password'){pass.type='text';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21\'></path></svg>';}else{pass.type='password';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\'></path><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z\'></path></svg>';}" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                      </button>
+
+                <!-- Simulasi komisi: berubah seketika saat angka diketik -->
+                <div class="rounded-xl border border-primary-100 dark:border-primary-500/20 bg-primary-50/60 dark:bg-primary-500/10 p-4">
+                  <p class="text-[10px] font-bold text-primary-600 dark:text-primary-400 uppercase tracking-widest mb-3">Simulasi dari tarif Rp100.000</p>
+                  <div class="flex items-center gap-4">
+                    <div class="flex-1">
+                      <div class="h-2.5 w-full rounded-full bg-white dark:bg-black/30 overflow-hidden flex">
+                        <div id="commissionBarCoop" class="h-full bg-primary-500 transition-all duration-300" style="width:0%"></div>
+                        <div id="commissionBarDriver" class="h-full bg-emerald-500 transition-all duration-300" style="width:100%"></div>
+                      </div>
                     </div>
+                  </div>
+                  <div class="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-primary-500"></span>Koperasi <b id="commissionCoop" class="text-gray-800 dark:text-gray-100">Rp 0</b></span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Supir <b id="commissionDriver" class="text-gray-800 dark:text-gray-100">Rp 100.000</b></span>
+                  </div>
                 </div>
               </div>
-              <button class="bg-gray-800 hover:bg-gray-900 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors shadow-md">Perbarui Kata Sandi</button>
+
+              <!-- ---- AREA & JAM ---- -->
+              <div data-spanel="area" class="hidden space-y-6 animate-fade-in">
+                <div>
+                  <div class="flex items-baseline justify-between gap-3 mb-1.5">
+                    <label class="stlabel mb-0">Area Bandara (Geofence)</label>
+                    <span class="text-[11px] text-gray-500 dark:text-gray-400">Radius <b id="airportRadiusLabel" class="text-primary-600 dark:text-primary-400">&mdash;</b></span>
+                  </div>
+                  <p class="sthint mb-3">Jangkauan auto-antrian &amp; peta supir. <b>Geser pin biru</b> untuk memindahkan titik pusat, dan <b>geser bulatan biru di tepi lingkaran</b> untuk mengubah radius.</p>
+
+                  <div id="airportCenterMap" style="height: 340px; z-index: 1;" class="rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20 ring-1 ring-gray-200 dark:ring-white/10"></div>
+
+                  <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
+                    <p class="sthint">Kotak angka di bawah tersinkron dua arah dengan peta.</p>
+                    <button type="button" id="btnResetAirportCenter" class="text-[11px] font-semibold text-primary-600 dark:text-primary-400 hover:underline shrink-0">Kembalikan ke pengaturan tersimpan</button>
+                  </div>
+
+                  <!-- Radius tidak diketik: nilainya lahir dari geseran di peta.
+                       Tetap sebagai input agar jalur simpan & validasi tidak berubah. -->
+                  <input type="hidden" id="airportRadiusKm">
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div>
+                      <label for="airportLatitude" class="stlabel-sm">Lintang / Latitude</label>
+                      <input type="number" id="airportLatitude" min="-90" max="90" step="any" placeholder="-0.371975" class="stinput font-mono">
+                    </div>
+                    <div>
+                      <label for="airportLongitude" class="stlabel-sm">Bujur / Longitude</label>
+                      <input type="number" id="airportLongitude" min="-180" max="180" step="any" placeholder="117.257919" class="stinput font-mono">
+                    </div>
+                  </div>
+                  <p id="airportCenterHint" class="sthint mt-2">Perubahan baru berlaku setelah menekan <b>Simpan Pengaturan</b>. Dikosongkan = nilai lama dipertahankan.</p>
+                </div>
+
+                <div class="border-t border-gray-100 dark:border-white/10 pt-5">
+                  <label class="stlabel">Tenggang di Luar Area</label>
+                  <p class="sthint mb-3">Supir yang sudah masuk antrian lalu keluar dari lingkaran di atas diberi tenggang selama ini untuk kembali. Lewat dari itu, antriannya hangus dan ia harus menekan <b>Masuk Antrian</b> lagi secara manual.</p>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                    <div class="sm:col-span-2">
+                      <label for="outOfAreaGraceMinutes" class="stlabel-sm">Batas waktu (menit)</label>
+                      <input type="number" id="outOfAreaGraceMinutes" min="0" max="720" step="1" placeholder="60" class="stinput">
+                    </div>
+                    <div class="rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-100 dark:border-white/10 px-3 py-2.5">
+                      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tenggang</p>
+                      <p id="outOfAreaGracePreview" class="text-sm font-bold text-gray-800 dark:text-gray-100">&mdash;</p>
+                    </div>
+                  </div>
+                  <p class="sthint mt-2">Isi <b>0</b> untuk menonaktifkan &mdash; supir tetap ditandai di luar area, tapi antriannya tidak pernah hangus sendiri.</p>
+                </div>
+
+                <div class="border-t border-gray-100 dark:border-white/10 pt-5">
+                  <label class="stlabel">Jam Operasi Pelacakan (WITA)</label>
+                  <p class="sthint mb-3">Di luar jam ini aplikasi driver otomatis mematikan GPS demi hemat baterai &amp; privasi &mdash; kecuali sedang mengantar penumpang.</p>
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                    <div>
+                      <label for="operatingStart" class="stlabel-sm">Mulai</label>
+                      <input type="time" id="operatingStart" class="stinput">
+                    </div>
+                    <div>
+                      <label for="operatingEnd" class="stlabel-sm">Selesai</label>
+                      <input type="time" id="operatingEnd" class="stinput">
+                    </div>
+                    <div class="rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-100 dark:border-white/10 px-3 py-2.5">
+                      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Durasi</p>
+                      <p id="operatingPreview" class="text-sm font-bold text-gray-800 dark:text-gray-100">&mdash;</p>
+                    </div>
+                  </div>
+                  <p class="sthint mt-2">Samakan jam mulai &amp; selesai untuk 24 jam nonstop.</p>
+                </div>
+              </div>
+
+              <!-- ---- PEMBAYARAN ---- -->
+              <div data-spanel="pembayaran" class="hidden space-y-4 animate-fade-in">
+                <label class="stlabel">Kode QRIS Perusahaan</label>
+                <p class="sthint">Gambar ini muncul di aplikasi CSO saat penumpang membayar non-tunai.</p>
+
+                <div id="qrisDrop" class="flex flex-col sm:flex-row items-center gap-5 rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/20 p-5 transition-colors">
+                  <div class="w-32 h-32 shrink-0 bg-gray-50 dark:bg-black/30 rounded-2xl flex flex-col items-center justify-center overflow-hidden relative group">
+                    <img id="previewQris" src="" alt="Pratinjau QRIS" class="w-full h-full object-cover hidden absolute inset-0 z-10 transition-transform group-hover:scale-105">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span id="placeholderQris" class="text-[10px] font-medium text-gray-400 text-center px-2 relative z-0">Belum ada QRIS</span>
+                  </div>
+                  <div class="flex-1 w-full text-center sm:text-left">
+                    <p class="text-sm font-semibold text-gray-700 dark:text-gray-200">Seret gambar ke sini, atau pilih berkas</p>
+                    <p class="sthint mt-1 mb-3">Format JPG/PNG, maksimal 2 MB.</p>
+                    <input type="file" id="companyQris" accept="image/*" class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-primary-50 dark:file:bg-primary-500/10 file:text-primary-700 dark:file:text-primary-400 hover:file:bg-primary-100 dark:hover:file:bg-primary-500/20 transition-all cursor-pointer">
+                    <p id="qrisFileName" class="text-[11px] font-semibold text-primary-600 dark:text-primary-400 mt-2 hidden"></p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ---- EMAIL / SMTP ---- -->
+              <div data-spanel="email" class="hidden space-y-5 animate-fade-in">
+                <div class="flex items-center gap-2">
+                  <label class="stlabel mb-0">Konfigurasi SMTP</label>
+                  <span id="smtpStatus" class="text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest border bg-gray-100 text-gray-500 border-gray-200 dark:bg-white/5 dark:text-gray-400 dark:border-white/10">Memuat…</span>
+                </div>
+                <p class="sthint -mt-3">Dipakai untuk mengirim notifikasi penarikan dana ke email admin.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="md:col-span-2">
+                    <label for="mailHost" class="stlabel-sm">Mail Host</label>
+                    <input type="text" id="mailHost" placeholder="smtp.gmail.com" class="stinput font-mono">
+                  </div>
+                  <div>
+                    <label for="mailPort" class="stlabel-sm">Port</label>
+                    <input type="number" id="mailPort" placeholder="587" class="stinput font-mono">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="mailUsername" class="stlabel-sm">Username (Email Pengirim)</label>
+                    <input type="text" id="mailUsername" class="stinput">
+                  </div>
+                  <div>
+                    <label for="mailPassword" class="stlabel-sm">Password / App Password</label>
+                    <div class="relative">
+                      <input type="password" id="mailPassword" class="stinput pr-10">
+                      <button type="button" data-toggle-password="mailPassword" class="steye" aria-label="Tampilkan kata sandi"></button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="mailEncryption" class="stlabel-sm">Enkripsi</label>
+                    <select id="mailEncryption" class="stinput cursor-pointer">
+                      <option value="tls">TLS (Port 587)</option>
+                      <option value="ssl">SSL (Port 465)</option>
+                      <option value="null">Tanpa Enkripsi</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="mailFromName" class="stlabel-sm">Nama Pengirim</label>
+                    <input type="text" id="mailFromName" placeholder="Admin Koperasi" class="stinput">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== Bilah simpan (menempel di bawah kartu) ===== -->
+            <div id="settingsSaveBar" class="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 dark:border-white/10 bg-white/85 dark:bg-[#0f172a]/85 backdrop-blur-md">
+              <p id="settingsSaveNote" class="text-[11px] text-gray-400 dark:text-gray-500">Semua perubahan tersimpan.</p>
+              <div class="flex items-center gap-2">
+                <button type="button" id="btnSettingsReset" class="hidden text-sm font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white px-4 py-2.5 rounded-xl transition-colors">Batalkan</button>
+                <button type="submit" id="btnSettingsSave" class="bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-xl px-6 py-2.5 font-bold text-sm shadow-md shadow-primary-500/30 transition-all active:scale-95">Simpan Pengaturan</button>
+              </div>
             </div>
           </form>
 
-          <form id="formSettings" class="space-y-8"> 
-            <div class="space-y-4 border-b border-gray-100 dark:border-white/10 pb-8">
-              <h4 class="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
-                <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                Variabel Umum
-              </h4>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Email Notifikasi Admin</label>
-                    <input type="email" id="adminEmail" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Komisi Koperasi (%)</label>
-                    <input type="number" id="commissionRate" min="0" max="100" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Radius Area Bandara (km)</label>
-                    <input type="number" id="airportRadiusKm" min="0.1" max="50" step="0.1" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                    <p class="text-[10px] text-gray-400 mt-1">Jangkauan geofence auto-antrian &amp; peta supir.</p>
-                </div>
-              </div>
-
-              <!-- Jam Operasi Pelacakan Lokasi -->
-              <div class="pt-2">
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Jam Operasi Pelacakan (WITA)</label>
-                <p class="text-[11px] text-gray-400 dark:text-gray-500 mb-3">Di luar jam ini aplikasi driver otomatis mematikan GPS demi hemat baterai &amp; privasi &mdash; kecuali sedang mengantar penumpang. Samakan jam mulai &amp; selesai untuk 24 jam nonstop.</p>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Mulai</label>
-                    <input type="time" id="operatingStart" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                  </div>
-                  <div>
-                    <label class="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">Selesai</label>
-                    <input type="time" id="operatingEnd" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                  </div>
-                </div>
-              </div>
-
-              <!-- QRIS Upload Section -->
-              <div class="pt-4">
-                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Kode QRIS Perusahaan</label>
-                  <p class="text-[11px] text-gray-400 dark:text-gray-500 mb-3">Gambar ini akan muncul di aplikasi CSO saat pembayaran non-tunai via QRIS.</p>
-                  
-                  <div class="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-                      <div class="w-28 h-28 bg-gray-50 dark:bg-black/30 rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/20 flex flex-col items-center justify-center overflow-hidden relative group">
-                          <img id="previewQris" src="" class="w-full h-full object-cover hidden absolute inset-0 z-10 transition-transform group-hover:scale-105">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                          <span id="placeholderQris" class="text-[10px] font-medium text-gray-400 text-center px-2 relative z-0">Belum ada QRIS</span>
-                      </div>
-                      <div class="flex-1 w-full">
-                          <input type="file" id="companyQris" accept="image/*" class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2.5 file:px-5 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-primary-50 dark:file:bg-primary-500/10 file:text-primary-700 dark:file:text-primary-400 hover:file:bg-primary-100 dark:hover:file:bg-primary-500/20 transition-all cursor-pointer"/>
-                      </div>
-                  </div>
-              </div>
+          <!-- ===== KEAMANAN (form terpisah — form tidak boleh bersarang) ===== -->
+          <form id="formAdminPassword" data-spanel="keamanan" class="hidden p-6 space-y-5 animate-fade-in">
+            <div>
+              <label class="stlabel mb-0">Ganti Kata Sandi Admin</label>
+              <p class="sthint mt-1">Minimal 6 karakter. Anda tidak akan keluar otomatis setelah menggantinya.</p>
             </div>
 
-            <div class="space-y-4">
-                <h4 class="font-bold text-gray-700 dark:text-gray-200 text-lg flex items-center gap-2">
-                    <svg class="w-5 h-5 text-pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                    Konfigurasi SMTP
-                    <span class="text-[10px] bg-pending/20 text-pending px-2 py-0.5 rounded-full uppercase tracking-widest ml-2 border border-pending/30">Notifikasi</span>
-                </h4>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Mail Host</label>
-                        <input type="text" id="mailHost" placeholder="smtp.gmail.com" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors font-mono">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Mail Port</label>
-                        <input type="number" id="mailPort" placeholder="587" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors font-mono">
-                    </div>
+            <div class="max-w-md space-y-4">
+              <div>
+                <label for="currentPassword" class="stlabel-sm">Kata Sandi Saat Ini</label>
+                <div class="relative">
+                  <input type="password" id="currentPassword" required class="stinput pr-10">
+                  <button type="button" data-toggle-password="currentPassword" class="steye" aria-label="Tampilkan kata sandi"></button>
                 </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Username (Email Pengirim)</label>
-                        <input type="text" id="mailUsername" class="w-full rounded-xl border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-black/20 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 transition-colors">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-500 dark:text-slate-400 mb-1.5">Password / App Password</label>
-                        <div class="relative">
-                          <input type="password" id="mailPassword" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm pl-3 pr-10 py-2.5 transition-colors">
-                          <button type="button" onclick="const pass=document.getElementById('mailPassword'); if(pass.type==='password'){pass.type='text';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21\'></path></svg>';}else{pass.type='password';this.innerHTML='<svg class=\'w-5 h-5\' fill=\'none\' stroke=\'currentColor\' viewBox=\'0 0 24 24\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M15 12a3 3 0 11-6 0 3 3 0 016 0z\'></path><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z\'></path></svg>';}" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                          </button>
-                        </div>
-                    </div>
+              </div>
+              <div>
+                <label for="newPassword" class="stlabel-sm">Kata Sandi Baru</label>
+                <div class="relative">
+                  <input type="password" id="newPassword" required minlength="6" class="stinput pr-10">
+                  <button type="button" data-toggle-password="newPassword" class="steye" aria-label="Tampilkan kata sandi"></button>
                 </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs text-slate-500 dark:text-slate-400">Encryption</label>
-                        <select id="mailEncryption" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-                            <option value="tls">TLS (Port 587)</option>
-                            <option value="ssl">SSL (Port 465)</option>
-                            <option value="null">None</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-500 dark:text-slate-400">Nama Pengirim</label>
-                        <input type="text" id="mailFromName" placeholder="Admin Koperasi" class="w-full rounded-lg border border-slate-400 dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:placeholder-slate-400 text-sm">
-                    </div>
+                <div class="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 mt-2 overflow-hidden">
+                  <div id="pwStrengthBar" class="h-full w-0 bg-gray-300 transition-all duration-300"></div>
                 </div>
-            </div>
-            <div class="flex pt-2">
-              <button class="bg-primary-600 hover:bg-primary-700 text-white rounded-lg px-4 py-2 w-full font-bold shadow transition-transform active:scale-95">Simpan Pengaturan</button>
+                <p id="pwStrengthText" class="sthint mt-1">&nbsp;</p>
+              </div>
+              <div>
+                <label for="confirmNewPassword" class="stlabel-sm">Ulangi Kata Sandi Baru</label>
+                <div class="relative">
+                  <input type="password" id="confirmNewPassword" required minlength="6" class="stinput pr-10">
+                  <button type="button" data-toggle-password="confirmNewPassword" class="steye" aria-label="Tampilkan kata sandi"></button>
+                </div>
+                <p id="pwMatch" class="sthint mt-1">&nbsp;</p>
+              </div>
+              <button type="submit" class="bg-gray-800 hover:bg-gray-900 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white rounded-xl px-5 py-2.5 text-sm font-semibold transition-all active:scale-95 shadow-md">Perbarui Kata Sandi</button>
             </div>
           </form>
         </div>

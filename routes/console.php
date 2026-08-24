@@ -10,6 +10,11 @@ Artisan::command('inspire', function () {
 
 Schedule::command('queue:rotate')->dailyAt('00:00');
 
+// Keluarkan supir standby yang HP-nya berhenti mengirim lokasi. Seluruh mesin
+// antrian digerakkan oleh ping aplikasi, jadi tanpa penyapu ini supir yang
+// mematikan aplikasi lalu pulang tetap memegang gilirannya.
+Schedule::command('queue:sweep-stale')->everyFiveMinutes();
+
 // Backup database harian (mysqldump untuk MySQL), simpan 14 backup terbaru.
 Schedule::command('backup:db')->dailyAt('02:00');
 

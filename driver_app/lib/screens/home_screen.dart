@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
@@ -11,6 +12,7 @@ import '../utils/api_error.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
+import '../widgets/driver_area_map.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
 
@@ -32,11 +34,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _locationStatus = "Menunggu GPS...";
   bool _isInArea = false;
   int? _remainingTimeSeconds; // Grace Period Timer
+  // false = admin mematikan auto-keluar antrian. Default true agar respons
+  // lama (tanpa field ini) tetap berperilaku seperti sebelumnya.
+  bool _graceEnabled = true;
   int? _pickupTimeSeconds; // Pickup Timer
 
   // --- Location State ---
   double? _lastLat;
   double? _lastLng;
+
+  /// Hambatan GPS yang butuh TINDAKAN supir — null bila tidak ada.
+  /// 'servis'   = layanan lokasi perangkat mati
+  /// 'izin'     = izin lokasi ditolak (masih bisa diminta lagi)
+  /// 'permanen' = izin ditolak permanen (hanya bisa lewat Pengaturan aplikasi)
+  ///
+  /// Sebelum ini ketiganya berakhir sama: layar diam di "Menunggu GPS..."
+  /// tanpa memberi tahu supir bahwa ada yang harus ia lakukan.
+  String? _gpsBlocker;
+
+  /// Kegagalan kirim lokasi berturut-turut yang dilaporkan layanan latar.
+  int _pushFailures = 0;
 
   @override
   void initState() {
@@ -65,9 +82,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _ensureTrackingIfWithinHours() async {
     if (!mounted) return;
     if (!_withinLocalOperatingHours()) return; // masih di luar jam → biarkan mati
+
+    // Ada hambatan GPS: periksa ulang tanpa memunculkan dialog. Supir yang baru
+    // menyalakan GPS atau memberi izin lewat Pengaturan langsung pulih saat
+    // kembali ke aplikasi, tanpa harus menekan apa pun.
+    if (_gpsBlocker != null) {
+      await _startLocationService(minta: false);
+      return;
+    }
+
     final service = FlutterBackgroundService();
     if (await service.isRunning()) return; // sudah jalan
-    await _startLocationService();
+    await _startLocationService(minta: false);
   }
 
   // Cek jam operasi memakai waktu LOKAL perangkat (WITA utk driver Samarinda),
@@ -103,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     final inArea = data['in_area'] ?? false;
+    final graceEnabled = data['grace_enabled'] != false;
     var remainingRaw = data['remaining_time'];
     int? remaining;
     if (remainingRaw != null) {
@@ -128,6 +155,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ? "Di luar jam operasi — pelacakan nonaktif"
             : "GPS: ${TimeOfDay.now().format(context)} (Background)";
         _isInArea = inArea;
+        _graceEnabled = graceEnabled;
+        // Ada data masuk = pelacakan sehat lagi.
+        _gpsBlocker = null;
+        _pushFailures = 0;
         _remainingTimeSeconds = remaining;
         _lastLat = lat;
         _lastLng = lng;
@@ -205,32 +236,71 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _countdownTimer?.cancel();
     _windowTimer?.cancel();
     _serviceSubscription?.cancel();
+    _errorSubscription?.cancel();
     super.dispose();
   }
 
   void _startCountdownTimer() {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          // 1. Grace Period Timer
-          if (_remainingTimeSeconds != null && _remainingTimeSeconds! > 0) {
-            _remainingTimeSeconds = _remainingTimeSeconds! - 1;
-          }
-          // 2. Pickup Timer
-          if (_pickupTimeSeconds != null && _pickupTimeSeconds! > 0) {
-            _pickupTimeSeconds = _pickupTimeSeconds! - 1;
-          }
-        });
-      }
+      if (!mounted) return;
+
+      // Hanya rebuild bila memang ada angka yang berubah. Beranda memuat peta
+      // (FlutterMap) yang ikut terbangun ulang tiap setState — supir standby
+      // membiarkan layar ini terbuka berjam-jam, jadi setState tanpa syarat
+      // membakar CPU & baterai 3.600 kali/jam tanpa satu pun perubahan.
+      final graceJalan = _remainingTimeSeconds != null && _remainingTimeSeconds! > 0;
+      final pickupJalan = _pickupTimeSeconds != null && _pickupTimeSeconds! > 0;
+      if (!graceJalan && !pickupJalan) return;
+
+      setState(() {
+        // 1. Grace Period Timer
+        if (graceJalan) _remainingTimeSeconds = _remainingTimeSeconds! - 1;
+        // 2. Pickup Timer
+        if (pickupJalan) _pickupTimeSeconds = _pickupTimeSeconds! - 1;
+      });
     });
   }
 
   // Listen to background service
   StreamSubscription? _serviceSubscription;
+  StreamSubscription? _errorSubscription;
 
-  Future<void> _startLocationService() async {
-    var status = await Permission.location.request();
+  /// [minta] = true boleh memunculkan dialog izin (dipanggil dari initState /
+  /// tombol). Jalur berkala & saat app kembali ke depan memakai false agar
+  /// tidak menyodorkan dialog tiap 60 detik.
+  Future<void> _startLocationService({bool minta = true}) async {
+    // 1. Layanan lokasi PERANGKAT harus hidup. Tanpa cek ini, stream tidak
+    //    pernah emit dan supir hanya melihat "Menunggu GPS..." selamanya —
+    //    tanpa petunjuk bahwa yang mati adalah GPS di HP-nya.
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      if (mounted) {
+        setState(() {
+          _gpsBlocker = 'servis';
+          _locationStatus = "GPS perangkat mati";
+        });
+      }
+      return;
+    }
+
+    var status = minta
+        ? await Permission.location.request()
+        : await Permission.location.status;
+
+    // 2. Ditolak permanen: dialog izin TIDAK akan muncul lagi, satu-satunya
+    //    jalan adalah Pengaturan aplikasi. Harus dikatakan, bukan dibiarkan
+    //    tampak seperti penolakan biasa.
+    if (status.isPermanentlyDenied) {
+      if (mounted) {
+        setState(() {
+          _gpsBlocker = 'permanen';
+          _locationStatus = "Izin GPS diblokir permanen";
+        });
+      }
+      return;
+    }
+
     if (status.isGranted) {
+      if (mounted) setState(() => _gpsBlocker = null);
       // OEM agresif (MIUI/Redmi) sering membunuh service latar → minta pengecualian
       // optimasi baterai agar tracking tetap hidup saat layar mati.
       if (!await Permission.ignoreBatteryOptimizations.isGranted) {
@@ -255,9 +325,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _processLocationUpdate(data);
         }
       });
+
+      // Kabar buruk dari layanan latar (stream mati / gagal kirim) — lihat
+      // background_service.dart. Tanpa ini, kegagalan hanya jadi baris print.
+      _errorSubscription?.cancel();
+      _errorSubscription = service.on('locationError').listen((data) {
+        if (data != null && mounted) _processLocationError(data);
+      });
     } else {
-      if (mounted) setState(() => _locationStatus = "Izin GPS Ditolak");
+      if (mounted) {
+        setState(() {
+          _gpsBlocker = 'izin';
+          _locationStatus = "Izin GPS ditolak";
+        });
+      }
     }
+  }
+
+  /// Terjemahkan kegagalan dari layanan latar jadi kalimat yang bisa dibaca
+  /// supir di kartu peringatan & chip status.
+  void _processLocationError(Map<String, dynamic> data) {
+    final jenis = data['jenis'];
+    setState(() {
+      if (jenis == 'kirim') {
+        _pushFailures = int.tryParse('${data['gagal']}') ?? (_pushFailures + 1);
+        _locationStatus = "Gagal terkirim ${_pushFailures}x — periksa koneksi";
+      } else if (jenis == 'stream') {
+        _locationStatus = "GPS terputus — menyambung ulang...";
+      } else if (jenis == 'fix_awal') {
+        _locationStatus = "Belum dapat sinyal GPS — coba ke tempat terbuka";
+      }
+    });
   }
 
   Future<void> _startTrip(int bookingId) async {
@@ -436,11 +534,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  // Tenggang di luar area kini diatur admin (bisa sampai 12 jam), jadi format
+  // MM:SS saja tidak cukup — pakai H:MM:SS begitu melewati satu jam.
   String _formatDuration(int totalSeconds) {
     if (totalSeconds < 0) return "00:00";
-    final minutes = totalSeconds ~/ 60;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
     final seconds = totalSeconds % 60;
-    return "${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+    final mm = minutes.toString().padLeft(2, '0');
+    final ss = seconds.toString().padLeft(2, '0');
+    return hours > 0 ? "$hours:$mm:$ss" : "$mm:$ss";
   }
 
   // Metadata status (warna, label, ikon) sesuai kondisi driver.
@@ -545,6 +648,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_gpsBlocker != null) ...[
+                      FadeInUp(child: _gpsBlockerCard()),
+                      const SizedBox(height: 16),
+                    ],
                     if (activeBooking != null) ...[
                       FadeInUp(
                         child: _buildOrderCard(activeBooking, currencyFormat),
@@ -563,6 +670,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         child: _buildActionButtons(status),
                       ),
                     ],
+                    const SizedBox(height: 20),
+                    FadeInUp(
+                      delayMs: 200,
+                      child: DriverAreaMap(
+                        lat: _lastLat,
+                        lng: _lastLng,
+                        inArea: _isInArea,
+                        locationStatus: _locationStatus,
+                      ),
+                    ),
                     const SizedBox(height: 26),
                     Center(child: _locationChip()),
                   ],
@@ -674,21 +791,108 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Kartu peringatan GPS: menjelaskan APA yang salah dan menyediakan TOMBOL
+  /// yang menyelesaikannya. Sebelumnya ketiga kondisi ini hanya berakhir
+  /// sebagai teks kecil "Izin GPS Ditolak" / "Menunggu GPS..." yang tidak bisa
+  /// ditindaklanjuti supir dari dalam aplikasi.
+  Widget _gpsBlockerCard() {
+    late final String judul, pesan, labelTombol;
+    late final Future<void> Function() aksi;
+
+    switch (_gpsBlocker) {
+      case 'servis':
+        judul = 'GPS perangkat mati';
+        pesan = 'Antrian & order butuh lokasi Anda. Nyalakan GPS agar tetap '
+            'terpantau di bandara.';
+        labelTombol = 'Nyalakan GPS';
+        aksi = () => Geolocator.openLocationSettings();
+        break;
+      case 'permanen':
+        judul = 'Izin lokasi diblokir';
+        pesan = 'Izin lokasi ditolak permanen, jadi aplikasi tidak bisa '
+            'memintanya lagi. Buka Pengaturan → Izin → Lokasi, pilih '
+            '"Izinkan sepanjang waktu".';
+        labelTombol = 'Buka Pengaturan';
+        aksi = () => openAppSettings();
+        break;
+      default: // 'izin'
+        judul = 'Izin lokasi ditolak';
+        pesan = 'Tanpa izin lokasi, Anda tidak bisa masuk antrian dan tidak '
+            'akan kebagian order.';
+        labelTombol = 'Beri Izin';
+        aksi = () => _startLocationService(); // interaktif: dialog boleh muncul
+    }
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.location_off_rounded,
+                  color: AppColors.danger, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  judul,
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.danger,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            pesan,
+            style: GoogleFonts.outfit(fontSize: 12.5, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 14),
+          GradientButton(
+            label: labelTombol,
+            icon: Icons.settings_rounded,
+            onPressed: () async {
+              await aksi();
+              // Kembali dari Pengaturan → periksa ulang tanpa dialog.
+              if (mounted) await _startLocationService(minta: false);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _locationChip() {
     final closed = _trackingClosed;
+    // Pelacakan sedang bermasalah (GPS terhambat / lokasi gagal terkirim) —
+    // chip ikut memerah supaya tidak tampak sama dengan keadaan normal.
+    final bermasalah = _gpsBlocker != null || _pushFailures > 0;
+
+    final Color latar = bermasalah
+        ? const Color(0xFFFEE2E2)
+        : (closed ? const Color(0xFFFFF4E5) : AppColors.paleBlue);
+    final Color depan = bermasalah
+        ? AppColors.danger
+        : (closed ? const Color(0xFFB45309) : AppColors.inkSoft);
+    final IconData ikon = bermasalah
+        ? Icons.gps_off_rounded
+        : (closed ? Icons.bedtime_rounded : Icons.gps_fixed_rounded);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: closed ? const Color(0xFFFFF4E5) : AppColors.paleBlue,
+        color: latar,
         borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            closed ? Icons.bedtime_rounded : Icons.gps_fixed_rounded,
+            ikon,
             size: 14,
-            color: closed ? const Color(0xFFB45309) : AppColors.cyan,
+            color: bermasalah ? AppColors.danger : (closed ? const Color(0xFFB45309) : AppColors.cyan),
           ),
           const SizedBox(width: 6),
           Flexible(
@@ -696,8 +900,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               _locationStatus,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.outfit(
-                color: closed ? const Color(0xFFB45309) : AppColors.inkSoft,
+                color: depan,
                 fontSize: 11,
+                fontWeight: bermasalah ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ),
@@ -924,8 +1129,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
 
+          // Auto-keluar dimatikan admin: tampilkan penegasan, bukan hitung
+          // mundur kosong yang bikin supir salah paham.
+          if (status == 'standby' && !_isInArea && !_graceEnabled) ...[
+            const Divider(height: 28),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.verified_user_outlined,
+                    size: 16, color: AppColors.inkSoft),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    "Antrian Anda aman — auto-keluar dinonaktifkan",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ]
           // Grace period countdown (standby di luar area)
-          if (status == 'standby' && !_isInArea) ...[
+          else if (status == 'standby' && !_isInArea) ...[
             const Divider(height: 28),
             Text(
               "Kembali ke area dalam:",

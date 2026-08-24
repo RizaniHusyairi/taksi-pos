@@ -50,6 +50,83 @@ class Setting extends Model
     }
 
     /**
+     * Tenggang (menit) supir standby yang berada di luar area bandara sebelum
+     * antriannya hangus otomatis. Bisa diatur admin lewat Pengaturan.
+     *
+     * CATATAN: sengaja TIDAK memakai pola `$v > 0 ? ...` seperti [airportRadiusKm] —
+     * di sini 0 adalah nilai yang SAH dan berarti "auto-keluar dinonaktifkan",
+     * bukan "belum diatur". Jadi yang dicek adalah "ada isinya & berupa angka",
+     * lalu hasilnya dijepit ke rentang yang sama dengan validasi form admin.
+     */
+    public static function outOfAreaGraceMinutes(): int
+    {
+        $raw = static::getValue('out_of_area_grace_minutes');
+
+        if ($raw !== null && $raw !== '' && is_numeric($raw)) {
+            return max(0, min(720, (int) $raw));
+        }
+
+        return max(0, min(720, (int) config('taksi.driver_queue.out_of_area_grace_minutes')));
+    }
+
+    /** Tenggang di luar area dalam detik. 0 = auto-keluar dinonaktifkan. */
+    public static function outOfAreaGraceSeconds(): int
+    {
+        return static::outOfAreaGraceMinutes() * 60;
+    }
+
+    /**
+     * Titik pusat area bandara (lintang) yang bisa diatur admin lewat
+     * Pengaturan. Fallback ke config bila belum diatur / tidak valid.
+     *
+     * CATATAN: sengaja TIDAK memakai pola `$v > 0 ? ...` seperti radius —
+     * lintang/bujur 0 itu koordinat yang sah (khatulistiwa / meridian utama),
+     * jadi yang dicek adalah "ada isinya & berupa angka", bukan "lebih dari 0".
+     */
+    public static function airportLatitude(): float
+    {
+        return static::coordOrDefault('airport_latitude', 'taksi.driver_queue.latitude', 90);
+    }
+
+    /** Titik pusat area bandara (bujur). Lihat [airportLatitude]. */
+    public static function airportLongitude(): float
+    {
+        return static::coordOrDefault('airport_longitude', 'taksi.driver_queue.longitude', 180);
+    }
+
+    /**
+     * Titik pusat area bandara sebagai pasangan siap pakai.
+     *
+     * @return array{latitude: float, longitude: float}
+     */
+    public static function airportCenter(): array
+    {
+        return [
+            'latitude'  => static::airportLatitude(),
+            'longitude' => static::airportLongitude(),
+        ];
+    }
+
+    /**
+     * Baca satu koordinat dari setting; tolak nilai kosong/non-numerik/di luar
+     * rentang dan jatuh ke config supaya geofence tidak pernah rusak gara-gara
+     * baris setting yang cacat.
+     */
+    protected static function coordOrDefault(string $key, string $configKey, float $max): float
+    {
+        $raw = static::getValue($key);
+
+        if ($raw !== null && $raw !== '' && is_numeric($raw)) {
+            $v = (float) $raw;
+            if ($v >= -$max && $v <= $max) {
+                return $v;
+            }
+        }
+
+        return (float) config($configKey);
+    }
+
+    /**
      * Jam operasi pelacakan lokasi (format 'HH:MM'). Nilai efektif =
      * setting admin, fallback ke config. Dipakai app driver untuk
      * mematikan layanan lokasi di luar jam kerja (hemat baterai + privasi).

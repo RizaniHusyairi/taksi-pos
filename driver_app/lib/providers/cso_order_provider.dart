@@ -52,6 +52,29 @@ class CsoOrderProvider with ChangeNotifier {
   // --- Submit ---
   bool submitting = false;
 
+  /// Supir yang siap menerima order (urutan sudah dari server).
+  List<QueueDriver> get readyDrivers =>
+      drivers.where((d) => d.isReady).toList(growable: false);
+
+  /// Supir yang sedang mendapat giliran — dipilih otomatis oleh sistem.
+  /// Sumber utamanya flag `is_next` dari backend; fallback ke elemen pertama
+  /// agar tetap benar bila aplikasi terhubung ke backend versi lama.
+  QueueDriver? get nextInQueue {
+    final ready = readyDrivers;
+    if (ready.isEmpty) return null;
+    for (final d in ready) {
+      if (d.isNext) return d;
+    }
+    return ready.first;
+  }
+
+  /// Sisa antrian di luar supir yang sedang giliran (jalur "pilih supir lain").
+  List<QueueDriver> get otherDrivers {
+    final top = nextInQueue;
+    if (top == null) return const [];
+    return readyDrivers.where((d) => d.id != top.id).toList(growable: false);
+  }
+
   /// Langkah yang sudah selesai (0..2) untuk indikator stepper.
   int get completedStep => paymentVerified ? 2 : (selectedZone != null ? 1 : 0);
 

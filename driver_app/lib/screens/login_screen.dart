@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/sky_backdrop.dart';
+import '../widgets/airport_pickup_backdrop.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
 
@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: SkyBackdrop(
+      body: AirportPickupBackdrop(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(

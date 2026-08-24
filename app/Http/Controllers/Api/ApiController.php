@@ -13,6 +13,7 @@ use App\Models\DriverProfile;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\Withdrawals;
+use App\Models\CsoDeposit;
 use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -25,8 +26,26 @@ class ApiController extends Controller
     public function adminGetDashboardStats()
     {
         // 1. Hitung Semua Metrik
-        $revenueToday = Transaction::whereDate('created_at', today())->sum('amount');
-        $transactionsToday = Transaction::whereDate('created_at', today())->count();
+        //
+        // Total + pecahan metode bayar hari ini diambil dalam SATU query
+        // beragregasi (pola yang sama dipakai dashboard CSO) — bukan empat
+        // query terpisah untuk data yang sumbernya sama.
+        $aggToday = Transaction::whereDate('created_at', today())
+            ->selectRaw('COUNT(*) as cnt')
+            ->selectRaw('COALESCE(SUM(amount), 0) as total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'CashCSO'    THEN amount ELSE 0 END), 0) as cash_cso")
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'CashDriver' THEN amount ELSE 0 END), 0) as cash_driver")
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'QRIS'       THEN amount ELSE 0 END), 0) as qris")
+            ->first();
+
+        // Pembanding kemarin, supaya angka hari ini punya konteks.
+        $aggYesterday = Transaction::whereDate('created_at', today()->subDay())
+            ->selectRaw('COUNT(*) as cnt')
+            ->selectRaw('COALESCE(SUM(amount), 0) as total')
+            ->first();
+
+        $revenueToday = (float) $aggToday->total;
+        $transactionsToday = (int) $aggToday->cnt;
         // A. Hitung driver di antrian (Online/Available)
         $driversInQueue = DriverQueue::count();
 
@@ -38,7 +57,41 @@ class ApiController extends Controller
 
         // Total Aktif = Queue + OnTrip (Asumsi driver on trip otomatis keluar dari queue, jadi tidak double count)
         $activeDrivers = $driversInQueue + $driversOnTrip;
-        $pendingWithdrawals = Withdrawals::where('status', 'Pending')->count();
+
+        $wdPending = Withdrawals::where('status', 'Pending')
+            ->selectRaw('COUNT(*) as cnt')
+            ->selectRaw('COALESCE(SUM(amount), 0) as total')
+            ->first();
+        $pendingWithdrawals = (int) $wdPending->cnt;
+
+        // Uang koperasi yang sedang dipegang supir & belum disetor. Akumulatif,
+        // bukan harian — inilah angka yang menentukan potongan saat pencairan.
+        $driverDebt = (float) Transaction::where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
+            ->sum('amount');
+
+        // 8 transaksi terakhir untuk panel Aktivitas Terbaru. Relasi di-eager
+        // load (pola dashboard CSO) supaya tidak N+1 saat menampilkan nama.
+        $recent = Transaction::with([
+                'booking:id,cso_id,driver_id,zone_id,manual_destination',
+                'booking.zoneTo:id,name',
+                'booking.driver:id,name',
+                'booking.cso:id,name',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(8)
+            ->get()
+            ->map(fn (Transaction $t) => [
+                'id'          => $t->id,
+                'method'      => $t->method,
+                'amount'      => (float) $t->amount,
+                'created_at'  => optional($t->created_at)->toIso8601String(),
+                'driver'      => $t->booking?->driver?->name,
+                'cso'         => $t->booking?->cso?->name,
+                'destination' => $t->booking?->zoneTo?->name
+                    ?? $t->booking?->manual_destination
+                    ?? '-',
+            ]);
 
         // 2. Siapkan Data Grafik Mingguan (7 hari terakhir)
         $weeklyChartData = Transaction::select(
@@ -60,14 +113,32 @@ class ApiController extends Controller
             ->orderBy('label', 'asc')
             ->get();
 
-        // 4. Gabungkan semua data dalam satu respons JSON
+        // 4. Gabungkan semua data dalam satu respons JSON.
+        //    Kunci lama dipertahankan apa adanya; yang baru ditambahkan di samping.
         return response()->json([
             'metrics' => [
                 'revenue_today' => $revenueToday,
                 'transactions_today' => $transactionsToday,
                 'active_drivers' => $activeDrivers,
                 'pending_withdrawals' => $pendingWithdrawals,
+
+                // Pembanding & konteks tambahan
+                'revenue_yesterday'          => (float) $aggYesterday->total,
+                'transactions_yesterday'     => (int) $aggYesterday->cnt,
+                'revenue_change_pct'         => $this->changePct($revenueToday, (float) $aggYesterday->total),
+                'transactions_change_pct'    => $this->changePct($transactionsToday, (int) $aggYesterday->cnt),
+                'pending_withdrawals_amount' => (float) $wdPending->total,
+                'drivers_in_queue'           => $driversInQueue,
+                'drivers_on_trip'            => $driversOnTrip,
             ],
+            'payments' => [
+                'cash_cso'    => (float) $aggToday->cash_cso,
+                'cash_driver' => (float) $aggToday->cash_driver,
+                'qris'        => (float) $aggToday->qris,
+                'total'       => $revenueToday,
+                'driver_debt' => $driverDebt,
+            ],
+            'recent' => $recent,
             'charts' => [
                 'weekly' => [
                     'labels' => $weeklyChartData->pluck('label'),
@@ -79,6 +150,21 @@ class ApiController extends Controller
                 ],
             ]
         ]);
+    }
+
+    /**
+     * Persentase perubahan terhadap pembanding.
+     *
+     * Mengembalikan null (BUKAN 0 atau Infinity) bila pembandingnya nol —
+     * "naik tak hingga persen dari nol" tidak bermakna, dan UI perlu tahu
+     * bedanya agar bisa menampilkan tanda "—" alih-alih angka palsu.
+     */
+    private function changePct(float|int $sekarang, float|int $sebelumnya): ?float
+    {
+        if ($sebelumnya <= 0) {
+            return null;
+        }
+        return round((($sekarang - $sebelumnya) / $sebelumnya) * 100, 1);
     }
 
 
@@ -95,7 +181,10 @@ class ApiController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
+            'category' => 'nullable|in:dalam,luar',
+            'description' => 'nullable|string|max:255',
         ]);
+        $validated['category'] = $validated['category'] ?? 'dalam';
         $zone = Zone::create($validated);
         return response()->json($zone, 201);
     }
@@ -104,7 +193,14 @@ class ApiController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
+            'category' => 'nullable|in:dalam,luar',
+            'description' => 'nullable|string|max:255',
         ]);
+        // Kategori tidak dikirim → jangan timpa jadi null (description boleh
+        // null: itu cara mengosongkan keterangan).
+        if (!isset($validated['category'])) {
+            unset($validated['category']);
+        }
         $zone->update($validated);
         return response()->json($zone);
     }
@@ -454,6 +550,154 @@ class ApiController extends Controller
         return response()->json($transactions);
     }
 
+    // =====================================================================
+    // ===  SETORAN TUNAI CSO (verifikasi admin)                          ===
+    // =====================================================================
+
+    /** Daftar setoran CSO, terbaru dulu. Filter: status, cso_id, rentang tanggal. */
+    public function adminGetCsoDeposits(Request $request)
+    {
+        $q = CsoDeposit::with(['cso:id,name,username', 'processedBy:id,name'])
+            ->orderByDesc('submitted_at');
+
+        if ($request->filled('status')) {
+            $q->where('status', $request->query('status'));
+        }
+        if ($request->filled('cso_id')) {
+            $q->where('cso_id', $request->query('cso_id'));
+        }
+        if ($request->filled('date_from')) {
+            $q->whereDate('submitted_at', '>=', $request->query('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $q->whereDate('submitted_at', '<=', $request->query('date_to'));
+        }
+
+        return response()->json($q->paginate(20));
+    }
+
+    /** Transaksi yang tercakup dalam satu setoran. */
+    public function adminGetCsoDepositDetails(CsoDeposit $deposit)
+    {
+        $transactions = Transaction::with(['booking.zoneTo', 'booking.driver:id,name'])
+            ->where('cso_deposit_id', $deposit->id)
+            ->orderBy('created_at')
+            ->get();
+
+        return response()->json([
+            'deposit'      => $deposit->load('cso:id,name,username'),
+            'transactions' => $transactions,
+        ]);
+    }
+
+    /** Admin menerima uangnya: setoran lunas, transaksinya ditandai Settled. */
+    public function adminApproveCsoDeposit(Request $request, CsoDeposit $deposit)
+    {
+        if ($deposit->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Setoran ini sudah diproses sebelumnya (status: ' . $deposit->status . ').',
+            ], 422);
+        }
+
+        $request->validate([
+            'proof_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+            'admin_note'  => 'nullable|string|max:500',
+        ]);
+
+        $path = $request->hasFile('proof_image')
+            ? $request->file('proof_image')->store('deposit_proofs', 'public')
+            : null;
+
+        DB::transaction(function () use ($deposit, $request, $path) {
+            $deposit->update([
+                'status'       => 'Approved',
+                'admin_note'   => $request->input('admin_note'),
+                'processed_at' => now(),
+                'processed_by' => Auth::id(),
+                // Bukti dari CSO dipertahankan bila admin tidak mengunggah apa pun.
+                'proof_image'  => $path ?: $deposit->proof_image,
+            ]);
+
+            Transaction::where('cso_deposit_id', $deposit->id)
+                ->update(['deposit_status' => 'Settled']);
+        });
+
+        $this->notifyCsoDeposit($deposit, true);
+
+        return response()->json(['message' => 'Setoran disetujui dan transaksinya ditandai lunas.']);
+    }
+
+    /**
+     * Admin menolak setoran (uang tidak cocok / belum diterima).
+     * Transaksinya kembali jadi kewajiban CSO dan tanggalnya muncul lagi.
+     */
+    public function adminRejectCsoDeposit(Request $request, CsoDeposit $deposit)
+    {
+        // KRITIS — alasan yang sama dengan adminRejectWithdrawal: tanpa guard
+        // ini, menolak setoran yang sudah 'Approved' akan mengubah transaksi
+        // 'Settled' kembali jadi 'Unsettled', sehingga uang yang SUDAH diterima
+        // admin muncul lagi sebagai tagihan ke CSO.
+        if ($deposit->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Setoran ini sudah diproses sebelumnya (status: ' . $deposit->status . ').',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'admin_note' => 'required|string|max:500',
+        ], [
+            'admin_note.required' => 'Tulis alasan penolakan agar CSO tahu apa yang harus diperbaiki.',
+        ]);
+
+        DB::transaction(function () use ($deposit, $validated) {
+            $deposit->update([
+                'status'       => 'Rejected',
+                'admin_note'   => $validated['admin_note'],
+                'processed_at' => now(),
+                'processed_by' => Auth::id(),
+            ]);
+
+            // Lepas ikatan agar tanggalnya kembali muncul di daftar "belum
+            // disetor" dan bisa diajukan ulang.
+            Transaction::where('cso_deposit_id', $deposit->id)
+                ->update(['deposit_status' => 'Unsettled', 'cso_deposit_id' => null]);
+        });
+
+        $this->notifyCsoDeposit($deposit, false);
+
+        return response()->json(['message' => 'Setoran ditolak dan tagihannya dikembalikan ke CSO.']);
+    }
+
+    /**
+     * Kabari CSO lewat WhatsApp. Sengaja DI LUAR DB::transaction & dibungkus
+     * try/catch: gagal kirim pesan tidak boleh membatalkan keputusan admin
+     * (pola sama dengan adminApproveWithdrawal).
+     */
+    private function notifyCsoDeposit(CsoDeposit $deposit, bool $disetujui): void
+    {
+        try {
+            $waToken = Setting::getValue('wa_token');
+            $cso     = $deposit->cso;
+            $phone   = $cso->phone_number ?? $cso->username;
+
+            if (!$waToken || !$phone) {
+                return;
+            }
+
+            $rp   = number_format((float) $deposit->amount, 0, ',', '.');
+            $tgl  = optional($deposit->processed_at)->format('d M Y H:i') ?? now()->format('d M Y H:i');
+            $hari = count($deposit->period_dates ?? []);
+
+            $message = $disetujui
+                ? "*SETORAN DITERIMA*\n\nHalo {$cso->name},\n\nSetoran tunai Anda sebesar *Rp {$rp}* ({$hari} tanggal) telah DIVERIFIKASI admin.\n\n📅 {$tgl}\n\nTerima kasih."
+                : "*SETORAN DITOLAK*\n\nHalo {$cso->name},\n\nSetoran tunai Anda sebesar *Rp {$rp}* DITOLAK admin.\n\nAlasan: {$deposit->admin_note}\n\n📅 {$tgl}\n\nTagihan tanggal tersebut kembali muncul di aplikasi dan bisa diajukan ulang.";
+
+            \App\Jobs\SendWhatsAppMessage::dispatch($phone, $message, $waToken);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Gagal kirim WA setoran CSO: ' . $e->getMessage());
+        }
+    }
+
     // Anda juga bisa menambahkan metode untuk 'Mark as Paid' jika logikanya berbeda
     
 
@@ -580,6 +824,95 @@ class ApiController extends Controller
 
         return response()->json($drivers);
     }
+
+    /**
+     * Laporan Performa CSO — per bulan, satu baris per CSO.
+     *
+     * Beda dengan laporan supir yang akumulatif sejak awal: CSO bekerja per
+     * shift/periode, jadi angkanya disaring ke satu bulan agar bisa
+     * dibandingkan antar-periode.
+     *
+     * Definisi status (alur: Assigned → Paid/CashDriver → Completed):
+     * - selesai    = 'Completed' (sama dengan definisi di laporan supir)
+     * - dibatalkan = 'Cancelled'
+     * - sisanya masih berjalan → ikut Total, tapi tidak di dua kolom itu.
+     *   Karena itu selesai + dibatalkan SENGAJA tidak selalu sama dengan total.
+     */
+    public function adminGetCsoPerformanceReport(Request $request)
+    {
+        $validated = $request->validate([
+            'month'   => 'nullable|date_format:Y-m',
+            'sort_by' => 'nullable|in:orders,revenue,cancelled',
+        ]);
+
+        $month = $validated['month'] ?? now()->format('Y-m');
+        $start = \Carbon\Carbon::createFromFormat('Y-m', $month)->startOfMonth();
+        $end   = (clone $start)->endOfMonth();
+        $range = [$start, $end];
+
+        $sortBy = $validated['sort_by'] ?? 'orders';
+        $orderCol = match ($sortBy) {
+            'revenue'   => 'revenue',
+            'cancelled' => 'cancelled',
+            default     => 'orders',
+        };
+
+        $csos = User::where('role', 'cso')
+            ->withCount([
+                // Kolom created_at diberi prefix nama tabel: withCount menempel
+                // pada subquery yang juga menyentuh 'users', jadi tanpa prefix
+                // nama kolomnya ambigu.
+                'csoBookings as orders' => fn ($q) => $q->whereBetween('bookings.created_at', $range),
+                'csoBookings as completed' => fn ($q) => $q
+                    ->whereBetween('bookings.created_at', $range)
+                    ->where('status', 'Completed'),
+                'csoBookings as cancelled' => fn ($q) => $q
+                    ->whereBetween('bookings.created_at', $range)
+                    ->where('status', 'Cancelled'),
+            ])
+            ->withSum([
+                'csoTransactions as revenue' => fn ($q) => $q->whereBetween('transactions.created_at', $range),
+            ], 'amount')
+            // SENGAJA tanpa batas bulan: justru gunanya menandai CSO yang sudah
+            // lama tidak membuat pesanan sama sekali.
+            ->withMax('csoBookings as last_order_at', 'bookings.created_at')
+            ->orderByDesc($orderCol)
+            ->get()
+            ->map(function (User $u) {
+                $orders  = (int) $u->orders;
+                $revenue = (float) ($u->revenue ?? 0);
+
+                return [
+                    'id'              => $u->id,
+                    'name'            => $u->name,
+                    'username'        => $u->username,
+                    'orders'          => $orders,
+                    'completed'       => (int) $u->completed,
+                    'cancelled'       => (int) $u->cancelled,
+                    'revenue'         => $revenue,
+                    // Dijaga dari pembagian nol: CSO tanpa pesanan bulan itu
+                    // tetap muncul dengan angka 0, bukan NaN/Infinity.
+                    'avg_order_value' => $orders > 0 ? round($revenue / $orders, 2) : 0.0,
+                    'cancel_rate'     => $orders > 0 ? round($u->cancelled / $orders * 100, 1) : 0.0,
+                    'last_order_at'   => optional($u->last_order_at ? \Carbon\Carbon::parse($u->last_order_at) : null)
+                        ->toIso8601String(),
+                ];
+            });
+
+        return response()->json([
+            'month'   => $month,
+            'sort_by' => $sortBy,
+            'summary' => [
+                'cso_count' => $csos->count(),
+                'orders'    => (int) $csos->sum('orders'),
+                'completed' => (int) $csos->sum('completed'),
+                'cancelled' => (int) $csos->sum('cancelled'),
+                'revenue'   => (float) $csos->sum('revenue'),
+            ],
+            'csos' => $csos->values(),
+        ]);
+    }
+
     public function adminGetSettings()
     {
         // Mengambil semua settings
@@ -605,12 +938,28 @@ class ApiController extends Controller
             config('taksi.driver_queue.radius_km')
         );
 
+        // Titik pusat area bandara — sama, kirim nilai efektif. Lewat model agar
+        // aturan validasi/fallback-nya persis sama dengan yang dipakai geofence.
+        $settings['airport_latitude']  = \App\Models\Setting::airportLatitude();
+        $settings['airport_longitude'] = \App\Models\Setting::airportLongitude();
+
+        // Tenggang "di luar area" (menit) — nilai efektif lewat model supaya aturan
+        // clamp/fallback-nya persis sama dengan yang dipakai auto-keluar antrian.
+        $settings['out_of_area_grace_minutes'] = Setting::outOfAreaGraceMinutes();
+
         // WhatsApp Gateway — kirim nilai efektif (default sesuai dokumentasi gateway).
-        $settings['wa_endpoint'] = $settings->get('wa_endpoint')
-            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        // Yang ditampilkan adalah BASE URL yang sudah dinormalkan, jadi nilai lama
+        // berbentuk URL kirim lengkap pun tampil konsisten sebagai base.
+        $settings['wa_endpoint'] = WhatsAppService::baseUrl();
         // Device ID opsional — kirim apa adanya ('' bila belum diatur), JANGAN
         // paksa jadi 1 (memaksa device bisa memicu 403 dari gateway).
-        $settings['wa_device_id'] = (string) $settings->get('wa_device_id', '');
+        // Device ID tidak lagi diisi admin — nilai bawaannya 0 = pakai device
+        // bawaan API Key. Tetap dikirim agar konsumen API lain tidak kehilangan
+        // kuncinya secara mendadak.
+        $settings['wa_device_id'] = (string) $settings->get(
+            'wa_device_id',
+            (string) WhatsAppService::DEFAULT_DEVICE_ID
+        );
 
         // Jam operasi pelacakan lokasi — kirim nilai efektif (setting || config)
         // agar field di UI tidak pernah kosong.
@@ -645,8 +994,12 @@ class ApiController extends Controller
             'wa_token'          => 'nullable|string',
             'admin_wa_number'   => 'nullable|string',
             'airport_radius_km' => 'nullable|numeric|min:0.1|max:50',
+            'airport_latitude'  => 'nullable|numeric|between:-90,90',
+            'airport_longitude' => 'nullable|numeric|between:-180,180',
+            // 0 = auto-keluar antrian dinonaktifkan (lihat Setting::outOfAreaGraceMinutes).
+            'out_of_area_grace_minutes' => 'nullable|integer|min:0|max:720',
             'wa_endpoint'       => 'nullable|url|max:255',
-            'wa_device_id'      => 'nullable|integer|min:1',
+            'wa_device_id'      => 'nullable|integer|min:0', // 0 = device bawaan API Key
             'operating_start'   => 'nullable|date_format:H:i',
             'operating_end'     => 'nullable|date_format:H:i',
         ]);
@@ -698,13 +1051,15 @@ class ApiController extends Controller
             }
         }
 
-        // Device ID WA boleh DIKOSONGKAN. Middleware mengubah '' → null sehingga
-        // loop di atas melewatinya (null di-skip); simpan eksplisit di sini agar
-        // admin bisa mengosongkannya (gateway lalu pakai device bawaan API Key).
+        // Device ID WA: nilai kosong/'0' sah dan berarti "pakai device bawaan
+        // API Key". Middleware mengubah '' → null sehingga loop di atas
+        // melewatinya (null di-skip), jadi disimpan eksplisit di sini —
+        // kosong dinormalkan jadi 0 supaya nilainya selalu terdefinisi.
         if ($request->has('wa_device_id')) {
+            $device = trim((string) $request->input('wa_device_id'));
             Setting::updateOrCreate(
                 ['key' => 'wa_device_id'],
-                ['value' => trim((string) $request->input('wa_device_id'))]
+                ['value' => $device === '' ? (string) WhatsAppService::DEFAULT_DEVICE_ID : $device]
             );
         }
 
@@ -722,46 +1077,33 @@ class ApiController extends Controller
     {
         $validated = $request->validate(['to' => 'required|string|max:20']);
 
-        $token = Setting::getValue('wa_token');
-        if (!$token) {
+        if (!WhatsAppService::apiKey()) {
             return response()->json([
                 'ok'      => false,
                 'message' => 'API Key WA belum diatur. Simpan API Key dulu, lalu tes.',
             ]);
         }
 
-        $endpoint = Setting::getValue('wa_endpoint')
-            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
+        $hasil = WhatsAppService::send(
+            $validated['to'],
+            'Tes notifikasi WhatsApp Gateway — Koperasi Angkasa Jaya. Jika pesan ini diterima, konfigurasi sudah benar.'
+        );
 
-        // Device ID opsional (lihat SendWhatsAppMessage): kirim hanya bila diisi.
-        $payload = [
-            'to'   => $validated['to'],
-            'body' => 'Tes notifikasi WhatsApp Gateway — Koperasi Angkasa Jaya. Jika pesan ini diterima, konfigurasi sudah benar.',
-        ];
-        $deviceRaw = trim((string) Setting::getValue('wa_device_id'));
-        if ($deviceRaw !== '') {
-            $payload['deviceId'] = (int) $deviceRaw;
+        // Tampilkan id & status antrean dari amplop { success, message, data }
+        // supaya admin bisa mencocokkannya dengan Log Pengiriman di bawah.
+        $rincian = '';
+        if ($hasil['queued_id'] !== null || $hasil['queue_status'] !== null) {
+            $rincian = ' (id ' . ($hasil['queued_id'] ?? '-')
+                . ', status ' . ($hasil['queue_status'] ?? '-') . ')';
         }
 
-        try {
-            $response = \Illuminate\Support\Facades\Http::withHeaders(['X-API-Key' => $token])
-                ->acceptJson()
-                ->timeout(15)
-                ->post($endpoint, $payload);
-
-            return response()->json([
-                'ok'      => $response->successful(),
-                'status'  => $response->status(),
-                'message' => $response->successful()
-                    ? "Terkirim ke gateway (HTTP {$response->status()}). Cek WhatsApp nomor tujuan."
-                    : "Gateway menolak (HTTP {$response->status()}): " . substr($response->body(), 0, 180),
-            ]);
-        } catch (\Throwable $e) {
-            return response()->json([
-                'ok'      => false,
-                'message' => 'Gagal menghubungi gateway: ' . $e->getMessage(),
-            ]);
-        }
+        return response()->json([
+            'ok'      => $hasil['ok'],
+            'status'  => $hasil['status'],
+            'message' => $hasil['ok']
+                ? "{$hasil['message']}{$rincian}. Cek WhatsApp nomor tujuan."
+                : "Gateway menolak (HTTP " . ($hasil['status'] ?? '-') . "): {$hasil['message']}",
+        ]);
     }
 
     /**
@@ -770,16 +1112,11 @@ class ApiController extends Controller
      */
     public function adminWaMessages(Request $request)
     {
-        $token = Setting::getValue('wa_token');
-        if (!$token) {
+        if (!WhatsAppService::apiKey()) {
             return response()->json(['ok' => false, 'message' => 'API Key WA belum diatur.']);
         }
 
-        $endpoint = Setting::getValue('wa_endpoint')
-            ?: 'https://wg.aptpairport.id/api/v1/messages/send';
-        // .../messages/send → .../messages (buang segmen terakhir).
-        $base = rtrim($endpoint, '/');
-        $listUrl = ($pos = strrpos($base, '/')) !== false ? substr($base, 0, $pos) : $base;
+        $listUrl = WhatsAppService::messagesUrl();
 
         $params = array_filter(
             $request->only(['page', 'limit', 'deviceId', 'direction', 'status', 'type', 'search', 'from', 'to']),
@@ -788,16 +1125,25 @@ class ApiController extends Controller
         $params['limit'] = $params['limit'] ?? 20;
 
         try {
-            $response = \Illuminate\Support\Facades\Http::withHeaders(['X-API-Key' => $token])
-                ->acceptJson()
-                ->timeout(15)
-                ->get($listUrl, $params);
+            $response = WhatsAppService::http()->get($listUrl, $params);
+
+            // Teruskan pesan galat ASLI dari gateway. Sebelumnya hanya kode HTTP
+            // yang ditampilkan, sehingga "HTTP 500" tidak memberi petunjuk apa
+            // pun — padahal gateway mengirim keterangan yang menunjuk langsung
+            // ke akar masalahnya di dalam amplop { success, message }.
+            $json = $response->json();
+            $pesanGateway = is_array($json) && !empty($json['message'])
+                ? (string) $json['message']
+                : trim(substr((string) $response->body(), 0, 180));
 
             return response()->json([
                 'ok'      => $response->successful(),
                 'status'  => $response->status(),
-                'data'    => $response->json() ?? $response->body(),
-                'message' => $response->successful() ? null : "Gateway menolak (HTTP {$response->status()})",
+                'data'    => $json ?? $response->body(),
+                'message' => $response->successful()
+                    ? null
+                    : "Gateway menolak (HTTP {$response->status()})"
+                        . ($pesanGateway !== '' ? ": {$pesanGateway}" : ''),
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -1014,8 +1360,8 @@ class ApiController extends Controller
 
         return response()->json([
             'base' => [
-                'latitude'  => (float) config('taksi.driver_queue.latitude'),
-                'longitude' => (float) config('taksi.driver_queue.longitude'),
+                'latitude'  => Setting::airportLatitude(),
+                'longitude' => Setting::airportLongitude(),
                 'radius_km' => Setting::airportRadiusKm(),
             ],
             'drivers' => $drivers,

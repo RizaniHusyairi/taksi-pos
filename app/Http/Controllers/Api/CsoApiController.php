@@ -10,11 +10,11 @@ use App\Models\Zone;
 use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
+use App\Models\CsoDeposit;
 use App\Models\DriverProfile;
 use App\Models\DriverQueue; 
 use App\Models\Setting; 
 use Illuminate\Support\Facades\Hash;
-use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
 use Illuminate\Support\Facades\Log;
@@ -91,25 +91,54 @@ class CsoApiController extends Controller
     }
 
     /**
-     * Mengambil daftar supir yang statusnya 'available'.
+     * Antrian supir yang BENAR-BENAR siap menerima order, terurut giliran:
+     * sort_order ASC (0,1,2 ... 1000+ = rejoin), lalu created_at ASC
+     * (sesama sort_order: siapa cepat dia dapat).
+     *
+     * Satu-satunya definisi "giliran berikutnya" — dipakai getAvailableDrivers(),
+     * processOrder(), dan changeDriver() supaya tidak ada dua versi kriteria.
      */
-    public function getAvailableDrivers()
+    private function readyQueueQuery()
     {
-        // Ambil data dari tabel queue, join ke users & profiles
-        // Urutkan berdasarkan sort_order ASC (0, 1, 2 ... 1000)
-        // Jika sort_order sama (sesama 1000), urutkan berdasarkan created_at (siapa cepat dia dapat)
-
-
-       $drivers = DriverQueue::with(['driver.driverProfile'])
+        return DriverQueue::with(['driver.driverProfile'])
             ->whereHas('driver.driverProfile', function ($query) {
                 // Hanya driver yang BENAR-BENAR siap: sudah tiba & standby, dan tidak
                 // sedang di luar area. Cegah order jatuh ke driver yang belum datang
                 // (mis. hasil pre-fill rotasi harian yang masih offline & lat/lng 0).
                 $query->whereIn('status', ['standby', 'available'])
-                      ->whereNull('out_of_area_since');
+                      ->whereNull('out_of_area_since')
+                      // ...DAN masih mengirim kabar. Tanpa syarat ini, supir
+                      // yang mematikan aplikasi lalu pulang tetap memegang
+                      // gilirannya: `out_of_area_since` hanya terisi kalau ada
+                      // ping, jadi HP yang diam terlihat sama seperti supir
+                      // yang setia menunggu di bandara. Aplikasi mengirim
+                      // heartbeat tiap 75 detik, jadi ambang menit-an ini tidak
+                      // akan mengganggu supir yang benar-benar hadir.
+                      ->whereNotNull('location_updated_at')
+                      ->where('location_updated_at', '>=', now()->subMinutes(
+                          (int) config('taksi.driver_queue.stale_location_minutes')
+                      ));
             })
             ->orderBy('sort_order', 'asc')
-            ->orderBy('created_at', 'asc')
+            ->orderBy('created_at', 'asc');
+    }
+
+    /**
+     * Supir yang sedang mendapat giliran (antrian teratas), atau null bila
+     * antrian kosong.
+     */
+    private function nextInQueueDriverId(): ?int
+    {
+        $top = $this->readyQueueQuery()->first();
+        return $top ? (int) $top->user_id : null;
+    }
+
+    /**
+     * Mengambil daftar supir yang statusnya 'available'.
+     */
+    public function getAvailableDrivers()
+    {
+        $drivers = $this->readyQueueQuery()
             ->get()
             ->map(function ($queue) {
                 $user = $queue->driver;
@@ -135,6 +164,14 @@ class CsoApiController extends Controller
                 return $user != null;
             })
             ->values();
+
+        // Tandai siapa yang sedang mendapat giliran. Backend-lah penentunya —
+        // UI (web & mobile) tinggal membaca flag ini, tidak menebak sendiri.
+        // Flag ditaruh di level teratas objek user (sejajar id/name), BUKAN di
+        // dalam driver_profile, agar tidak mengulang kebingungan queue_score.
+        $drivers->each(function ($user, $i) {
+            $user->is_next = ($i === 0);
+        });
 
         return response()->json($drivers);
     }
@@ -184,8 +221,8 @@ class CsoApiController extends Controller
 
         return response()->json([
             'base' => [
-                'latitude'  => (float) config('taksi.driver_queue.latitude'),
-                'longitude' => (float) config('taksi.driver_queue.longitude'),
+                'latitude'  => Setting::airportLatitude(),
+                'longitude' => Setting::airportLongitude(),
                 'radius_km' => Setting::airportRadiusKm(),
             ],
             'drivers' => $drivers,
@@ -362,8 +399,17 @@ class CsoApiController extends Controller
         $zone = Zone::findOrFail($validated['zone_id']);
         $cso = Auth::user();
 
+        // Supir yang seharusnya mendapat giliran. Kalau CSO memilih supir lain,
+        // order tetap diproses (ada kasus lapangan: mobil mogok, penumpang
+        // menolak, supir tak muncul) tetapi dicatat sebagai audit di bawah.
+        $topDriverId  = $this->nextInQueueDriverId();
+        $isOverride   = $topDriverId !== null && $topDriverId !== (int) $validated['driver_id'];
+        $topDriverName = $isOverride
+            ? (User::find($topDriverId)->name ?? 'supir teratas')
+            : null;
+
         // 2. Mulai Transaksi Database (Atomic)
-        $result = DB::transaction(function () use ($validated, $zone, $cso, $request) {
+        $result = DB::transaction(function () use ($validated, $zone, $cso, $request, $isOverride, $topDriverId, $topDriverName) {
             
             
             $status = 'Assigned';
@@ -396,6 +442,27 @@ class CsoApiController extends Controller
 
             // D. Hapus Driver dari Antrian (PENTING)
             DriverQueue::where('user_id', $validated['driver_id'])->delete();
+
+            // E. Jejak aktivitas supir.
+            $driverId = (int) $validated['driver_id'];
+            $this->logDriverActivity($driverId, 'ORDER_RECEIVED', "Dapat order dari CSO {$cso->name} → {$zone->name}");
+            $this->logDriverActivity($driverId, 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Order)');
+
+            // Bila CSO melewati giliran, catat di KEDUA sisi agar bisa ditelusuri
+            // dari halaman aktivitas supir manapun.
+            if ($isOverride) {
+                $chosenName = User::find($driverId)->name ?? 'supir lain';
+                $this->logDriverActivity(
+                    $driverId,
+                    'ORDER_QUEUE_OVERRIDE',
+                    "Mendahului antrian (giliran: {$topDriverName})"
+                );
+                $this->logDriverActivity(
+                    $topDriverId,
+                    'QUEUE_SKIPPED',
+                    "Dilewati CSO {$cso->name} — order diberikan ke {$chosenName}"
+                );
+            }
 
             // Load data lengkap untuk dikembalikan ke frontend (guna cetak struk)
             // 'transaction' diikutkan agar app bisa membangun link/QR struk dari ID transaksi.
@@ -473,8 +540,9 @@ class CsoApiController extends Controller
         }
 
         return response()->json([
-            'message' => 'Order berhasil diproses',
-            'data'    => $result // Mengembalikan objek booking lengkap
+            'message'        => 'Order berhasil diproses',
+            'queue_override' => $isOverride, // true = giliran antrian dilewati
+            'data'           => $result // Mengembalikan objek booking lengkap
         ], 201);
     }
 
@@ -570,7 +638,14 @@ class CsoApiController extends Controller
 
         $oldDriverId = (int) $booking->driver_id;
 
-        DB::transaction(function () use ($booking, $newDriverId, $oldDriverId) {
+        // "Ganti Supir" adalah jalur kedua yang bisa melewati giliran — audit
+        // sama seperti processOrder().
+        $cso           = Auth::user();
+        $topDriverId   = $this->nextInQueueDriverId();
+        $isOverride    = $topDriverId !== null && $topDriverId !== $newDriverId;
+        $topDriverName = $isOverride ? (User::find($topDriverId)->name ?? 'supir teratas') : null;
+
+        DB::transaction(function () use ($booking, $newDriverId, $oldDriverId, $newDriver, $cso, $isOverride, $topDriverId, $topDriverName) {
             // Alihkan order ke supir baru (status tetap 'Assigned').
             $booking->update(['driver_id' => $newDriverId]);
 
@@ -581,6 +656,19 @@ class CsoApiController extends Controller
             $this->logDriverActivity($oldDriverId, 'ORDER_REASSIGNED_OUT', 'Order dialihkan ke supir lain oleh CSO');
             $this->logDriverActivity($newDriverId, 'ORDER_REASSIGNED_IN', 'Menerima order alihan dari CSO');
             $this->logDriverActivity($newDriverId, 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Order Alihan)');
+
+            if ($isOverride) {
+                $this->logDriverActivity(
+                    $newDriverId,
+                    'ORDER_QUEUE_OVERRIDE',
+                    "Mendahului antrian (giliran: {$topDriverName})"
+                );
+                $this->logDriverActivity(
+                    $topDriverId,
+                    'QUEUE_SKIPPED',
+                    "Dilewati CSO {$cso->name} — order alihan diberikan ke {$newDriver->name}"
+                );
+            }
         });
 
         // Muat ulang relasi untuk response dan notifikasi.
@@ -636,6 +724,139 @@ class CsoApiController extends Controller
             'CashCSO'    => 'Tunai ke Kasir',
             default      => 'QRIS',
         };
+    }
+
+    // =====================================================================
+    // ===  SETORAN TUNAI CSO -> ADMIN                                    ===
+    // =====================================================================
+
+    /**
+     * Rekap tunai yang MASIH dipegang CSO, dikelompokkan per tanggal.
+     *
+     * CSO menyetor per hari penuh (boleh beberapa hari sekaligus), jadi inilah
+     * daftar yang ia centang di aplikasi. Diagregasi di DB — jangan tarik
+     * semua transaksi ke memori, bandingkan getDashboardStats().
+     */
+    public function depositOutstanding(Request $request)
+    {
+        $cso = $request->user();
+
+        $rows = Transaction::cashCsoBelumSetor($cso->id)
+            ->selectRaw('DATE(created_at) as tanggal')
+            ->selectRaw('COALESCE(SUM(amount), 0) as total')
+            ->selectRaw('COUNT(*) as jumlah')
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->orderByDesc(DB::raw('DATE(created_at)'))
+            ->get();
+
+        return response()->json([
+            'days' => $rows->map(fn ($r) => [
+                'date'  => (string) $r->tanggal,
+                'total' => (float) $r->total,
+                'count' => (int) $r->jumlah,
+            ])->values(),
+            'grand_total' => (float) $rows->sum('total'),
+            'grand_count' => (int) $rows->sum('jumlah'),
+        ]);
+    }
+
+    /**
+     * Buat setoran atas satu/beberapa tanggal.
+     *
+     * Nominal TIDAK diterima dari klien: server mengunci sendiri transaksi yang
+     * memenuhi syarat lalu menjumlahkannya. Inilah yang membuat dua perangkat
+     * yang menekan "Setor" bersamaan tidak bisa menyetor uang yang sama dua
+     * kali — yang kedua hanya kebagian sisa, atau ditolak karena kosong.
+     */
+    public function storeDeposit(Request $request)
+    {
+        $validated = $request->validate([
+            'dates'       => 'required|array|min:1|max:62',
+            'dates.*'     => 'required|date_format:Y-m-d',
+            'note'        => 'nullable|string|max:500',
+            'proof_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+        ], [
+            'dates.required' => 'Pilih minimal satu tanggal setoran.',
+        ]);
+
+        $cso   = $request->user();
+        $dates = array_values(array_unique($validated['dates']));
+
+        // Foto disimpan SEBELUM transaksi DB supaya kegagalan upload tidak
+        // menyisakan setoran setengah jadi (pola sama dengan recordPayment).
+        $proofPath = $request->hasFile('proof_image')
+            ? $request->file('proof_image')->store('deposit_proofs', 'public')
+            : null;
+
+        $hasil = DB::transaction(function () use ($cso, $dates, $validated, $proofPath) {
+            $placeholders = implode(',', array_fill(0, count($dates), '?'));
+
+            $rows = Transaction::cashCsoBelumSetor($cso->id)
+                ->whereRaw("DATE(created_at) IN ($placeholders)", $dates)
+                ->lockForUpdate()
+                ->get(['id', 'amount', 'created_at']);
+
+            if ($rows->isEmpty()) {
+                return ['error' => 'Tidak ada tunai yang perlu disetor pada tanggal tersebut.'];
+            }
+
+            // period_dates diambil dari baris yang BENAR-BENAR terkunci, bukan
+            // dari permintaan klien — tanggal kosong tidak ikut tercatat.
+            $tanggalNyata = $rows
+                ->map(fn ($t) => $t->created_at->toDateString())
+                ->unique()->sort()->values()->all();
+
+            $deposit = CsoDeposit::create([
+                'cso_id'             => $cso->id,
+                'amount'             => $rows->sum('amount'),
+                'status'             => 'Pending',
+                'period_dates'       => $tanggalNyata,
+                'transactions_count' => $rows->count(),
+                'note'               => $validated['note'] ?? null,
+                'proof_image'        => $proofPath,
+                'submitted_at'       => now(),
+            ]);
+
+            Transaction::whereIn('id', $rows->pluck('id'))->update([
+                'deposit_status' => 'Processing',
+                'cso_deposit_id' => $deposit->id,
+            ]);
+
+            return ['deposit' => $deposit];
+        });
+
+        if (isset($hasil['error'])) {
+            return response()->json(['message' => $hasil['error']], 422);
+        }
+
+        return response()->json([
+            'message' => 'Setoran diajukan, menunggu verifikasi admin.',
+            'data'    => $hasil['deposit'],
+        ], 201);
+    }
+
+    /** Riwayat setoran milik CSO yang sedang login. */
+    public function depositHistory(Request $request)
+    {
+        return response()->json(
+            CsoDeposit::where('cso_id', $request->user()->id)
+                ->orderByDesc('submitted_at')
+                ->paginate(20)
+        );
+    }
+
+    /** Detail satu setoran + transaksi yang tercakup di dalamnya. */
+    public function depositDetail(Request $request, CsoDeposit $deposit)
+    {
+        // Route model binding TIDAK memeriksa kepemilikan — tanpa baris ini,
+        // CSO mana pun bisa membaca setoran CSO lain hanya dengan menebak id.
+        if ((int) $deposit->cso_id !== (int) $request->user()->id) {
+            return response()->json(['message' => 'Setoran ini bukan milik Anda.'], 403);
+        }
+
+        $deposit->load(['transactions.booking.zoneTo:id,name', 'transactions.booking.driver:id,name']);
+
+        return response()->json($deposit);
     }
 
     /**

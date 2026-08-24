@@ -565,35 +565,36 @@ class CsoApp {
         }
     }
 
-    // --- NEW: RENDER DRIVERS FOR SELECTION MODAL ---
+    // --- RENDER DRIVERS FOR SELECTION MODAL ---
+    // Supir giliran (is_next dari backend) tampil sebagai kartu utama siap
+    // di-assign satu klik. Sisanya disembunyikan di balik toggle karena
+    // memilihnya = melewati antrian (dicatat sebagai audit oleh backend).
     async renderDriversForSelection() {
         this.selectDriverList.innerHTML = this.driverSkeleton(3);
 
         try {
             const drivers = await fetchApi('/cso/available-drivers');
 
-            if (drivers.length === 0) {
+            const ready = (drivers || []).filter(d => {
+                const rawStatus = ((d.driver_profile || {}).status || '').toLowerCase();
+                return rawStatus === 'standby' || rawStatus === 'available';
+            });
+
+            if (ready.length === 0) {
                 this.selectDriverList.innerHTML = `<div class="glass rounded-2xl p-6 text-center text-slate-500 font-semibold">Tidak ada supir standby saat ini.</div>`;
                 return;
             }
 
+            // Backend penentu giliran; fallback ke elemen pertama (urutan server).
+            const top = ready.find(d => d.is_next === true) || ready[0];
+            const others = ready.filter(d => d.id !== top.id);
+
+            // Disimpan agar konfirmasi override bisa menyebut nama yang dilewati.
+            this.nextQueueDriver = top;
+
             let hasRejoinHeaderRendered = false;
-
-            this.selectDriverList.innerHTML = drivers.map((d, index) => {
-                const profile = d.driver_profile || {};
-
-                // Filter hanya yang Available/Standby untuk dipilih
-                const rawStatus = (profile.status || '').toLowerCase();
-                const isStandby = (rawStatus === 'standby' || rawStatus === 'available');
-
-                if (!isStandby) return ''; // Skip offline drivers in selection modal
-
-                const queueNumber = d.queue_score < 1000 ? (d.queue_score + 1) : '-';
-                const queueScore = d.queue_score || 0;
-
-                const lineNumber = profile.line_number
-                    ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
-                    : '';
+            const othersHtml = others.map(d => {
+                const queueScore = this.queueScoreOf(d);
 
                 // --- LOGIKA SEPARATOR REJOIN ---
                 let separatorHtml = '';
@@ -612,39 +613,39 @@ class CsoApp {
                      </div>`;
                 }
 
-                return `
-                ${separatorHtml}
-                <div class="group relative w-full border border-emerald-100 dark:border-emerald-900/50 bg-white dark:bg-slate-800 rounded-2xl p-3.5 shadow-sm hover:shadow-lg hover:border-emerald-400 hover:-translate-y-0.5 transition-all duration-300">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3 overflow-hidden">
-                            <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center text-lg font-extrabold shadow-md">
-                                ${queueNumber}
-                            </div>
-                            <div class="min-w-0">
-                                <div class="flex items-center">
-                                    ${lineNumber}
-                                    <div class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${d.name}</div>
-                                </div>
-                                <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
-                                    <span>${profile.car_model || '-'}</span>
-                                    <span class="w-1 h-1 rounded-full bg-slate-300"></span>
-                                    <span class="font-mono">${profile.plate_number || '-'}</span>
-                                </div>
-                            </div>
-                        </div>
-                        <button class="btn-select-final bg-gradient-to-br from-emerald-500 to-teal-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1" data-driver-id="${d.id}">
-                            PILIH
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                        </button>
-                    </div>
-                </div>`;
+                return separatorHtml + this.driverRowHtml(d);
             }).join('');
+
+            this.selectDriverList.innerHTML = `
+                ${this.nextDriverCardHtml(top)}
+                ${others.length === 0 ? '' : `
+                <button id="btnToggleOtherDrivers" type="button" class="w-full mt-4 mb-1 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center gap-1.5 py-2">
+                    <svg id="iconToggleOtherDrivers" class="w-4 h-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    <span id="labelToggleOtherDrivers">Pilih supir lain (${others.length}) — melewati antrian</span>
+                </button>
+                <div id="otherDriversWrap" class="hidden space-y-3">${othersHtml}</div>`}
+            `;
+
+            // Toggle jalur sekunder
+            const toggleBtn = document.getElementById('btnToggleOtherDrivers');
+            toggleBtn?.addEventListener('click', () => {
+                const wrap = document.getElementById('otherDriversWrap');
+                const label = document.getElementById('labelToggleOtherDrivers');
+                const icon = document.getElementById('iconToggleOtherDrivers');
+                const willShow = wrap.classList.contains('hidden');
+                wrap.classList.toggle('hidden', !willShow);
+                label.textContent = willShow
+                    ? 'Sembunyikan supir lain'
+                    : `Pilih supir lain (${others.length}) — melewati antrian`;
+                icon.classList.toggle('rotate-180', willShow);
+            });
 
             // Bind Click Events
             this.selectDriverList.querySelectorAll('.btn-select-final').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const driverId = btn.dataset.driverId;
-                    this.finalizeOrder(driverId);
+                    const isOverride = btn.dataset.override === '1';
+                    this.finalizeOrder(driverId, isOverride);
                 });
             });
 
@@ -652,6 +653,87 @@ class CsoApp {
             console.error("Error render selection drivers:", error);
             this.selectDriverList.innerHTML = `<div class="text-center p-4 text-red-600">Gagal memuat antrian.</div>`;
         }
+    }
+
+    /** sort_order supir. Backend menaruhnya di dalam driver_profile.queue_score. */
+    queueScoreOf(d) {
+        const profile = d.driver_profile || {};
+        const raw = profile.queue_score ?? d.queue_score ?? 0;
+        return Number(raw) || 0;
+    }
+
+    /** Badge nomor antrian (1-based); '↺' untuk antrian rejoin. */
+    queueBadgeOf(d) {
+        const score = this.queueScoreOf(d);
+        return score < 1000 ? (score + 1) : '↺';
+    }
+
+    lineNumberHtml(profile) {
+        return profile.line_number
+            ? `<span class="font-mono text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded mr-2">#L${profile.line_number}</span>`
+            : '';
+    }
+
+    /** Kartu utama: supir yang sedang mendapat giliran. */
+    nextDriverCardHtml(d) {
+        const profile = d.driver_profile || {};
+        return `
+        <div class="w-full border-2 border-emerald-500 bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-lg">
+            <div class="flex items-center gap-1.5 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-3">
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M11 3a1 1 0 00-1.8-.6l-6 8A1 1 0 004 12h4v5a1 1 0 001.8.6l6-8A1 1 0 0015 8h-4V3z"/></svg>
+                Giliran Berikutnya
+            </div>
+            <div class="flex items-center gap-3 overflow-hidden">
+                <div class="flex-shrink-0 w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white flex items-center justify-center text-xl font-extrabold shadow-md">
+                    ${this.queueBadgeOf(d)}
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center">
+                        ${this.lineNumberHtml(profile)}
+                        <div class="font-extrabold text-slate-800 dark:text-slate-100 text-base truncate">${d.name}</div>
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                        <span>${profile.car_model || '-'}</span>
+                        <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                        <span class="font-mono">${profile.plate_number || '-'}</span>
+                    </div>
+                </div>
+            </div>
+            <button class="btn-select-final w-full mt-4 bg-gradient-to-br from-emerald-500 to-teal-500 text-white px-4 py-3 rounded-xl text-sm font-extrabold shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2" data-driver-id="${d.id}" data-override="0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                ASSIGN KE ${(d.name || '').split(' ')[0].toUpperCase()}
+            </button>
+        </div>`;
+    }
+
+    /** Baris supir di jalur sekunder (melewati antrian). */
+    driverRowHtml(d) {
+        const profile = d.driver_profile || {};
+        return `
+        <div class="group relative w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-2xl p-3.5 shadow-sm hover:shadow-lg hover:border-amber-400 transition-all duration-300">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 flex items-center justify-center text-lg font-extrabold">
+                        ${this.queueBadgeOf(d)}
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center">
+                            ${this.lineNumberHtml(profile)}
+                            <div class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${d.name}</div>
+                        </div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                            <span>${profile.car_model || '-'}</span>
+                            <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                            <span class="font-mono">${profile.plate_number || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn-select-final bg-amber-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1" data-driver-id="${d.id}" data-override="1">
+                    PILIH
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                </button>
+            </div>
+        </div>`;
     }
 
     openSelectDriverModal() {
@@ -1079,13 +1161,18 @@ class CsoApp {
     }
 
     // --- FINALISASI ORDER (DIPANGGIL SAAT PILIH SUPIR) ---
-    async finalizeOrder(driverId) {
+    async finalizeOrder(driverId, isOverride = false) {
         if (!this.paymentVerified || !this.pendingPaymentPayload) {
             Utils.showToast('Selesaikan pembayaran terlebih dahulu!', 'error');
             return;
         }
 
-        if (!confirm('Assign order ke supir ini?')) return;
+        if (isOverride) {
+            const skipped = this.nextQueueDriver?.name || 'supir yang sedang giliran';
+            if (!confirm(`Melewati antrian: order akan diberikan ke supir ini, melewati ${skipped}.\n\nTindakan ini dicatat pada riwayat aktivitas kedua supir. Lanjutkan?`)) return;
+        } else if (!confirm('Assign order ke supir ini?')) {
+            return;
+        }
 
         const payload = this.pendingPaymentPayload;
 

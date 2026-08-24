@@ -659,7 +659,7 @@
       <div class="modal-card glass dark:bg-slate-800/95 rounded-3xl shadow-2xl max-w-md w-full p-0 flex flex-col max-h-[85vh] overflow-hidden">
           <div class="p-4 flex justify-between items-center bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
               <div>
-                  <h3 class="font-bold text-lg">Pilih Supir</h3>
+                  <h3 class="font-bold text-lg">Supir Giliran Berikutnya</h3>
                   <p class="text-xs text-emerald-50 font-bold flex items-center gap-1">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                     Pembayaran Dikonfirmasi
@@ -668,7 +668,7 @@
               <button id="closeSelectDriver" class="w-9 h-9 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition-colors">✕</button>
           </div>
           <div class="p-3 bg-emerald-50/50 dark:bg-slate-900/50 text-xs text-emerald-700 dark:text-emerald-300 text-center font-medium">
-              Silakan pilih supir dari antrian di bawah ini untuk menyelesaikan order.
+              Sistem memilih supir sesuai urutan antrian. Tekan tombol assign untuk menyelesaikan order.
           </div>
           <div id="selectDriverList" class="overflow-y-auto flex-grow p-4 space-y-3 bg-slate-50/50 dark:bg-slate-800/50 nice-scroll">
               <!-- Driver list injected by JS -->

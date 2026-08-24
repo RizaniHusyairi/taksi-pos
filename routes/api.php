@@ -63,10 +63,17 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/withdrawals/{withdrawal}/approve', [ApiController::class, 'adminApproveWithdrawal']);
         Route::post('/withdrawals/{withdrawal}/reject', [ApiController::class, 'adminRejectWithdrawal']);
         Route::get('/withdrawals/{withdrawal}/details', [ApiController::class, 'adminGetWithdrawalDetails']);
+
+        // Verifikasi setoran tunai CSO
+        Route::get('/cso-deposits', [ApiController::class, 'adminGetCsoDeposits']);
+        Route::get('/cso-deposits/{deposit}/details', [ApiController::class, 'adminGetCsoDepositDetails']);
+        Route::post('/cso-deposits/{deposit}/approve', [ApiController::class, 'adminApproveCsoDeposit']);
+        Route::post('/cso-deposits/{deposit}/reject', [ApiController::class, 'adminRejectCsoDeposit']);
         
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);
         Route::get('/reports/driver-performance', [ApiController::class, 'adminGetDriverPerformanceReport']);
+        Route::get('/reports/cso-performance', [ApiController::class, 'adminGetCsoPerformanceReport']);
 
         // Peta supir + rekap keluar-masuk bandara
         Route::get('/driver-locations', [ApiController::class, 'adminGetDriverLocations']);
@@ -122,6 +129,13 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
 
         Route::post('/bookings/{booking}/change-driver', [CsoApiController::class, 'changeDriver']);
+
+        // Setoran tunai CSO ke admin. `outstanding` didaftarkan SEBELUM
+        // `{deposit}` supaya tidak tertelan route model binding.
+        Route::get('/deposits/outstanding', [CsoApiController::class, 'depositOutstanding']);
+        Route::get('/deposits', [CsoApiController::class, 'depositHistory']);
+        Route::post('/deposits', [CsoApiController::class, 'storeDeposit']);
+        Route::get('/deposits/{deposit}', [CsoApiController::class, 'depositDetail']);
     });
     
     
@@ -145,6 +159,8 @@ Route::middleware('auth:sanctum')->group(function() {
         // Riwayat Perjalanan
         Route::get('/history', [DriverApiController::class, 'getTripHistory']);
         Route::post('/location', [DriverApiController::class, 'updateLocation']);
+        // Titik pusat + radius geofence, untuk peta di beranda supir.
+        Route::get('/airport-area', [DriverApiController::class, 'getAirportArea']);
 
         Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);

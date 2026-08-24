@@ -6,9 +6,11 @@ import '../../widgets/app_bottom_nav.dart';
 import 'cso_dashboard_screen.dart';
 import 'cso_order_screen.dart';
 import 'cso_history_screen.dart';
+import 'cso_deposit_screen.dart';
 import 'cso_profile_screen.dart';
 
-/// Shell utama untuk peran CSO: tiga tab — Pemesanan Baru, Riwayat, Profil.
+/// Shell utama untuk peran CSO: Dashboard, Pemesanan Baru, Riwayat,
+/// Setoran (serah terima tunai ke admin), dan Profil.
 class CsoMainScreen extends StatefulWidget {
   const CsoMainScreen({super.key});
 
@@ -23,6 +25,7 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
     'Dashboard',
     'Pemesanan Baru',
     'Riwayat Transaksi',
+    'Setoran Tunai',
     'Profil Saya',
   ];
 
@@ -32,6 +35,7 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
       const CsoDashboardScreen(),
       const CsoOrderScreen(),
       const CsoHistoryScreen(),
+      const CsoDepositScreen(),
       const CsoProfileScreen(),
     ];
 
@@ -57,6 +61,7 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
             NavItemData(Icons.dashboard_rounded, 'Dashboard'),
             NavItemData(Icons.point_of_sale_rounded, 'Pesan'),
             NavItemData(Icons.history_rounded, 'Riwayat'),
+            NavItemData(Icons.account_balance_wallet_rounded, 'Setoran'),
             NavItemData(Icons.person_rounded, 'Profil'),
           ],
         ),

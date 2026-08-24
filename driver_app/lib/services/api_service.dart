@@ -9,7 +9,16 @@ class ApiService {
   // so localhost on the phone tunnels to the PC. No Wi-Fi/firewall needed.
   //   LAN alternative: http://<PC-LAN-IP>:8000/api  (needs server on 0.0.0.0 + firewall open)
   //   Production:      https://kaj.aptpairport.id/api
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  //
+  // Nilai bawaan = PRODUKSI, supaya build rilis tidak pernah lagi ikut terbawa
+  // alamat uji coba karena lupa mengembalikannya. Untuk menguji, timpa lewat
+  // --dart-define (tanpa menyentuh berkas ini):
+  //   flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api   (adb reverse)
+  //   flutter run --dart-define=API_BASE_URL=http://10.10.20.71:8000/api (Wi-Fi LAN)
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://kaj.aptpairport.id/api',
+  );
 
   /// Base URL untuk aset publik (mis. /storage/...) — baseUrl tanpa sufiks '/api'.
   static String get assetBaseUrl => baseUrl.endsWith('/api')
@@ -88,11 +97,23 @@ class ApiService {
     return await _dio.get('/driver/profile');
   }
 
-  Future<Response> updateLocation(double lat, double lng) async {
+  /// [accuracy] = radius ketidakpastian fix dalam meter (Position.accuracy).
+  /// Server memakainya untuk MENUNDA keputusan di dalam/luar area saat fix-nya
+  /// meragukan — posisinya tetap disimpan. Opsional agar aman bila null.
+  Future<Response> updateLocation(double lat, double lng, {double? accuracy}) async {
     return await _dio.post(
       '/driver/location',
-      data: {'latitude': lat, 'longitude': lng},
+      data: {
+        'latitude': lat,
+        'longitude': lng,
+        if (accuracy != null) 'accuracy': accuracy,
+      },
     );
+  }
+
+  /// Titik pusat & radius geofence bandara — untuk peta di beranda supir.
+  Future<Response> getAirportArea() async {
+    return await _dio.get('/driver/airport-area');
   }
 
   Future<Response> setStatus(
@@ -249,6 +270,37 @@ class ApiService {
       '/cso/process-order',
       data: FormData.fromMap(fields),
     );
+  }
+
+  // --- Setoran tunai CSO ke admin ---
+
+  /// Rekap tunai yang belum disetor, dikelompokkan per tanggal.
+  Future<Response> getCsoDepositOutstanding() async {
+    return await _dio.get('/cso/deposits/outstanding');
+  }
+
+  /// Ajukan setoran untuk [dates] (format 'YYYY-MM-DD').
+  /// Nominalnya dihitung server dari tanggal-tanggal itu — klien tidak
+  /// mengirim angka apa pun, supaya tidak mungkin berbeda dengan catatan asli.
+  Future<Response> createCsoDeposit(
+    List<String> dates, {
+    String? note,
+    String? proofPath,
+  }) async {
+    final Map<String, dynamic> fields = {
+      // Dio mengirim List sebagai dates[]=..., sesuai validasi 'dates.*'.
+      'dates': dates,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    };
+    if (proofPath != null) {
+      fields['proof_image'] = await MultipartFile.fromFile(proofPath);
+    }
+    return await _dio.post('/cso/deposits', data: FormData.fromMap(fields));
+  }
+
+  /// Riwayat setoran CSO yang sedang login (paginated).
+  Future<Response> getCsoDeposits() async {
+    return await _dio.get('/cso/deposits');
   }
 
   Future<Response> csoChangeDriver(int bookingId, int newDriverId) async {

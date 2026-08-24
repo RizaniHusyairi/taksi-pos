@@ -2,40 +2,41 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\Zone;
 
 class ZoneSeeder extends Seeder
 {
     /**
-     * Run the database seeds.
+     * Tarif resmi Bandar Udara APT Pranoto Samarinda (poster "Tarif / Sewa"):
+     * 5 zona Dalam Kota Samarinda + 5 tujuan Luar Kota.
+     * updateOrCreate → idempoten (aman dijalankan berulang / di produksi).
      */
     public function run(): void
     {
-        // Data zona tujuan yang akan kita masukkan
         $zones = [
-            ['name' => 'BONTANG', 'price' => 550000],
-            ['name' => 'JONGGON', 'price' => 450000],
-            ['name' => 'KOTA BANGUN', 'price' => 600000],
-            ['name' => 'L4', 'price' => 350000],
-            ['name' => 'MARANGKAYU', 'price' => 300000],
-            ['name' => 'SAMBOJA', 'price' => 400000],
-            ['name' => 'SANGATTA', 'price' => 750000],
-            ['name' => 'Zona I ( Depan bandara )', 'price' => 50000],
-            ['name' => 'Zona II ( Sungai Siring -Tanah Merah )', 'price' => 100000],
-            ['name' => 'Zona III ( Talang Sari - Jalan Juanda )', 'price' => 185000],
-            ['name' => 'Zona IV ( Jalan Antasari - Sungai Kujang )', 'price' => 225000],
-            ['name' => 'Zona V ( Samarinda Seberang - Loa janan )', 'price' => 275000],
+            // === DALAM KOTA SAMARINDA ===
+            ['name' => 'ZONA 1', 'price' => 60000,  'category' => 'dalam', 'description' => 'Depan Bandara'],
+            ['name' => 'ZONA 2', 'price' => 100000, 'category' => 'dalam', 'description' => 'Sungai Siring - Tanah Merah'],
+            ['name' => 'ZONA 3', 'price' => 185000, 'category' => 'dalam', 'description' => 'Talang Sari - Jalan Juanda'],
+            ['name' => 'ZONA 4', 'price' => 225000, 'category' => 'dalam', 'description' => 'Jalan Antasari - Sungai Kujang'],
+            ['name' => 'ZONA 5', 'price' => 275000, 'category' => 'dalam', 'description' => 'Samarinda Seberang - Loa Janan'],
+            // === LUAR KOTA SAMARINDA ===
+            ['name' => 'TENGGARONG',  'price' => 350000, 'category' => 'luar', 'description' => null],
+            ['name' => 'SANGA-SANGA', 'price' => 450000, 'category' => 'luar', 'description' => null],
+            ['name' => 'BONTANG',     'price' => 550000, 'category' => 'luar', 'description' => null],
+            ['name' => 'BALIKPAPAN',  'price' => 600000, 'category' => 'luar', 'description' => null],
+            ['name' => 'SANGATTA',    'price' => 750000, 'category' => 'luar', 'description' => null],
         ];
 
-        // Loop melalui data dan masukkan ke database
         foreach ($zones as $zone) {
-            // Menggunakan updateOrCreate untuk menghindari duplikasi data
-            // jika seeder dijalankan lebih dari sekali.
             Zone::updateOrCreate(
-                ['name' => $zone['name']], // <-- Mencari zona berdasarkan nama
-                ['price' => $zone['price']] // <-- Data yang akan di-insert atau di-update
+                ['name' => $zone['name']],
+                [
+                    'price'       => $zone['price'],
+                    'category'    => $zone['category'],
+                    'description' => $zone['description'],
+                ]
             );
         }
     }
