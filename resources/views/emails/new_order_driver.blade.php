@@ -49,8 +49,10 @@
 
         <div style="text-align: center;">
             <p>Silakan segera menuju titik jemput dan hubungi penumpang jika diperlukan.</p>
-            
-            <a href="{{ $receiptUrl }}" class="btn">Lihat Struk Pembayaran</a>
+
+            {{-- Tombol "Lihat Struk Pembayaran" dihapus: URL-nya memuat
+                 receipt_token, kunci form penilaian penumpang yang terbuka
+                 tanpa login. Lihat App\Mail\NewOrderForDriver. --}}
         </div>
 
         <div class="footer">

@@ -5,9 +5,6 @@ use App\Http\Controllers\CsoController;
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PageController;
-use App\Models\Setting;
-use App\Models\DriverQueue;
-use App\Models\DriverProfile;
 use App\Http\Controllers\PublicReceiptController;
 use App\Http\Controllers\ExportController;
 
@@ -15,34 +12,18 @@ use App\Http\Controllers\ExportController;
 
 // Halaman Login
 Route::get('/', [PageController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login']);
+// Rem laju login web: 5 percobaan gagal per menit per IP+username. Tanpa ini
+// password 6 karakter (batas minimum di ganti-password) bisa ditebak massal.
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
+// Penilaian penumpang: satu struk sekali nilai, tapi tetap perlu rem agar
+// token tidak bisa dibombardir.
 Route::get('/receipt/{uuid}', [PublicReceiptController::class, 'show'])->name('receipt.show');
-Route::post('/receipt/{uuid}/rate', [PublicReceiptController::class, 'rate'])->name('receipt.rate');
+Route::post('/receipt/{uuid}/rate', [PublicReceiptController::class, 'rate'])
+    ->middleware('throttle:10,1')
+    ->name('receipt.rate');
 
-
-Route::get('/init-rotation', function () {
-    // Set giliran awal mulai dari L1
-    Setting::updateOrCreate(
-        ['key' => 'daily_start_line'],
-        ['value' => 1] 
-    );
-    return "Rotasi berhasil diinisialisasi ke Nomor 1.";
-});
-
-Route::get('/reset-daily-queue', function () {
-    // 1. Kosongkan antrian fisik
-    DriverQueue::truncate();
-    
-    // 2. Reset tanggal masuk terakhir semua driver agar dianggap "Baru Masuk" lagi
-    DriverProfile::query()->update([
-        'last_queue_date' => null, 
-        'status' => 'offline'
-    ]);
-    
-    return "Antrian Harian Berhasil Direset. Silakan tes ulang dari awal.";
-});
 
 // Halaman yang butuh login
 Route::middleware('auth')->group(function () {

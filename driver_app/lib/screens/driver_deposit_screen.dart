@@ -3,37 +3,43 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../models/cso_deposit.dart';
-import '../../services/api_service.dart';
-import '../../theme/app_colors.dart';
-import '../../utils/api_error.dart';
-import '../../utils/format.dart';
-import '../../widgets/app_card.dart';
-import '../../widgets/fade_in.dart';
-import '../../widgets/gradient_button.dart';
+import '../models/driver_deposit.dart';
+import '../services/api_service.dart';
+import '../theme/app_colors.dart';
+import '../utils/api_error.dart';
+import '../utils/format.dart';
+import '../widgets/app_card.dart';
+import '../widgets/fade_in.dart';
+import '../widgets/gradient_button.dart';
 
-/// Tab "Setoran": CSO menyerahkan uang tunai penumpang (metode Tunai ke Kasir)
-/// ke admin.
+/// Layar "Setor Tunai": supir melunasi utang komisi atas order yang dibayar
+/// penumpang secara tunai langsung kepadanya.
 ///
-/// Setoran dilakukan PER TANGGAL — CSO mencentang satu atau beberapa hari,
-/// server yang menjumlahkan nominalnya. Nominal sengaja tidak bisa diketik:
-/// angka yang disetor harus selalu sama dengan catatan transaksi, supaya
-/// rekonsiliasi tidak pernah bergantung pada ingatan orang.
-class CsoDepositScreen extends StatefulWidget {
-  const CsoDepositScreen({super.key});
+/// Alurnya sengaja dibuat kembar dengan layar setoran CSO — pilih tanggal,
+/// server yang menjumlahkan, admin yang memverifikasi — supaya siapa pun yang
+/// pernah memakai salah satunya langsung paham yang lain.
+///
+/// Satu hal yang WAJIB jelas di layar ini dan tidak ada di layar CSO: angka
+/// yang disetor adalah KOMISI koperasi, bukan seluruh ongkos penumpang. Supir
+/// yang mengira harus menyerahkan Rp 150.000 padahal cuma Rp 30.000 akan
+/// menunda-nunda setoran, dan itu persis masalah yang ingin diselesaikan
+/// fitur ini.
+class DriverDepositScreen extends StatefulWidget {
+  const DriverDepositScreen({super.key});
 
   @override
-  State<CsoDepositScreen> createState() => _CsoDepositScreenState();
+  State<DriverDepositScreen> createState() => _DriverDepositScreenState();
 }
 
-class _CsoDepositScreenState extends State<CsoDepositScreen> {
+class _DriverDepositScreenState extends State<DriverDepositScreen> {
   final _api = ApiService();
 
-  List<OutstandingDay> _days = [];
-  List<CsoDeposit> _history = [];
+  List<DriverOutstandingDay> _days = [];
+  List<DriverDeposit> _history = [];
   final Set<String> _selected = {};
 
   num _grandTotal = 0;
+  num _debtLimit = 0;
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -60,28 +66,31 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     });
     try {
       final hasil = await Future.wait([
-        _api.getCsoDepositOutstanding(),
-        _api.getCsoDeposits(),
+        _api.getDriverDepositOutstanding(),
+        _api.getDriverDeposits(),
       ]);
 
-      final out = hasil[0].data as Map<String, dynamic>;
+      final out = Map<String, dynamic>.from(hasil[0].data as Map);
       final days = (out['days'] as List? ?? [])
-          .map((e) => OutstandingDay.fromJson(Map<String, dynamic>.from(e)))
+          .map((e) => DriverOutstandingDay.fromJson(Map<String, dynamic>.from(e)))
           .toList();
 
       // Endpoint riwayat dipaginasi Laravel: isinya ada di key 'data'.
       final rawHist = hasil[1].data;
-      final listHist = rawHist is Map ? (rawHist['data'] as List? ?? []) : (rawHist as List? ?? []);
+      final listHist =
+          rawHist is Map ? (rawHist['data'] as List? ?? []) : (rawHist as List? ?? []);
       final history = listHist
-          .map((e) => CsoDeposit.fromJson(Map<String, dynamic>.from(e)))
+          .map((e) => DriverDeposit.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+
+      num toNum(dynamic v) =>
+          v is num ? v : (num.tryParse(v?.toString() ?? '0') ?? 0);
 
       if (!mounted) return;
       setState(() {
         _days = days;
-        _grandTotal = out['grand_total'] is num
-            ? out['grand_total'] as num
-            : num.tryParse('${out['grand_total']}') ?? 0;
+        _grandTotal = toNum(out['grand_total']);
+        _debtLimit = toNum(out['debt_limit']);
         _history = history;
         // Buang pilihan atas tanggal yang sudah tidak ada lagi (mis. baru
         // disetor dari perangkat lain) supaya total terpilih tidak berbohong.
@@ -105,6 +114,9 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
   int get _jumlahTransaksiTerpilih => _days
       .where((d) => _selected.contains(d.date))
       .fold<int>(0, (a, d) => a + d.count);
+
+  /// Utang sudah melewati batas yang ditetapkan admin -> antrian terkunci.
+  bool get _terblokir => _debtLimit > 0 && _grandTotal > _debtLimit;
 
   String _tanggalPanjang(String ymd) {
     final d = DateTime.tryParse(ymd);
@@ -146,8 +158,6 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     if (sumber == null) return;
 
     try {
-      // Dikecilkan sejak dari HP: hemat kuota supir, dan server toh akan
-      // memampatkannya lagi saat membakar keterangan setoran.
       final file = await ImagePicker().pickImage(
         source: sumber,
         imageQuality: 75,
@@ -173,7 +183,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
         content: Text(
           'Anda menyetorkan ${formatRupiah(_totalTerpilih)} '
           'dari ${_selected.length} tanggal '
-          '($_jumlahTransaksiTerpilih transaksi).\n\n'
+          '($_jumlahTransaksiTerpilih order).\n\n'
+          'Nominal ini adalah komisi koperasi, bukan seluruh tarif penumpang.\n\n'
           '${_proofPath == null ? 'Tanpa foto bukti. ' : 'Foto bukti akan diberi keterangan setoran otomatis. '}'
           'Serahkan uangnya ke admin, lalu admin akan memverifikasi setoran ini.',
         ),
@@ -193,7 +204,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
 
     setState(() => _submitting = true);
     try {
-      await _api.createCsoDeposit(
+      await _api.createDriverDeposit(
         _selected.toList()..sort(),
         proofPath: _proofPath,
       );
@@ -223,6 +234,19 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Setor Tunai'),
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.ink,
+        elevation: 0,
+      ),
+      body: _body(),
+    );
+  }
+
+  Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_error != null) {
@@ -254,11 +278,15 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               children: [
                 FadeInUp(child: _ringkasan()),
+                if (_terblokir) ...[
+                  const SizedBox(height: 12),
+                  _peringatanBlokir(),
+                ],
                 const SizedBox(height: 18),
                 _judul('Belum Disetor', Icons.savings_rounded),
                 const SizedBox(height: 10),
                 if (_days.isEmpty)
-                  _kosong('Tidak ada tunai yang perlu disetor. Semua sudah beres.')
+                  _kosong('Tidak ada utang setoran. Semua sudah beres.')
                 else
                   ..._days.map(_kartuTanggal),
                 const SizedBox(height: 24),
@@ -285,11 +313,12 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 18),
+              Icon(Icons.savings_rounded, color: Colors.white, size: 18),
               SizedBox(width: 8),
               Text(
-                'Tunai di tangan Anda',
-                style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600),
+                'Utang setoran ke koperasi',
+                style: TextStyle(
+                    color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -309,6 +338,58 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
                 ? 'Semua setoran sudah diserahkan'
                 : 'Dari ${_days.length} tanggal yang belum disetor',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+          // Menyebut batasnya sejak awal — supir berhak tahu seberapa dekat
+          // ia dengan titik di mana antriannya terkunci, bukan baru sadar
+          // saat ditolak di gerbang.
+          if (_debtLimit > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'Batas utang: ${formatRupiah(_debtLimit)}',
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _peringatanBlokir() {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_rounded, color: AppColors.danger, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Antrian terkunci',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.danger,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Utang Anda melewati batas. Setor tunai ke admin dulu, '
+                  'lalu Anda bisa masuk antrian lagi.',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -336,7 +417,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     return AppCard(
       child: Row(
         children: [
-          const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 20),
+          const Icon(Icons.check_circle_outline_rounded,
+              color: AppColors.success, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -349,7 +431,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     );
   }
 
-  Widget _kartuTanggal(OutstandingDay hari) {
+  Widget _kartuTanggal(DriverOutstandingDay hari) {
     final dipilih = _selected.contains(hari.date);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -360,9 +442,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
         }),
         child: AppCard(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          border: dipilih
-              ? Border.all(color: AppColors.skyBlue, width: 1.6)
-              : null,
+          border:
+              dipilih ? Border.all(color: AppColors.skyBlue, width: 1.6) : null,
           child: Row(
             children: [
               Checkbox(
@@ -386,8 +467,9 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${hari.count} transaksi tunai',
-                      style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
+                      '${hari.count} order tunai',
+                      style:
+                          const TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
                     ),
                   ],
                 ),
@@ -407,7 +489,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     );
   }
 
-  Widget _kartuRiwayat(CsoDeposit d) {
+  Widget _kartuRiwayat(DriverDeposit d) {
     final (Color warna, String label, IconData ikon) = d.isApproved
         ? (AppColors.success, 'Diterima', Icons.verified_rounded)
         : d.isRejected
@@ -427,7 +509,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
                 const SizedBox(width: 6),
                 Text(
                   label,
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: warna),
+                  style: TextStyle(
+                      fontSize: 11.5, fontWeight: FontWeight.w700, color: warna),
                 ),
                 const Spacer(),
                 Text(
@@ -442,7 +525,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '${d.periodDates.map(_tanggalPanjang).join(' · ')} — ${d.transactionsCount} transaksi',
+              '${d.periodDates.map(_tanggalPanjang).join(' · ')} — ${d.transactionsCount} order',
               style: const TextStyle(fontSize: 11.5, color: AppColors.inkSoft),
             ),
             if (d.submittedAt != null) ...[
@@ -452,7 +535,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
                 style: const TextStyle(fontSize: 11, color: AppColors.inkFaint),
               ),
             ],
-            // Alasan penolakan wajib terlihat: inilah yang memberi tahu CSO
+            // Alasan penolakan wajib terlihat: inilah yang memberi tahu supir
             // apa yang harus diperbaiki sebelum mengajukan ulang.
             if (d.isRejected && d.adminNote != null) ...[
               const SizedBox(height: 8),
@@ -488,7 +571,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
             foregroundColor: AppColors.skyBlue,
             side: const BorderSide(color: AppColors.skyBlue, width: 1.2),
             padding: const EdgeInsets.symmetric(vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       );
@@ -512,7 +596,8 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
               errorBuilder: (_, _, _) => const SizedBox(
                 width: 46,
                 height: 46,
-                child: Icon(Icons.broken_image_rounded, color: AppColors.inkFaint),
+                child:
+                    Icon(Icons.broken_image_rounded, color: AppColors.inkFaint),
               ),
             ),
           ),
@@ -540,12 +625,14 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
           IconButton(
             tooltip: 'Ganti foto',
             onPressed: _submitting ? null : _ambilFoto,
-            icon: const Icon(Icons.refresh_rounded, size: 19, color: AppColors.skyBlue),
+            icon: const Icon(Icons.refresh_rounded,
+                size: 19, color: AppColors.skyBlue),
           ),
           IconButton(
             tooltip: 'Hapus foto',
             onPressed: _submitting ? null : () => setState(() => _proofPath = null),
-            icon: const Icon(Icons.close_rounded, size: 19, color: AppColors.danger),
+            icon: const Icon(Icons.close_rounded,
+                size: 19, color: AppColors.danger),
           ),
         ],
       ),

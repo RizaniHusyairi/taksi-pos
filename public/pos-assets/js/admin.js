@@ -91,7 +91,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp {
   constructor() {
-    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'cso-deposits', 'report-revenue', 'report-driver', 'cso-performance', 'driver-map', 'api', 'wa', 'settings'];
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'cso-deposits', 'driver-deposits', 'method-disputes', 'report-revenue', 'report-driver', 'cso-performance', 'fraud-signals', 'driver-map', 'api', 'wa', 'settings'];
     this.charts = {};
   }
   init() {
@@ -241,6 +241,12 @@ export class AdminApp {
       const graceEl = document.getElementById('outOfAreaGraceMinutes');
       if (graceEl && graceEl.value.trim() !== '') {
         formData.append('out_of_area_grace_minutes', graceEl.value.trim());
+      }
+      // Batas utang supir (Rp). Kosong = jangan ubah; 0 sah & berarti
+      // pembatasan masuk antrian dimatikan — pola sama dengan grace period.
+      const debtEl = document.getElementById('maxDriverDebt');
+      if (debtEl && debtEl.value.trim() !== '') {
+        formData.append('max_driver_debt', debtEl.value.trim());
       }
       // Jam operasi pelacakan lokasi (HH:MM). Kosong = jangan ubah.
       const opStartEl = document.getElementById('operatingStart');
@@ -503,6 +509,18 @@ export class AdminApp {
     window.app = this;
     window.openWdDetails = (id) => this.openWdDetails(id);
     window.openDepDetails = (id) => this.openDepDetails(id);
+    window.openDdepDetails = (id) => this.openDdepDetails(id);
+
+    // Modal rincian setoran SUPIR
+    document.getElementById('btnCloseDdepDetails')?.addEventListener('click', () => {
+      const m = document.getElementById('modalDdepDetails');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    });
+
+    // Filter laporan sinyal kecurangan
+    document.getElementById('fsApply')?.addEventListener('click', () => this.renderFraudSignals());
+    document.getElementById('fsPhoneMin')?.addEventListener('change', () => this.renderFraudSignals());
 
     // Modal rincian setoran CSO
     document.getElementById('btnCloseDepDetails')?.addEventListener('click', () => {
@@ -530,6 +548,8 @@ export class AdminApp {
     this.renderTxLog();
     this.renderWithdrawals();
     this.renderCsoDeposits();
+    this.renderDriverDeposits();
+    this.renderMethodDisputes();
     this.renderRevReport();
     this.renderDriverReport();
     this.renderCsoReport();
@@ -558,6 +578,10 @@ export class AdminApp {
       this._mapPoll = setInterval(() => this.renderDriverMap(), 15000);
     }
     if (hash === 'wa') this.renderWa();
+    // Sinyal kecurangan sengaja TIDAK ikut renderAll(): tiga query agregatnya
+    // berat dan tidak ada gunanya dijalankan setiap kali admin membuka panel.
+    // Dimuat saat tabnya benar-benar dibuka.
+    if (hash === 'fraud-signals') this.renderFraudSignals();
     // Peta pemilih titik pusat hidup di tab Pengaturan yang awalnya tersembunyi
     // → Leaflet perlu menghitung ulang ukurannya setiap tab ini dibuka.
     if (hash === 'settings') this.renderAirportCenterMap();
@@ -572,9 +596,12 @@ export class AdminApp {
       'finance-log': 'Transaction Log',
       'withdrawals': 'Withdrawal Requests',
       'cso-deposits': 'Setoran Tunai CSO',
+      'driver-deposits': 'Setoran Tunai Supir',
+      'method-disputes': 'Sengketa Pembayaran',
       'report-revenue': 'Laporan Pendapatan',
       'report-driver': 'Laporan Kinerja Supir',
       'cso-performance': 'Performa CSO',
+      'fraud-signals': 'Sinyal Kecurangan',
       'driver-map': 'Peta Supir',
       'api': 'API Integrasi',
       'wa': 'WhatsApp Gateway',
@@ -1820,6 +1847,338 @@ export class AdminApp {
     }
   }
 
+  // ----- Setoran Tunai SUPIR -----
+  // Kembar dengan renderCsoDeposits() di atas. Sengaja tidak digabung jadi satu
+  // fungsi berparameter: keduanya menyentuh buku besar yang BERBEDA
+  // (deposit_status vs payout_status) dan kolom tabelnya pun berbeda, jadi
+  // menyatukannya akan melahirkan satu fungsi bercabang-cabang yang lebih sulit
+  // dibaca daripada dua fungsi lurus.
+  async renderDriverDeposits(page = 1) {
+    const tbody = document.getElementById('ddepTable');
+    if (!tbody) return;
+
+    const sel = document.getElementById('ddepFilterStatus');
+    if (sel && !sel.dataset.bound) {
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', () => this.renderDriverDeposits());
+    }
+    const status = sel ? sel.value : 'Pending';
+
+    try {
+      const _paged = await fetchApi(`/admin/driver-deposits?page=${page}${status ? `&status=${status}` : ''}`);
+      const rows = _paged.data || _paged;
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-500">Tidak ada setoran pada filter ini.</td></tr>';
+        this._renderPager('ddepPager', tbody, _paged, (p) => this.renderDriverDeposits(p));
+        return;
+      }
+
+      tbody.innerHTML = rows.map(d => {
+        const tanggal = (d.period_dates || []);
+        const tglRingkas = tanggal.length > 3
+          ? `${tanggal.slice(0, 3).join(', ')} <span class="text-slate-400">+${tanggal.length - 3} lagi</span>`
+          : (tanggal.join(', ') || '-');
+
+        const btnDetail = `<button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500 px-2 py-1 rounded" onclick="window.openDdepDetails(${d.id})">Detail</button>`;
+        const btnBukti = d.proof_image
+          ? `<button class="text-xs text-blue-600 border border-blue-200 dark:text-blue-400 dark:border-blue-800 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-slate-700" onclick="window.open('/storage/${d.proof_image}', '_blank')">Bukti</button>`
+          : '';
+
+        let aksi;
+        if (d.status === 'Pending') {
+          aksi = `<div class="flex items-center justify-end gap-1">${btnDetail}${btnBukti}
+              <button class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded shadow" data-ddep-act="approve" data-id="${d.id}">Terima</button>
+              <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-ddep-act="reject" data-id="${d.id}">Tolak</button>
+            </div>`;
+        } else if (d.status === 'Approved') {
+          aksi = `<div class="flex items-center justify-end gap-1">${btnDetail}${btnBukti}<span class="text-xs text-emerald-600 font-bold ml-1">Diterima</span></div>`;
+        } else {
+          aksi = `<div class="flex items-center justify-end gap-1">${btnDetail}<span class="text-xs text-red-500 italic ml-1" title="${(d.admin_note || '').replace(/"/g, '&quot;')}">Ditolak</span></div>`;
+        }
+
+        const catatan = d.status === 'Rejected' && d.admin_note
+          ? `<div class="text-[11px] text-red-500 mt-0.5">${d.admin_note}</div>` : '';
+
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+            <td class="py-3 px-5 align-top dark:text-slate-300">${d.submitted_at ? new Date(d.submitted_at).toLocaleString('id-ID') : '-'}</td>
+            <td class="py-3 px-5 align-top">
+              <div class="font-medium dark:text-slate-200">${d.driver?.name || 'Supir Dihapus'}</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${d.transactions_count} order</div>
+            </td>
+            <td class="py-3 px-5 align-top text-xs dark:text-slate-300">${tglRingkas}</td>
+            <td class="py-3 px-5 align-top text-right font-mono dark:text-slate-200">${Utils.formatCurrency(d.amount)}</td>
+            <td class="py-3 px-5 align-top text-center">${this.wdBadge(d.status)}${catatan}</td>
+            <td class="py-3 px-5 align-top text-right">${aksi}</td>
+          </tr>`;
+      }).join('');
+
+      this._renderPager('ddepPager', tbody, _paged, (p) => this.renderDriverDeposits(p));
+
+      tbody.querySelectorAll('[data-ddep-act="approve"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Konfirmasi bahwa uang tunai sudah Anda TERIMA dari supir? Utangnya akan ditandai lunas.')) return;
+          await fetchApi(`/admin/driver-deposits/${btn.dataset.id}/approve`, { method: 'POST', body: JSON.stringify({}) });
+          alert('Setoran diterima, utang supir lunas.');
+          this.renderDriverDeposits();
+        });
+      });
+
+      tbody.querySelectorAll('[data-ddep-act="reject"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          // Alasan WAJIB — supir harus tahu apa yang perlu diperbaiki, dan
+          // server pun menolak permintaan tanpa alasan.
+          const alasan = prompt('Alasan penolakan (wajib, akan dikirim ke supir):');
+          if (alasan === null) return;
+          if (!alasan.trim()) { alert('Alasan tidak boleh kosong.'); return; }
+          await fetchApi(`/admin/driver-deposits/${btn.dataset.id}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ admin_note: alasan.trim() }),
+          });
+          alert('Setoran ditolak, utang dikembalikan ke supir.');
+          this.renderDriverDeposits();
+        });
+      });
+    } catch (error) {
+      console.error('Gagal memuat setoran supir:', error);
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Gagal memuat data.</td></tr>';
+    }
+  }
+
+  async openDdepDetails(id) {
+    const modal = document.getElementById('modalDdepDetails');
+    const body = document.getElementById('ddepDetailBody');
+    body.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">Memuat...</td></tr>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    try {
+      const { deposit, transactions } = await fetchApi(`/admin/driver-deposits/${id}/details`);
+
+      document.getElementById('ddepDetailSub').textContent =
+        `${deposit.driver?.name || 'Supir'} • ${(deposit.period_dates || []).join(', ') || '-'}`;
+      document.getElementById('ddepDetailTotal').textContent = Utils.formatCurrency(deposit.amount);
+
+      body.innerHTML = transactions.length
+        ? transactions.map(t => `<tr>
+              <td class="px-4 py-2 dark:text-slate-300">${new Date(t.created_at).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-2 dark:text-slate-300">${t.booking?.zone_to?.name || t.booking?.manual_destination || '-'}</td>
+              <td class="px-4 py-2 dark:text-slate-300">${t.booking?.cso?.name || '-'}</td>
+              <td class="px-4 py-2 text-right font-mono dark:text-slate-200">${Utils.formatCurrency(t.amount)}</td>
+            </tr>`).join('')
+        : '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">Tidak ada transaksi.</td></tr>';
+    } catch (e) {
+      body.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-red-500">Gagal memuat rincian.</td></tr>';
+    }
+  }
+
+  // ----- Sengketa Metode Pembayaran -----
+  async renderMethodDisputes(page = 1) {
+    const tbody = document.getElementById('mdTable');
+    if (!tbody) return;
+
+    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+    const sel = document.getElementById('mdFilterStatus');
+    if (sel && !sel.dataset.bound) {
+      sel.dataset.bound = '1';
+      sel.addEventListener('change', () => this.renderMethodDisputes());
+    }
+    const status = sel ? sel.value : 'Open';
+
+    try {
+      const _paged = await fetchApi(`/admin/method-disputes?page=${page}&status=${encodeURIComponent(status)}`);
+      const rows = _paged.data || _paged;
+
+      // Lencana di sidebar: sengketa yang menganggur berarti supir menunggu
+      // keputusan yang tidak pernah datang. Hanya dihitung saat filter memang
+      // menampilkan yang belum diputus.
+      const badge = document.getElementById('navDisputeBadge');
+      if (badge && status === 'Open') {
+        const jml = _paged.total ?? rows.length;
+        badge.textContent = jml;
+        badge.classList.toggle('hidden', !jml);
+      }
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-slate-500">Tidak ada sengketa pada filter ini.</td></tr>';
+        this._renderPager('mdPager', tbody, _paged, (p) => this.renderMethodDisputes(p));
+        return;
+      }
+
+      tbody.innerHTML = rows.map(t => {
+        const b = t.booking || {};
+        const rute = b.zone_to?.name || b.manual_destination || '-';
+
+        let aksi;
+        if (t.method_dispute_status === 'Open') {
+          aksi = `<div class="flex items-center justify-end gap-1">
+              <button class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded shadow" data-md-act="uphold" data-id="${t.id}">Kabulkan</button>
+              <button class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded shadow" data-md-act="reject" data-id="${t.id}">Tolak</button>
+            </div>`;
+        } else if (t.method_dispute_status === 'Upheld') {
+          // Menyebut perpindahannya secara eksplisit — "Dikabulkan" saja tidak
+          // memberi tahu ke mana uangnya pergi.
+          aksi = `<span class="text-xs text-emerald-600 font-bold">Dikabulkan → jadi tagihan CSO</span>`;
+        } else {
+          aksi = `<span class="text-xs text-red-500 italic">Ditolak</span>`;
+        }
+
+        const catatanAdmin = t.method_admin_note
+          ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Catatan admin: ${esc(t.method_admin_note)}</div>`
+          : '';
+
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40 align-top">
+            <td class="py-3 px-5 dark:text-slate-300">${t.method_disputed_at ? new Date(t.method_disputed_at).toLocaleString('id-ID') : '-'}</td>
+            <td class="py-3 px-5">
+              <div class="font-medium dark:text-slate-200">#${t.booking_id}</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${esc(rute)}</div>
+            </td>
+            <td class="py-3 px-5 text-xs dark:text-slate-300">
+              <div>${esc(b.driver?.name || '-')}</div>
+              <div class="text-slate-400">CSO: ${esc(b.cso?.name || '-')}</div>
+            </td>
+            <td class="py-3 px-5 text-xs dark:text-slate-300 max-w-xs">${esc(t.method_dispute_note || '-')}${catatanAdmin}</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-200">${Utils.formatCurrency(t.amount)}</td>
+            <td class="py-3 px-5 text-center">${this.wdBadge(t.method_dispute_status === 'Upheld' ? 'Approved' : t.method_dispute_status === 'Rejected' ? 'Rejected' : 'Pending')}</td>
+            <td class="py-3 px-5 text-right">${aksi}</td>
+          </tr>`;
+      }).join('');
+
+      this._renderPager('mdPager', tbody, _paged, (p) => this.renderMethodDisputes(p));
+
+      tbody.querySelectorAll('[data-md-act="uphold"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          // Konfirmasi menyebut KONSEKUENSINYA, bukan cuma "yakin?" — ini
+          // memindahkan kewajiban uang ke orang lain dan tidak bisa dibatalkan.
+          if (!confirm(
+            'Kabulkan sanggahan?\n\n'
+            + '• Order dikoreksi menjadi "Tunai ke Kasir"\n'
+            + '• Utang komisi lepas dari supir\n'
+            + '• Uangnya menjadi kewajiban setoran CSO\n\n'
+            + 'Keputusan ini tidak bisa dibatalkan dari panel.'
+          )) return;
+          const catatan = prompt('Catatan untuk arsip (opsional):') ?? '';
+          await fetchApi(`/admin/method-disputes/${btn.dataset.id}/uphold`, {
+            method: 'POST',
+            body: JSON.stringify({ admin_note: catatan.trim() || null }),
+          });
+          alert('Sanggahan dikabulkan. Uangnya kini tercatat sebagai tagihan setoran CSO.');
+          this.renderMethodDisputes();
+        });
+      });
+
+      tbody.querySelectorAll('[data-md-act="reject"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          // Alasan WAJIB — supir berhak tahu dasar keputusan yang membuatnya
+          // tetap berutang; server pun menolak permintaan tanpa alasan.
+          const alasan = prompt('Alasan penolakan (wajib, akan dikirim ke supir):');
+          if (alasan === null) return;
+          if (!alasan.trim()) { alert('Alasan tidak boleh kosong.'); return; }
+          await fetchApi(`/admin/method-disputes/${btn.dataset.id}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ admin_note: alasan.trim() }),
+          });
+          alert('Sanggahan ditolak. Utang supir tetap berlaku.');
+          this.renderMethodDisputes();
+        });
+      });
+    } catch (error) {
+      console.error('Gagal memuat sengketa pembayaran:', error);
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Gagal memuat data.</td></tr>';
+    }
+  }
+
+  // ----- Sinyal Kecurangan -----
+  async renderFraudSignals() {
+    const bodyOverride = document.getElementById('fsOverrideBody');
+    const bodyPhone = document.getElementById('fsPhoneBody');
+    const bodyTrip = document.getElementById('fsTripBody');
+    if (!bodyOverride) return;
+
+    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+    const kosong = (n, teks) => `<tr><td colspan="${n}" class="py-6 text-center text-slate-500">${teks}</td></tr>`;
+    const memuat = (n) => kosong(n, 'Memuat...');
+
+    bodyOverride.innerHTML = memuat(5);
+    bodyPhone.innerHTML = memuat(4);
+    bodyTrip.innerHTML = memuat(5);
+
+    const q = new URLSearchParams();
+    const from = document.getElementById('fsFrom')?.value;
+    const to = document.getElementById('fsTo')?.value;
+    const phoneMin = document.getElementById('fsPhoneMin')?.value;
+    if (from) q.set('date_from', from);
+    if (to) q.set('date_to', to);
+    if (phoneMin) q.set('phone_min', phoneMin);
+
+    try {
+      const data = await fetchApi(`/admin/reports/fraud-signals?${q.toString()}`);
+
+      // Isi tanggal ke filter bila admin belum memilih, supaya rentang yang
+      // sedang ditampilkan selalu terlihat jelas.
+      if (!from) document.getElementById('fsFrom').value = data.period.from;
+      if (!to) document.getElementById('fsTo').value = data.period.to;
+
+      // --- A. Override antrian ---
+      const rata = data.queue_overrides.average_rate;
+      document.getElementById('fsAvgRate').textContent = `${rata}%`;
+
+      const csos = data.queue_overrides.csos || [];
+      bodyOverride.innerHTML = csos.length ? csos.map(c => {
+        // Sorot hanya yang MENYIMPANG JAUH dari rekannya (2x rata-rata dan
+        // minimal 3 kejadian) — bukan setiap CSO yang pernah override sekali.
+        // Menyorot semuanya sama saja dengan tidak menyorot apa pun.
+        const mencolok = c.overrides >= 3 && rata > 0 && c.override_rate >= rata * 2;
+        const pair = c.top_pair
+          ? `<span class="text-xs">${esc(c.top_pair.favored_driver)} <span class="text-slate-400">didahulukan atas</span> ${esc(c.top_pair.skipped_driver)} <b>(${c.top_pair.count}x)</b></span>`
+          : '<span class="text-xs text-slate-400">-</span>';
+        return `<tr class="${mencolok ? 'bg-amber-50 dark:bg-amber-500/10' : ''}">
+            <td class="py-3 px-5 dark:text-slate-200">${esc(c.name)}</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${c.total_orders}</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${c.overrides}</td>
+            <td class="py-3 px-5 text-right font-mono font-bold ${mencolok ? 'text-amber-600 dark:text-amber-400' : 'dark:text-slate-200'}">${c.override_rate}%</td>
+            <td class="py-3 px-5">${pair}</td>
+          </tr>`;
+      }).join('') : kosong(5, 'Tidak ada order pada rentang ini.');
+
+      // --- B. Nomor berulang ---
+      const phones = data.repeated_phones || [];
+      bodyPhone.innerHTML = phones.length ? phones.map(p => {
+        // Satu nomor + satu CSO + sering = kombinasi yang paling layak ditanya.
+        const mencolok = p.cso_count === 1 && p.count >= 5;
+        return `<tr class="${mencolok ? 'bg-amber-50 dark:bg-amber-500/10' : ''}">
+            <td class="py-3 px-5 font-mono dark:text-slate-200">${esc(p.phone)}</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${p.count}x</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${p.cso_count}</td>
+            <td class="py-3 px-5 text-xs dark:text-slate-300">${p.csos.map(esc).join(', ') || '-'}</td>
+          </tr>`;
+      }).join('') : kosong(4, 'Tidak ada nomor yang melewati ambang pengulangan.');
+
+      // --- C. Keluar area tanpa order ---
+      const trips = data.unreported_trips || [];
+      bodyTrip.innerHTML = trips.length ? trips.map(t => {
+        const jam = Math.floor(t.total_minutes / 60);
+        const menit = t.total_minutes % 60;
+        const durasi = jam > 0 ? `${jam} jam ${menit} mnt` : `${menit} mnt`;
+        return `<tr>
+            <td class="py-3 px-5 dark:text-slate-200">${esc(t.name)}</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${t.trips}x</td>
+            <td class="py-3 px-5 text-right font-mono dark:text-slate-300">${durasi}</td>
+            <td class="py-3 px-5 text-xs dark:text-slate-300">${t.last_at ? new Date(t.last_at).toLocaleString('id-ID') : '-'}</td>
+            <td class="py-3 px-5 text-right">
+              <button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500 px-2 py-1 rounded" onclick="window.openActivityModal(${t.id})">Lihat Jejak</button>
+            </td>
+          </tr>`;
+      }).join('') : kosong(5, 'Tidak ada kepergian tanpa order pada rentang ini.');
+    } catch (e) {
+      console.error('Gagal memuat sinyal kecurangan:', e);
+      bodyOverride.innerHTML = kosong(5, 'Gagal memuat data.');
+      bodyPhone.innerHTML = kosong(4, 'Gagal memuat data.');
+      bodyTrip.innerHTML = kosong(5, 'Gagal memuat data.');
+    }
+  }
+
   // Fungsi wdBadge tidak perlu diubah, karena ini hanya helper untuk styling
   wdBadge(s) {
     const status = s.toLowerCase();
@@ -2769,6 +3128,12 @@ export class AdminApp {
 
       // Tenggang di luar area. Cek !== undefined (bukan truthy) supaya nilai 0
       // — yang berarti "auto-keluar dinonaktifkan" — tidak ikut terbuang.
+      // Batas utang supir (nilai efektif; 0 = pembatasan mati).
+      const debtInput = document.getElementById('maxDriverDebt');
+      if (debtInput && settings.max_driver_debt !== undefined) {
+        debtInput.value = settings.max_driver_debt;
+      }
+
       const graceInput = document.getElementById('outOfAreaGraceMinutes');
       if (graceInput && settings.out_of_area_grace_minutes !== undefined) {
         graceInput.value = settings.out_of_area_grace_minutes;

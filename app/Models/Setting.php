@@ -50,6 +50,30 @@ class Setting extends Model
     }
 
     /**
+     * Batas utang (Rp) sebelum supir dilarang masuk antrian.
+     *
+     * Tanpa batas ini, penyelesaian utang HANYA terjadi saat pencairan dana —
+     * sehingga supir yang saldonya negatif cukup tidak pernah menekan
+     * "Cairkan", dan uang koperasi yang ia pegang tidak punya jatuh tempo sama
+     * sekali. Lihat DriverApiController::hitungSaldo().
+     *
+     * Mengikuti pola [outOfAreaGraceMinutes], BUKAN [airportRadiusKm]: 0 adalah
+     * nilai yang SAH dan berarti "pembatasan dimatikan" — supir tetap bisa
+     * masuk antrian berapa pun utangnya. Itu penting supaya koperasi bisa
+     * mengaktifkan fitur ini secara bertahap.
+     */
+    public static function maxDriverDebt(): int
+    {
+        $v = static::getValue('max_driver_debt');
+
+        if ($v === null || $v === '' || !is_numeric($v)) {
+            return 0; // belum diatur = pembatasan mati
+        }
+
+        return max(0, (int) $v);
+    }
+
+    /**
      * Tenggang (menit) supir standby yang berada di luar area bandara sebelum
      * antriannya hangus otomatis. Bisa diatur admin lewat Pengaturan.
      *

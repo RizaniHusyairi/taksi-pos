@@ -11,6 +11,7 @@ import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
 import '../widgets/error_state.dart';
 import '../utils/api_error.dart';
+import 'driver_deposit_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -24,6 +25,10 @@ class _WalletScreenState extends State<WalletScreen> {
   bool _isLoading = true;
   String? _error;
   double _balance = 0;
+  // Batas utang & status blokir dari server — supaya supir melihat dirinya
+  // mendekati batas SEBELUM antriannya terkunci, bukan mendadak ditolak.
+  double _debtLimit = 0;
+  bool _debtBlocked = false;
   Map<String, dynamic>? _breakdown; // rincian saldo (income/debt) dari API
   List<dynamic> _history = [];
 
@@ -59,6 +64,8 @@ class _WalletScreenState extends State<WalletScreen> {
           _breakdown = balRes.data['breakdown'] is Map
               ? Map<String, dynamic>.from(balRes.data['breakdown'])
               : null;
+          _debtLimit = double.tryParse('${balRes.data['debt_limit']}') ?? 0;
+          _debtBlocked = balRes.data['debt_blocked'] == true;
           _history = histRes.data;
 
           // Set bank details from profile
@@ -399,6 +406,42 @@ class _WalletScreenState extends State<WalletScreen> {
             icon: Icons.arrow_outward_rounded,
             onPressed: canWithdraw ? _requestWithdrawal : null,
           ),
+          // Jalur KEDUA melunasi utang: bayar tunai ke admin. Sebelum ini
+          // satu-satunya cara adalah dipotong dari pencairan — sehingga supir
+          // bersaldo minus cukup tidak pernah menarik dana dan utangnya tidak
+          // punya jatuh tempo sama sekali. Tombolnya muncul hanya saat memang
+          // ada utang, supaya tidak menambah kebisingan bagi yang bersih.
+          if (debt > 0) ...[
+            const SizedBox(height: 10),
+            _WhiteButton(
+              label: _debtBlocked ? 'SETOR TUNAI (ANTRIAN TERKUNCI)' : 'SETOR TUNAI KE ADMIN',
+              icon: Icons.savings_rounded,
+              outlined: true,
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DriverDepositScreen()),
+                );
+                if (mounted) _fetchData();
+              },
+            ),
+          ],
+          if (_debtLimit > 0 && debt > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Center(
+                child: Text(
+                  _debtBlocked
+                      ? 'Utang melewati batas ${currency.format(_debtLimit)} — antrian terkunci sampai Anda menyetor'
+                      : 'Batas utang ${currency.format(_debtLimit)} · sisa ${currency.format((_debtLimit - debt).clamp(0, double.infinity))}',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11.5,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+              ),
+            ),
           if (!canWithdraw)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -1033,33 +1076,62 @@ class _WhiteButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback? onPressed;
-  const _WhiteButton({required this.label, required this.icon, this.onPressed});
+
+  /// Varian sekunder: transparan dengan garis tepi putih. Dipakai agar
+  /// "Setor Tunai" tidak bersaing perhatian dengan "Tarik Dana" — keduanya
+  /// tindakan uang, tapi hanya satu yang jadi aksi utama kartu ini.
+  final bool outlined;
+
+  const _WhiteButton({
+    required this.label,
+    required this.icon,
+    this.onPressed,
+    this.outlined = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
+    final warnaTeks = outlined ? Colors.white : AppColors.deepBlue;
+
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.5),
+        color: outlined
+            ? Colors.white.withValues(alpha: 0.12)
+            : (enabled ? Colors.white : Colors.white.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onPressed,
-          child: Padding(
+          child: Container(
             padding: const EdgeInsets.symmetric(vertical: 15),
+            decoration: outlined
+                ? BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      width: 1.2,
+                    ),
+                  )
+                : null,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: AppColors.deepBlue, size: 20),
+                Icon(icon,
+                    color: enabled ? warnaTeks : warnaTeks.withValues(alpha: 0.6),
+                    size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: GoogleFonts.outfit(
-                    color: AppColors.deepBlue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    letterSpacing: 0.5,
+                Flexible(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(
+                      color: enabled ? warnaTeks : warnaTeks.withValues(alpha: 0.6),
+                      fontWeight: FontWeight.w700,
+                      fontSize: outlined ? 13.5 : 15,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ],

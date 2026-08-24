@@ -913,6 +913,592 @@ class ApiController extends Controller
         ]);
     }
 
+    // =====================================================================
+    // ===  SETORAN TUNAI SUPIR (verifikasi admin)                        ===
+    // =====================================================================
+    //
+    // Kembar dengan blok setoran CSO di atas — sengaja, supaya admin tidak
+    // perlu mempelajari dua alur verifikasi yang berbeda untuk hal yang sama.
+    // Bedanya cuma buku besar yang disentuh: setoran CSO memakai
+    // `deposit_status`, setoran supir memakai `payout_status` (lihat migrasi
+    // 2026_08_24_000005 untuk alasannya).
+
+    /** Daftar setoran supir, terbaru dulu. Filter: status, driver_id, tanggal. */
+    public function adminGetDriverDeposits(Request $request)
+    {
+        $q = \App\Models\DriverDeposit::with(['driver:id,name,username', 'processedBy:id,name'])
+            ->orderByDesc('submitted_at');
+
+        if ($request->filled('status')) {
+            $q->where('status', $request->query('status'));
+        }
+        if ($request->filled('driver_id')) {
+            $q->where('driver_id', $request->query('driver_id'));
+        }
+        if ($request->filled('date_from')) {
+            $q->whereDate('submitted_at', '>=', $request->query('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $q->whereDate('submitted_at', '<=', $request->query('date_to'));
+        }
+
+        return response()->json($q->paginate(20));
+    }
+
+    /** Transaksi yang utangnya tercakup dalam satu setoran supir. */
+    public function adminGetDriverDepositDetails(\App\Models\DriverDeposit $deposit)
+    {
+        $transactions = Transaction::with(['booking.zoneTo', 'booking.cso:id,name'])
+            ->where('driver_deposit_id', $deposit->id)
+            ->orderBy('created_at')
+            ->get();
+
+        return response()->json([
+            'deposit'      => $deposit->load('driver:id,name,username'),
+            'transactions' => $transactions,
+        ]);
+    }
+
+    /** Admin menerima uangnya: utang lunas, transaksinya ditandai Paid. */
+    public function adminApproveDriverDeposit(Request $request, \App\Models\DriverDeposit $deposit)
+    {
+        if ($deposit->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Setoran ini sudah diproses sebelumnya (status: ' . $deposit->status . ').',
+            ], 422);
+        }
+
+        $request->validate([
+            'proof_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+            'admin_note'  => 'nullable|string|max:500',
+        ]);
+
+        $path = $request->hasFile('proof_image')
+            ? $request->file('proof_image')->store('deposit_proofs', 'public')
+            : null;
+
+        DB::transaction(function () use ($deposit, $request, $path) {
+            $deposit->update([
+                'status'       => 'Approved',
+                'admin_note'   => $request->input('admin_note'),
+                'processed_at' => now(),
+                'processed_by' => Auth::id(),
+                'proof_image'  => $path ?: $deposit->proof_image,
+            ]);
+
+            Transaction::where('driver_deposit_id', $deposit->id)
+                ->update(['payout_status' => 'Paid']);
+        });
+
+        $this->notifyDriverDeposit($deposit, true);
+
+        return response()->json(['message' => 'Setoran disetujui dan utangnya ditandai lunas.']);
+    }
+
+    /**
+     * Admin menolak setoran (uang tidak cocok / belum diterima).
+     * Utangnya kembali menjadi kewajiban supir dan tanggalnya muncul lagi.
+     */
+    public function adminRejectDriverDeposit(Request $request, \App\Models\DriverDeposit $deposit)
+    {
+        // KRITIS — alasan yang sama dengan adminRejectWithdrawal &
+        // adminRejectCsoDeposit: tanpa guard ini, menolak setoran yang sudah
+        // 'Approved' akan mengubah transaksi 'Paid' kembali jadi 'Unpaid',
+        // sehingga utang yang SUDAH dibayar muncul lagi sebagai tagihan.
+        if ($deposit->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Setoran ini sudah diproses sebelumnya (status: ' . $deposit->status . ').',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'admin_note' => 'required|string|max:500',
+        ], [
+            'admin_note.required' => 'Tulis alasan penolakan agar supir tahu apa yang harus diperbaiki.',
+        ]);
+
+        DB::transaction(function () use ($deposit, $validated) {
+            $deposit->update([
+                'status'       => 'Rejected',
+                'admin_note'   => $validated['admin_note'],
+                'processed_at' => now(),
+                'processed_by' => Auth::id(),
+            ]);
+
+            // Lepas ikatan agar tanggalnya kembali muncul di daftar "belum
+            // disetor" dan bisa diajukan ulang.
+            Transaction::where('driver_deposit_id', $deposit->id)
+                ->update(['payout_status' => 'Unpaid', 'driver_deposit_id' => null]);
+        });
+
+        $this->notifyDriverDeposit($deposit, false);
+
+        return response()->json(['message' => 'Setoran ditolak dan utangnya dikembalikan ke supir.']);
+    }
+
+    /**
+     * Kabari supir lewat WhatsApp. Di LUAR DB::transaction & dibungkus
+     * try/catch: gagal kirim pesan tidak boleh membatalkan keputusan admin.
+     */
+    private function notifyDriverDeposit(\App\Models\DriverDeposit $deposit, bool $disetujui): void
+    {
+        try {
+            $waToken = Setting::getValue('wa_token');
+            $driver  = $deposit->driver;
+            $phone   = $driver->phone_number ?? $driver->username;
+
+            if (!$waToken || !$phone) {
+                return;
+            }
+
+            $rp   = number_format((float) $deposit->amount, 0, ',', '.');
+            $tgl  = optional($deposit->processed_at)->format('d M Y H:i') ?? now()->format('d M Y H:i');
+            $hari = count($deposit->period_dates ?? []);
+
+            $message = $disetujui
+                ? "*SETORAN DITERIMA*\n\nHalo {$driver->name},\n\nSetoran tunai Anda sebesar *Rp {$rp}* ({$hari} tanggal) telah DIVERIFIKASI admin. Utang setoran Anda berkurang.\n\n📅 {$tgl}\n\nTerima kasih."
+                : "*SETORAN DITOLAK*\n\nHalo {$driver->name},\n\nSetoran tunai Anda sebesar *Rp {$rp}* DITOLAK admin.\n\nAlasan: {$deposit->admin_note}\n\n📅 {$tgl}\n\nTagihan tanggal tersebut kembali muncul di aplikasi dan bisa diajukan ulang.";
+
+            \App\Jobs\SendWhatsAppMessage::dispatch($phone, $message, $waToken);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Gagal kirim WA setoran supir: ' . $e->getMessage());
+        }
+    }
+
+    // =====================================================================
+    // ===  SENGKETA METODE PEMBAYARAN (keputusan admin)                  ===
+    // =====================================================================
+
+    /** Daftar sanggahan supir. Default: yang belum diputus. */
+    public function adminGetMethodDisputes(Request $request)
+    {
+        $status = $request->query('status', 'Open');
+
+        $q = Transaction::with([
+                'booking.driver:id,name',
+                'booking.cso:id,name',
+                'booking.zoneTo:id,name',
+            ])
+            ->whereNotNull('method_dispute_status')
+            ->orderByDesc('method_disputed_at');
+
+        if ($status !== '') {
+            $q->where('method_dispute_status', $status);
+        }
+
+        return response()->json($q->paginate(20));
+    }
+
+    /**
+     * Admin membenarkan sanggahan: uangnya ternyata diterima CSO.
+     *
+     * Ini MEMINDAHKAN kewajiban, jadi bukan sekadar mengubah label:
+     *  - metode 'CashDriver' -> 'CashCSO'. Otomatis utang komisi lepas dari
+     *    supir dan berubah jadi hak pemasukannya (lihat hitungSaldo()).
+     *  - `deposit_status` dipaksa 'Unsettled' secara EKSPLISIT. Tidak boleh
+     *    mengandalkan nilai bawaan: transaksi lama sempat di-backfill jadi
+     *    'Settled' (migrasi 2026_08_24_000002), sehingga tanpa baris ini uang
+     *    itu lenyap — tidak ditagih ke supir, tidak juga ke CSO.
+     *  - `original_method` disimpan agar pola CSO yang berulang kali
+     *    salah-label tetap bisa ditelusuri setelah dikoreksi.
+     *
+     * Koreksi HANYA ke 'CashCSO'. Mengizinkan 'QRIS' terdengar lebih fleksibel
+     * tapi tidak koheren: transaksi QRIS wajib punya foto bukti transfer, dan
+     * di sini tidak ada satu pun bukti yang diunggah.
+     */
+    public function adminUpholdMethodDispute(Request $request, Transaction $transaction)
+    {
+        $validated = $request->validate([
+            'admin_note' => 'nullable|string|max:500',
+        ]);
+
+        if ($transaction->method_dispute_status !== 'Open') {
+            return response()->json([
+                'message' => 'Sanggahan ini sudah diputus sebelumnya (status: '
+                    . ($transaction->method_dispute_status ?? 'tidak ada') . ').',
+            ], 422);
+        }
+
+        // Diperiksa ULANG di sini, bukan cuma saat sanggahan dibuat: di antara
+        // kedua momen itu supir bisa saja mengajukan pencairan atau setoran,
+        // dan mengoreksi metode transaksi yang bukunya sudah tutup akan
+        // mengubah angka yang sudah dibayarkan.
+        if ($transaction->payout_status !== 'Unpaid') {
+            return response()->json([
+                'message' => 'Transaksi ini sudah masuk pencairan/setoran (status: '
+                    . $transaction->payout_status . '). Koreksi harus dilakukan manual.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($transaction, $validated) {
+            $transaction->update([
+                'original_method'       => $transaction->method,
+                'method'                => 'CashCSO',
+                'deposit_status'        => 'Unsettled',
+                'cso_deposit_id'        => null,
+                'method_dispute_status' => 'Upheld',
+                'method_admin_note'     => $validated['admin_note'] ?? null,
+                'method_resolved_at'    => now(),
+                'method_resolved_by'    => Auth::id(),
+            ]);
+        });
+
+        $this->notifyMethodDispute($transaction->fresh(), true);
+
+        return response()->json([
+            'message' => 'Sanggahan dikabulkan. Order ini kini tercatat Tunai ke Kasir '
+                . 'dan menjadi kewajiban setoran CSO.',
+        ]);
+    }
+
+    /** Admin menolak sanggahan: uangnya memang diterima supir. */
+    public function adminRejectMethodDispute(Request $request, Transaction $transaction)
+    {
+        $validated = $request->validate([
+            'admin_note' => 'required|string|max:500',
+        ], [
+            'admin_note.required' => 'Tulis alasan penolakan agar supir tahu dasar keputusannya.',
+        ]);
+
+        if ($transaction->method_dispute_status !== 'Open') {
+            return response()->json([
+                'message' => 'Sanggahan ini sudah diputus sebelumnya (status: '
+                    . ($transaction->method_dispute_status ?? 'tidak ada') . ').',
+            ], 422);
+        }
+
+        $transaction->update([
+            'method_dispute_status' => 'Rejected',
+            'method_admin_note'     => $validated['admin_note'],
+            'method_resolved_at'    => now(),
+            'method_resolved_by'    => Auth::id(),
+        ]);
+
+        $this->notifyMethodDispute($transaction->fresh(), false);
+
+        return response()->json(['message' => 'Sanggahan ditolak. Utang supir tetap berlaku.']);
+    }
+
+    /**
+     * Kabari SUPIR selalu, dan CSO hanya bila sanggahan dikabulkan — karena
+     * saat itulah muncul kewajiban baru di pundaknya. Di luar DB::transaction
+     * & dibungkus try/catch: gagal kirim pesan tidak boleh membatalkan
+     * keputusan admin (pola sama dengan notifyCsoDeposit).
+     */
+    private function notifyMethodDispute(Transaction $transaction, bool $dikabulkan): void
+    {
+        try {
+            $waToken = Setting::getValue('wa_token');
+            if (!$waToken) {
+                return;
+            }
+
+            $booking = $transaction->booking;
+            $driver  = $booking?->driver;
+            $cso     = $booking?->cso;
+            $rp      = number_format((float) $transaction->amount, 0, ',', '.');
+            $tgl     = optional($transaction->method_resolved_at)->format('d M Y H:i')
+                ?? now()->format('d M Y H:i');
+
+            $driverPhone = $driver?->phone_number ?? $driver?->username;
+            if ($driverPhone) {
+                $pesan = $dikabulkan
+                    ? "*SANGGAHAN DIKABULKAN*\n\nHalo {$driver->name},\n\nOrder #{$transaction->booking_id} (Rp {$rp}) dikoreksi menjadi *Tunai ke Kasir*. Utang komisi atas order ini dihapus dari dompet Anda.\n\n📅 {$tgl}"
+                    : "*SANGGAHAN DITOLAK*\n\nHalo {$driver->name},\n\nSanggahan Anda atas order #{$transaction->booking_id} (Rp {$rp}) ditolak admin.\n\nAlasan: {$transaction->method_admin_note}\n\n📅 {$tgl}";
+                \App\Jobs\SendWhatsAppMessage::dispatch($driverPhone, $pesan, $waToken);
+            }
+
+            if ($dikabulkan && $cso) {
+                $csoPhone = $cso->phone_number ?? $cso->username;
+                if ($csoPhone) {
+                    \App\Jobs\SendWhatsAppMessage::dispatch(
+                        $csoPhone,
+                        "*KOREKSI METODE PEMBAYARAN*\n\nHalo {$cso->name},\n\nOrder #{$transaction->booking_id} (Rp {$rp}) dikoreksi admin dari Tunai ke Supir menjadi *Tunai ke Kasir*.\n\nUang ini kini tercatat sebagai kewajiban setoran Anda dan muncul di menu Setoran.\n\n📅 {$tgl}",
+                        $waToken
+                    );
+                }
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Gagal kirim WA sengketa metode: ' . $e->getMessage());
+        }
+    }
+
+    // =====================================================================
+    // ===  LAPORAN SINYAL KECURANGAN                                     ===
+    // =====================================================================
+
+    /**
+     * Tiga daftar yang menuntut PERTANYAAN, bukan tiga vonis.
+     *
+     * Sistem ini punya beberapa titik yang sepenuhnya bergantung pada kejujuran
+     * orang: CSO memilih sendiri supir mana yang dapat order, mengetik sendiri
+     * nomor penumpang, dan supir memutuskan sendiri apakah trip di luar antrian
+     * dilaporkan. Tidak satu pun bisa dikunci lewat kode tanpa melumpuhkan
+     * operasional — mobil memang bisa mogok, penumpang memang bisa menolak
+     * supir, dan supir memang boleh pulang. Yang bisa dilakukan kode adalah
+     * MEMBUAT POLANYA TERLIHAT, lalu menyerahkan keputusannya ke pengurus.
+     *
+     * Karena itu setiap angka di sini dikembalikan apa adanya beserta
+     * pembandingnya (total order, jumlah pemakaian, durasi) — bukan sebagai
+     * skor "kecurigaan" yang terkesan objektif padahal cuma tebakan berbaju
+     * matematika.
+     */
+    public function adminGetFraudSignals(Request $request)
+    {
+        $validated = $request->validate([
+            'date_from' => 'nullable|date_format:Y-m-d',
+            'date_to'   => 'nullable|date_format:Y-m-d',
+            // Berapa kali satu nomor HP dipakai sebelum layak ditanyakan.
+            'phone_min' => 'nullable|integer|min:2|max:100',
+        ]);
+
+        $from = \Carbon\Carbon::parse($validated['date_from'] ?? now()->startOfMonth()->toDateString())->startOfDay();
+        $to   = \Carbon\Carbon::parse($validated['date_to'] ?? now()->toDateString())->endOfDay();
+        $range = [$from, $to];
+        $phoneMin = (int) ($validated['phone_min'] ?? 3);
+
+        return response()->json([
+            'period' => [
+                'from' => $from->toDateString(),
+                'to'   => $to->toDateString(),
+            ],
+            'queue_overrides'  => $this->sinyalOverrideAntrian($range),
+            'repeated_phones'  => $this->sinyalNomorBerulang($range, $phoneMin),
+            'unreported_trips' => $this->sinyalKeluarAreaTanpaOrder($range),
+            'phone_min'        => $phoneMin,
+        ]);
+    }
+
+    /**
+     * Seberapa sering tiap CSO melewati giliran antrian.
+     *
+     * Override itu SAH — ada mobil mogok, penumpang menolak, supir tak muncul.
+     * Yang tidak wajar adalah pola: satu CSO yang melewati giliran jauh lebih
+     * sering daripada rekannya, atau yang selalu melewati orang yang sama demi
+     * supir yang sama. Karena itu yang ditampilkan rasio (bukan jumlah mentah)
+     * plus pasangan supir yang paling sering diuntungkan/dirugikan.
+     */
+    private function sinyalOverrideAntrian(array $range): array
+    {
+        $csos = User::where('role', 'cso')
+            ->withCount([
+                'csoBookings as total_orders' => fn ($q) => $q->whereBetween('bookings.created_at', $range),
+                'csoBookings as overrides' => fn ($q) => $q
+                    ->whereBetween('bookings.created_at', $range)
+                    ->where('queue_override', true),
+            ])
+            ->get()
+            ->filter(fn ($u) => $u->total_orders > 0)
+            ->map(function (User $u) use ($range) {
+                $total = (int) $u->total_orders;
+                $over  = (int) $u->overrides;
+
+                // Pasangan yang paling sering berulang: siapa yang didahulukan,
+                // dan siapa yang dilewati. Hanya diambil bila ADA override,
+                // supaya CSO bersih tidak ikut membebani query.
+                $pasangan = null;
+                if ($over > 0) {
+                    $pasangan = Booking::query()
+                        ->where('cso_id', $u->id)
+                        ->where('queue_override', true)
+                        ->whereBetween('created_at', $range)
+                        ->whereNotNull('skipped_driver_id')
+                        ->selectRaw('driver_id, skipped_driver_id, COUNT(*) as jml')
+                        ->groupBy('driver_id', 'skipped_driver_id')
+                        ->orderByDesc('jml')
+                        ->first();
+                }
+
+                return [
+                    'id'            => $u->id,
+                    'name'          => $u->name,
+                    'total_orders'  => $total,
+                    'overrides'     => $over,
+                    'override_rate' => round($over / $total * 100, 1),
+                    'top_pair'      => $pasangan ? [
+                        'favored_driver' => optional(User::find($pasangan->driver_id))->name,
+                        'skipped_driver' => optional(User::find($pasangan->skipped_driver_id))->name,
+                        'count'          => (int) $pasangan->jml,
+                    ] : null,
+                ];
+            })
+            ->sortByDesc('override_rate')
+            ->values();
+
+        return [
+            // Rata-rata seluruh CSO — TANPA ini angka 12% tidak berarti apa-apa.
+            // Yang dicari pengurus adalah siapa yang menyimpang dari rekannya,
+            // bukan siapa yang melewati ambang yang kita karang sendiri.
+            'average_rate' => $csos->count() > 0
+                ? round($csos->sum('overrides') / max($csos->sum('total_orders'), 1) * 100, 1)
+                : 0.0,
+            'csos' => $csos->all(),
+        ];
+    }
+
+    /**
+     * Nomor HP penumpang yang dipakai berulang kali.
+     *
+     * Nomor penumpang adalah SATU-SATUNYA jalur verifikasi independen yang
+     * dimiliki sistem: dari sanalah penumpang menerima struk berisi tarif yang
+     * sebenarnya tercatat. CSO yang mengetik nomornya sendiri memutus jalur itu
+     * — dan itulah yang membuat "pilih zona murah, tagih tarif jauh" tidak
+     * pernah ketahuan.
+     *
+     * Berulang tidak selalu curang: pelanggan tetap dan penjemputan rombongan
+     * itu nyata. Karena itu setiap baris membawa daftar CSO yang memakainya —
+     * satu nomor yang dipakai banyak CSO wajar, satu nomor yang selalu dipakai
+     * CSO yang sama jauh lebih layak ditanyakan.
+     */
+    private function sinyalNomorBerulang(array $range, int $minimal): array
+    {
+        $nomors = Booking::query()
+            ->whereBetween('created_at', $range)
+            ->whereNotNull('passenger_phone')
+            ->where('passenger_phone', '!=', '')
+            ->selectRaw('passenger_phone, COUNT(*) as jml, COUNT(DISTINCT cso_id) as jml_cso')
+            ->groupBy('passenger_phone')
+            ->havingRaw('COUNT(*) >= ?', [$minimal])
+            ->orderByDesc('jml')
+            ->limit(50)
+            ->get();
+
+        return $nomors->map(function ($n) use ($range) {
+            $csoNames = Booking::query()
+                ->where('passenger_phone', $n->passenger_phone)
+                ->whereBetween('created_at', $range)
+                ->with('cso:id,name')
+                ->get()
+                ->pluck('cso.name')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            return [
+                'phone'     => $n->passenger_phone,
+                'count'     => (int) $n->jml,
+                'cso_count' => (int) $n->jml_cso,
+                'csos'      => $csoNames,
+            ];
+        })->all();
+    }
+
+    /**
+     * Supir yang keluar area bandara lalu kembali, TANPA order tercatat.
+     *
+     * Inilah bentuk terukur dari celah "fee trip mandiri berbasis kejujuran":
+     * supir yang dapat penumpang sendiri seharusnya keluar antrian dengan
+     * alasan `self` (kena fee flat), tapi bisa memilih `other` alias
+     * "istirahat" yang gratis. Server tidak bisa membedakan keduanya saat
+     * kejadian — tapi JEJAKNYA berbeda, dan jejak itu sudah lama terekam:
+     * pasangan AIRPORT_EXIT → AIRPORT_ENTER di `driver_activities`.
+     *
+     * Yang dilaporkan hanya kepergian yang MASUK AKAL sebagai satu trip:
+     * terlalu singkat = cuma beli makan atau menyeberang batas geofence;
+     * terlalu lama = pulang, bukan mengantar. Trip yang jujur dilaporkan
+     * (termasuk lewat tombol "Dapat Penumpang Sendiri") otomatis tidak muncul,
+     * karena booking-nya menutupi rentang waktu tersebut.
+     *
+     * Ini SINYAL, bukan bukti: supir bisa saja mengantar keluarganya sendiri.
+     */
+    private function sinyalKeluarAreaTanpaOrder(array $range): array
+    {
+        // Rentang durasi yang pantas dicurigai sebagai satu trip mengantar.
+        $minMenit = 15;
+        $maxMenit = 240;
+
+        $aktivitas = \App\Models\DriverActivity::query()
+            ->whereIn('activity_type', ['AIRPORT_EXIT', 'AIRPORT_ENTER'])
+            ->whereBetween('created_at', $range)
+            ->orderBy('user_id')
+            ->orderBy('created_at')
+            ->get(['user_id', 'activity_type', 'created_at']);
+
+        // Pasangkan tiap EXIT dengan ENTER berikutnya milik supir yang sama.
+        $kepergian = [];
+        foreach ($aktivitas->groupBy('user_id') as $userId => $baris) {
+            $keluar = null;
+            foreach ($baris as $a) {
+                if ($a->activity_type === 'AIRPORT_EXIT') {
+                    $keluar = $a->created_at;
+                    continue;
+                }
+                // ENTER tanpa EXIT sebelumnya = supir baru datang hari itu.
+                if ($keluar === null) {
+                    continue;
+                }
+                $menit = $keluar->diffInMinutes($a->created_at);
+                if ($menit >= $minMenit && $menit <= $maxMenit) {
+                    $kepergian[] = [
+                        'user_id' => (int) $userId,
+                        'keluar'  => $keluar,
+                        'kembali' => $a->created_at,
+                        'menit'   => (int) $menit,
+                    ];
+                }
+                $keluar = null;
+            }
+        }
+
+        if (empty($kepergian)) {
+            return [];
+        }
+
+        // Order yang menutupi tiap kepergian. Satu query untuk semua supir,
+        // bukan satu query per kepergian — daftar ini bisa panjang.
+        $userIds = array_unique(array_column($kepergian, 'user_id'));
+        $bookings = Booking::query()
+            ->whereIn('driver_id', $userIds)
+            ->where('status', '!=', 'Cancelled')
+            // Longgar di kedua ujung: order dibuat sebelum supir bergerak, dan
+            // diselesaikan setelah ia kembali.
+            ->where('created_at', '<=', $range[1]->copy()->addHours(6))
+            ->where('created_at', '>=', $range[0]->copy()->subHours(6))
+            ->get(['id', 'driver_id', 'created_at', 'updated_at'])
+            ->groupBy('driver_id');
+
+        $hasil = [];
+        foreach ($kepergian as $k) {
+            $milik = $bookings[$k['user_id']] ?? collect();
+
+            // "Tertutupi" = ada order yang dibuat sebelum/saat supir keluar dan
+            // baru berubah status setelah ia bergerak. Sengaja longgar: lebih
+            // baik melewatkan satu kasus daripada menuduh supir yang jujur.
+            $tertutupi = $milik->contains(function ($b) use ($k) {
+                return $b->created_at->lte($k['kembali'])
+                    && $b->updated_at->gte($k['keluar']);
+            });
+
+            if (!$tertutupi) {
+                $hasil[] = $k;
+            }
+        }
+
+        // Ringkas per supir: yang dicari pola berulang, bukan daftar mentah.
+        $namaSupir = User::whereIn('id', array_unique(array_column($hasil, 'user_id')))
+            ->pluck('name', 'id');
+
+        $perSupir = [];
+        foreach ($hasil as $h) {
+            $id = $h['user_id'];
+            $perSupir[$id] ??= [
+                'id'            => $id,
+                'name'          => $namaSupir[$id] ?? 'Supir #' . $id,
+                'trips'         => 0,
+                'total_minutes' => 0,
+                'last_at'       => null,
+            ];
+            $perSupir[$id]['trips']++;
+            $perSupir[$id]['total_minutes'] += $h['menit'];
+            $perSupir[$id]['last_at'] = $h['kembali']->toIso8601String();
+        }
+
+        usort($perSupir, fn ($a, $b) => $b['trips'] <=> $a['trips']);
+
+        return array_values($perSupir);
+    }
+
     public function adminGetSettings()
     {
         // Mengambil semua settings
@@ -967,6 +1553,10 @@ class ApiController extends Controller
         $settings['operating_start'] = $oh['start'];
         $settings['operating_end']   = $oh['end'];
 
+        // Batas utang supir — nilai efektif lewat model (0 = pembatasan mati),
+        // supaya field di UI tidak pernah kosong dan artinya tidak ambigu.
+        $settings['max_driver_debt'] = Setting::maxDriverDebt();
+
         return response()->json($settings);
     }
     
@@ -998,6 +1588,9 @@ class ApiController extends Controller
             'airport_longitude' => 'nullable|numeric|between:-180,180',
             // 0 = auto-keluar antrian dinonaktifkan (lihat Setting::outOfAreaGraceMinutes).
             'out_of_area_grace_minutes' => 'nullable|integer|min:0|max:720',
+            // Batas utang supir sebelum dilarang masuk antrian.
+            // 0 = pembatasan dimatikan (lihat Setting::maxDriverDebt).
+            'max_driver_debt'   => 'nullable|integer|min:0|max:100000000',
             'wa_endpoint'       => 'nullable|url|max:255',
             'wa_device_id'      => 'nullable|integer|min:0', // 0 = device bawaan API Key
             'operating_start'   => 'nullable|date_format:H:i',
@@ -1332,6 +1925,8 @@ class ApiController extends Controller
                     'in_area'         => (bool) $p->last_in_area,
                     'airport_entries' => (int) $p->airport_entries,
                     'airport_exits'   => (int) $p->airport_exits,
+                    // Dugaan fake GPS — lihat DriverApiController::periksaLokasiPalsu().
+                    'spoof_strikes'   => (int) $p->spoof_strikes,
                 ];
             })
             ->filter()
@@ -1358,14 +1953,44 @@ class ApiController extends Controller
             ->sortByDesc('entries')
             ->values();
 
+        // Daftar pantau dugaan fake GPS. Sengaja dipisah dari `ranking`:
+        // mendeteksi tanpa ada yang menindak sama saja dengan tidak mendeteksi,
+        // jadi angka ini harus muncul sebagai daftar tersendiri yang pendek dan
+        // menuntut keputusan — bukan satu kolom yang tenggelam di tabel besar.
+        // Yang ditampilkan hanya supir yang PERNAH kena, terbanyak di atas.
+        $spoofWatch = \App\Models\DriverProfile::with('user:id,name')
+            ->where('spoof_strikes', '>', 0)
+            ->orderByDesc('spoof_strikes')
+            ->get()
+            ->map(function ($p) {
+                $user = $p->user;
+                if (!$user) {
+                    return null;
+                }
+                return [
+                    'id'          => $user->id,
+                    'name'        => $user->name,
+                    'line_number' => $p->line_number,
+                    'strikes'     => (int) $p->spoof_strikes,
+                    // 'mock_provider' = Android sendiri menandai lokasinya palsu
+                    // (bukti tegas). 'teleport' = lompatan mustahil antar-ping
+                    // (bukti tak langsung, bisa juga GPS rusak).
+                    'last_reason' => $p->last_spoof_reason,
+                    'last_at'     => optional($p->last_spoof_at)->toIso8601String(),
+                ];
+            })
+            ->filter()
+            ->values();
+
         return response()->json([
             'base' => [
                 'latitude'  => Setting::airportLatitude(),
                 'longitude' => Setting::airportLongitude(),
                 'radius_km' => Setting::airportRadiusKm(),
             ],
-            'drivers' => $drivers,
-            'ranking' => $ranking,
+            'drivers'     => $drivers,
+            'ranking'     => $ranking,
+            'spoof_watch' => $spoofWatch,
         ]);
     }
 

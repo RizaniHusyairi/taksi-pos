@@ -27,6 +27,36 @@ return [
         // fix meleset 800 m sudah cukup menghanguskan antrian orang.
         'poor_accuracy_meters' => 150,
 
+        // --- Deteksi lokasi palsu (fake GPS) ---
+        //
+        // Seluruh mesin antrian digerakkan oleh koordinat KIRIMAN KLIEN. Tanpa
+        // pemeriksaan di sini, supir cukup memasang aplikasi fake GPS (atau
+        // memanggil endpointnya langsung dengan curl) untuk "hadir" di bandara
+        // sambil tidur di rumah, dan semua pertahanan lain — histeresis,
+        // tenggang luar area, penyapu supir basi — tidak melihat apa pun yang
+        // aneh. Dua detektor yang saling menutupi:
+        //
+        //  1. Flag `is_mocked` dari Android (Position.isMocked). Tegas, tapi
+        //     hilang kalau supir memakai APK modifikasi.
+        //  2. Lompatan mustahil antar-ping, dihitung di server. Tidak bisa
+        //     dimatikan dari sisi klien.
+
+        // Kecepatan (km/jam) yang mustahil bagi kendaraan darat. Sengaja jauh
+        // di atas kecepatan jalan raya: yang diburu adalah lompatan puluhan
+        // kilometer dalam hitungan detik (fake GPS menghasilkan ribuan km/jam),
+        // BUKAN supir yang ngebut. Ambang longgar = nyaris nol salah tuduh.
+        'teleport_speed_kmh' => 300.0,
+
+        // Lompatan di bawah jarak ini (km) tidak pernah dianggap teleport,
+        // berapa pun kecepatan hitungannya. Dua fix berjarak 2 detik yang
+        // meleset 300 m menghasilkan 540 km/jam — itu jitter GPS biasa, bukan
+        // kecurangan.
+        'teleport_min_km' => 3.0,
+
+        // Selisih waktu minimum (detik) antar dua fix sebelum kecepatan layak
+        // dihitung. Pembagi yang terlalu kecil membuat angkanya meledak.
+        'teleport_min_seconds' => 5,
+
         // Supir 'standby' yang tidak mengirim lokasi selama ini (menit)
         // dianggap tidak hadir: dikeluarkan dari antrian oleh perintah
         // terjadwal `queue:sweep-stale`, dan sementara itu tidak akan

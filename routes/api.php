@@ -15,7 +15,10 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 
 // Public Routes
-Route::post('/login', [ApiAuthController::class, 'login']);
+// Rem laju khusus login: 5 percobaan per menit per IP. Ini satu-satunya
+// endpoint tanpa autentikasi yang menerima password, jadi batasnya jauh lebih
+// ketat daripada rem umum grup api (lihat bootstrap/app.php).
+Route::post('/login', [ApiAuthController::class, 'login'])->middleware('throttle:5,1');
 
 // === MANAGEMENT API (read-only) — untuk website manajemen koperasi eksternal ===
 // Auth via API key (bukan login user). Header: Authorization: Bearer <api_key>.
@@ -69,11 +72,28 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/cso-deposits/{deposit}/details', [ApiController::class, 'adminGetCsoDepositDetails']);
         Route::post('/cso-deposits/{deposit}/approve', [ApiController::class, 'adminApproveCsoDeposit']);
         Route::post('/cso-deposits/{deposit}/reject', [ApiController::class, 'adminRejectCsoDeposit']);
+
+        // Sengketa metode pembayaran: supir menyanggah menerima tunai.
+        // Mengabulkannya MEMINDAHKAN kewajiban uang dari supir ke CSO —
+        // lihat adminUpholdMethodDispute().
+        Route::get('/method-disputes', [ApiController::class, 'adminGetMethodDisputes']);
+        Route::post('/method-disputes/{transaction}/uphold', [ApiController::class, 'adminUpholdMethodDispute']);
+        Route::post('/method-disputes/{transaction}/reject', [ApiController::class, 'adminRejectMethodDispute']);
+
+        // Verifikasi setoran tunai supir (pelunasan utang komisi)
+        Route::get('/driver-deposits', [ApiController::class, 'adminGetDriverDeposits']);
+        Route::get('/driver-deposits/{deposit}/details', [ApiController::class, 'adminGetDriverDepositDetails']);
+        Route::post('/driver-deposits/{deposit}/approve', [ApiController::class, 'adminApproveDriverDeposit']);
+        Route::post('/driver-deposits/{deposit}/reject', [ApiController::class, 'adminRejectDriverDeposit']);
         
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);
         Route::get('/reports/driver-performance', [ApiController::class, 'adminGetDriverPerformanceReport']);
         Route::get('/reports/cso-performance', [ApiController::class, 'adminGetCsoPerformanceReport']);
+        // Sinyal kecurangan: override antrian, nomor penumpang berulang, dan
+        // supir yang keluar area tanpa order tercatat. Daftar untuk ditanyakan,
+        // bukan vonis — lihat adminGetFraudSignals().
+        Route::get('/reports/fraud-signals', [ApiController::class, 'adminGetFraudSignals']);
 
         // Peta supir + rekap keluar-masuk bandara
         Route::get('/driver-locations', [ApiController::class, 'adminGetDriverLocations']);
@@ -114,9 +134,18 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/driver-locations', [CsoApiController::class, 'getDriverLocations']);
         Route::get('/dashboard-stats', [CsoApiController::class, 'getDashboardStats']);
 
-        // Aksi membuat booking dan pembayaran
-        Route::post('/bookings', [CsoApiController::class, 'storeBooking']);
-        Route::post('/payment', [CsoApiController::class, 'recordPayment']);
+        // Aksi membuat booking + pembayaran: SATU pintu, `process-order`.
+        //
+        // Jalur lama dua langkah (`POST /bookings` lalu `POST /payment`) sudah
+        // DIHAPUS. Keduanya sudah tidak dipakai klien manapun — web memakai
+        // process-order (public/pos-assets/js/cso.js) dan aplikasi mobile juga
+        // (driver_app/lib/services/api_service.dart) — tapi tetap terbuka
+        // sebagai celah: `/bookings` membuat order TANPA baris Transaction
+        // (uang berpindah tangan tanpa jejak di laporan & kewajiban setoran),
+        // dan `/payment` menerima booking_id milik CSO manapun serta bisa
+        // menumpuk transaksi kedua pada booking yang sudah dibayar — transaksi
+        // itu tersembunyi dari UI (Booking::transaction adalah hasOne) tapi
+        // tetap terhitung di semua agregat.
 
         // Mengambil riwayat transaksi untuk CSO yang login
         Route::get('/history', [CsoApiController::class, 'getHistory']);
@@ -161,6 +190,18 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/location', [DriverApiController::class, 'updateLocation']);
         // Titik pusat + radius geofence, untuk peta di beranda supir.
         Route::get('/airport-area', [DriverApiController::class, 'getAirportArea']);
+
+        // Menyanggah metode pembayaran satu transaksi ("saya tidak menerima
+        // tunai ini"). Lihat DriverApiController::disputeMethod().
+        Route::post('/transactions/{transaction}/dispute-method', [DriverApiController::class, 'disputeMethod']);
+
+        // Setoran tunai supir ke admin (pelunasan utang komisi). `outstanding`
+        // didaftarkan SEBELUM `{deposit}` supaya tidak tertelan route model
+        // binding — jebakan yang sama sudah pernah kena di sisi CSO.
+        Route::get('/deposits/outstanding', [DriverApiController::class, 'depositOutstanding']);
+        Route::get('/deposits', [DriverApiController::class, 'depositHistory']);
+        Route::post('/deposits', [DriverApiController::class, 'storeDeposit']);
+        Route::get('/deposits/{deposit}', [DriverApiController::class, 'depositDetail']);
 
         Route::post('/bank-details', [DriverApiController::class, 'updateBankDetails']);
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);

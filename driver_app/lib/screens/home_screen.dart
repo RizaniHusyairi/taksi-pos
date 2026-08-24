@@ -201,12 +201,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    // Ambil fix BARU khusus untuk join, bukan koordinat cache dari layar.
+    // Dua alasan: masuk antrian adalah tindakan sadar yang pantas diverifikasi
+    // dengan data segar, dan hanya fix langsung dari Geolocator yang membawa
+    // `isMocked` — penanda Android bahwa lokasinya datang dari aplikasi fake
+    // GPS. Kalau fix baru gagal (di dalam gedung, GPS baru menyala), pakai
+    // koordinat terakhir dan biarkan `isMocked` null: server tetap menjalankan
+    // deteksi teleport-nya sendiri.
+    double lat = _lastLat!;
+    double lng = _lastLng!;
+    bool? isMocked;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+      lat = pos.latitude;
+      lng = pos.longitude;
+      isMocked = pos.isMocked;
+    } catch (_) {
+      // Sengaja diabaikan — fallback di atas sudah aman.
+    }
+
     try {
       // 1. Panggil API Join
       await _apiService.setStatus(
         'join',
-        latitude: _lastLat!,
-        longitude: _lastLng!,
+        latitude: lat,
+        longitude: lng,
+        isMocked: isMocked,
       );
 
       // 2. Refresh Profile

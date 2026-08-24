@@ -22,7 +22,21 @@ class AuthController extends Controller
             $request->session()->regenerate();
 
             // Ambil role pengguna yang berhasil login
-         $userRole = Auth::user()->role;
+         $user = Auth::user();
+         $userRole = $user->role;
+
+         // Akun yang dinonaktifkan admin tidak boleh masuk — jalur API sudah
+         // memeriksa ini (ApiAuthController::login), web sebelumnya tidak.
+         // Tanpa baris ini, CSO yang dinonaktifkan tetap bisa membuka /cso
+         // dari browser dan terus membuat order.
+         if (!$user->active) {
+             Auth::logout();
+             $request->session()->invalidate();
+             $request->session()->regenerateToken();
+             return back()->withErrors([
+                 'username' => 'Akun Anda dinonaktifkan. Silakan hubungi admin.',
+             ])->onlyInput('username');
+         }
 
          if ($userRole === 'driver') {
              Auth::logout();

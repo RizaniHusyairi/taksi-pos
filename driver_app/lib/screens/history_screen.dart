@@ -203,9 +203,169 @@ class _HistoryScreenState extends State<HistoryScreen> {
               _buildStatusBadge(trip),
             ],
           ),
+          ..._barisSanggahan(trip),
         ],
       ),
     );
+  }
+
+  /// Baris sanggahan metode pembayaran.
+  ///
+  /// Muncul untuk order yang tercatat "Tunai ke Supir" — sistem mengklaim supir
+  /// memegang uangnya dan menagih komisinya. Kalau kenyataannya uang itu
+  /// diterima kasir, inilah satu-satunya cara supir membantah; tanpa ini ia
+  /// baru sadar saat dompetnya minus dan tidak punya saluran resmi apa pun.
+  ///
+  /// Kelayakannya TIDAK dihitung ulang di sini — dibaca dari flag `can_dispute`
+  /// yang dikirim server, supaya aturan di aplikasi tidak bisa menyimpang dari
+  /// yang ditegakkan endpoint.
+  List<Widget> _barisSanggahan(dynamic trip) {
+    final status = trip['method_dispute_status'];
+
+    if (status == 'Open') {
+      return [_infoSanggahan(
+        Icons.hourglass_top_rounded,
+        AppColors.warning,
+        'Sanggahan terkirim — menunggu keputusan admin.',
+      )];
+    }
+    if (status == 'Upheld') {
+      return [_infoSanggahan(
+        Icons.verified_rounded,
+        AppColors.success,
+        'Sanggahan dikabulkan. Order ini dikoreksi menjadi Tunai ke Kasir.',
+      )];
+    }
+    if (status == 'Rejected') {
+      final catatan = trip['method_admin_note'];
+      return [_infoSanggahan(
+        Icons.cancel_rounded,
+        AppColors.danger,
+        'Sanggahan ditolak.${catatan != null ? ' Alasan: $catatan' : ''}',
+      )];
+    }
+
+    if (trip['can_dispute'] != true) return [];
+
+    return [
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _ajukanSanggahan(trip),
+          icon: const Icon(Icons.report_problem_outlined, size: 16),
+          label: const Text('Saya tidak menerima uang tunai ini'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.danger,
+            side: BorderSide(color: AppColors.danger.withValues(alpha: 0.5)),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            textStyle: GoogleFonts.outfit(fontSize: 12.5, fontWeight: FontWeight.w600),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _infoSanggahan(IconData ikon, Color warna, String teks) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: warna.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(ikon, size: 15, color: warna),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                teks,
+                style: GoogleFonts.outfit(fontSize: 11.5, color: warna),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _ajukanSanggahan(dynamic trip) async {
+    final ctrl = TextEditingController();
+
+    final kirim = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sanggah Pembayaran'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Order ini tercatat sebagai Tunai ke Supir, jadi komisinya ditagihkan '
+              'kepada Anda. Jelaskan singkat apa yang sebenarnya terjadi — admin '
+              'akan memeriksa dan memutuskan.',
+              style: GoogleFonts.outfit(fontSize: 13, color: AppColors.inkSoft),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              maxLength: 500,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Contoh: uang diterima kasir di loket, saya tidak pegang.',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Kirim Sanggahan'),
+          ),
+        ],
+      ),
+    );
+
+    if (kirim != true) return;
+
+    if (ctrl.text.trim().length < 5) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alasan terlalu pendek.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _apiService.disputePaymentMethod(trip['id'], ctrl.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sanggahan terkirim. Admin akan memeriksanya.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      await _fetchHistory();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(apiErrorMessage(e)),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildStatusBadge(Map<String, dynamic> trip) {

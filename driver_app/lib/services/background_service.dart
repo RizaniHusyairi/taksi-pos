@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:dio/dio.dart';
 import 'package:driver_app/services/api_service.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -103,6 +104,9 @@ void onStart(ServiceInstance service) async {
         pos.latitude,
         pos.longitude,
         accuracy: pos.accuracy,
+        // Android menandai sendiri fix yang berasal dari aplikasi fake GPS.
+        // Diteruskan apa adanya — server yang memutuskan hukumannya.
+        isMocked: pos.isMocked,
       );
 
       gagalKirim = 0; // berhasil → pulih dari kegagalan sebelumnya
@@ -135,6 +139,34 @@ void onStart(ServiceInstance service) async {
         subscribe(); // re-subscribe dengan setting baru
       }
     } catch (e) {
+      // Server menolak fix ini karena dicurigai palsu (HTTP 422). Ini BUKAN
+      // kegagalan jaringan dan tidak boleh disamarkan jadi "gagal kirim":
+      // supir berhak tahu persis kenapa lokasinya diabaikan, apalagi kalau
+      // penyebabnya aplikasi fake GPS yang lupa dimatikan — atau GPS ponselnya
+      // yang memang sedang kacau. Lihat DriverApiController::periksaLokasiPalsu().
+      if (e is DioException && e.response?.statusCode == 422) {
+        final body = e.response?.data;
+        if (body is Map && body['spoof_detected'] == true) {
+          final palsu = body['reason'] == 'mock_provider';
+          _updateNotif(notifPlugin, service, {
+            'status': palsu ? 'spoof_blocked' : 'spoof_ignored',
+          });
+          service.invoke('spoofDetected', {
+            'reason': body['reason'],
+            'pesan': body['message'],
+          });
+
+          // Tetap jadwalkan heartbeat: begitu fake GPS dimatikan (atau fix
+          // GPS-nya waras lagi), ping berikutnya langsung diterima dan supir
+          // pulih tanpa harus me-restart aplikasi.
+          heartbeat?.cancel();
+          heartbeat = Timer(const Duration(seconds: 75), () {
+            if (lastPos != null) push(lastPos!);
+          });
+          return;
+        }
+      }
+
       // Diam-diam gagal adalah hal terburuk yang bisa terjadi di sini: notifikasi
       // tetap memajang stempel waktu lama, supir mengira dirinya terpantau,
       // padahal server tidak menerima apa-apa — dan sejak ada penyapu supir
@@ -234,6 +266,12 @@ void _updateNotif(
     statusText = "Lokasi gagal terkirim ${n}x — periksa koneksi | $timestamp";
   } else if (status == 'gps_error') {
     statusText = "GPS terputus — mencoba menyambung ulang | $timestamp";
+  } else if (status == 'spoof_blocked') {
+    // Sudah dikeluarkan dari antrian oleh server — sebut jalan keluarnya,
+    // jangan cuma menuduh.
+    statusText = "Fake GPS terdeteksi — matikan, lalu masuk antrian lagi";
+  } else if (status == 'spoof_ignored') {
+    statusText = "Lompatan lokasi tidak wajar — data diabaikan | $timestamp";
   }
 
   if (service is AndroidServiceInstance) {

@@ -13,18 +13,20 @@ class NewOrderForDriver extends Mailable implements ShouldQueue
     use Queueable, SerializesModels;
 
     public $booking;
-    public $receiptUrl;
 
     /**
      * Create a new message instance.
      *
+     * Sengaja TIDAK menerima URL struk lagi. `receipt_token` di dalam URL itu
+     * adalah satu-satunya kunci form penilaian penumpang yang terbuka tanpa
+     * login (PublicReceiptController::rate) — mengirimkannya ke supir membuat
+     * supir bisa menilai perjalanannya sendiri. Struk adalah milik penumpang.
+     *
      * @param Booking $booking Objek booking lengkap
-     * @param string $receiptUrl Link URL struk pembayaran
      */
-    public function __construct($booking, $receiptUrl)
+    public function __construct($booking)
     {
         $this->booking = $booking;
-        $this->receiptUrl = $receiptUrl;
     }
 
     /**

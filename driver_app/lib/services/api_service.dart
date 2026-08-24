@@ -100,13 +100,26 @@ class ApiService {
   /// [accuracy] = radius ketidakpastian fix dalam meter (Position.accuracy).
   /// Server memakainya untuk MENUNDA keputusan di dalam/luar area saat fix-nya
   /// meragukan — posisinya tetap disimpan. Opsional agar aman bila null.
-  Future<Response> updateLocation(double lat, double lng, {double? accuracy}) async {
+  ///
+  /// [isMocked] = Position.isMocked, yaitu Android sendiri yang memberi tahu
+  /// bahwa fix ini datang dari mock provider (aplikasi fake GPS). Server
+  /// menolak fix seperti ini dan mengeluarkan supir dari antrian.
+  /// Flag ini TIDAK berdiri sendiri sebagai pengaman — APK modifikasi tinggal
+  /// tidak mengirimnya — makanya server juga menghitung lompatan mustahil
+  /// antar-ping. Lihat DriverApiController::periksaLokasiPalsu().
+  Future<Response> updateLocation(
+    double lat,
+    double lng, {
+    double? accuracy,
+    bool? isMocked,
+  }) async {
     return await _dio.post(
       '/driver/location',
       data: {
         'latitude': lat,
         'longitude': lng,
         if (accuracy != null) 'accuracy': accuracy,
+        if (isMocked != null) 'is_mocked': isMocked,
       },
     );
   }
@@ -123,6 +136,7 @@ class ApiService {
     int? manualPrice,
     double? latitude,
     double? longitude,
+    bool? isMocked,
   }) async {
     final Map<String, dynamic> data = {'action': action};
     if (reason != null) data['reason'] = reason;
@@ -132,6 +146,9 @@ class ApiService {
     if (manualPrice != null) data['manual_price'] = manualPrice;
     if (latitude != null) data['latitude'] = latitude;
     if (longitude != null) data['longitude'] = longitude;
+    // Pintu masuk antrian dijaga sama ketatnya dengan ping berkala — lihat
+    // catatan isMocked di updateLocation().
+    if (isMocked != null) data['is_mocked'] = isMocked;
 
     return await _dio.post('/driver/status', data: data);
   }
@@ -301,6 +318,49 @@ class ApiService {
   /// Riwayat setoran CSO yang sedang login (paginated).
   Future<Response> getCsoDeposits() async {
     return await _dio.get('/cso/deposits');
+  }
+
+  /// Menyanggah metode pembayaran satu transaksi: "saya tidak menerima tunai
+  /// ini". Server memeriksa sendiri kelayakannya — aplikasi cukup membaca flag
+  /// `can_dispute` dari riwayat trip untuk menampilkan tombolnya.
+  Future<Response> disputePaymentMethod(int transactionId, String note) async {
+    return await _dio.post(
+      '/driver/transactions/$transactionId/dispute-method',
+      data: {'note': note},
+    );
+  }
+
+  // --- Setoran tunai SUPIR ke admin (pelunasan utang komisi) ---
+  //
+  // Bentuknya kembar dengan setoran CSO di atas. Satu bedanya penting: nominal
+  // di sini adalah KOMISI yang terutang, bukan tarif penuh — supir menyetor
+  // bagian koperasi, bukan seluruh ongkos penumpang.
+
+  /// Rekap utang komisi yang belum disetor, dikelompokkan per tanggal.
+  Future<Response> getDriverDepositOutstanding() async {
+    return await _dio.get('/driver/deposits/outstanding');
+  }
+
+  /// Ajukan setoran untuk [dates] (format 'YYYY-MM-DD').
+  /// Nominalnya dihitung server — klien tidak mengirim angka apa pun.
+  Future<Response> createDriverDeposit(
+    List<String> dates, {
+    String? note,
+    String? proofPath,
+  }) async {
+    final Map<String, dynamic> fields = {
+      'dates': dates,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    };
+    if (proofPath != null) {
+      fields['proof_image'] = await MultipartFile.fromFile(proofPath);
+    }
+    return await _dio.post('/driver/deposits', data: FormData.fromMap(fields));
+  }
+
+  /// Riwayat setoran supir yang sedang login (paginated).
+  Future<Response> getDriverDeposits() async {
+    return await _dio.get('/driver/deposits');
   }
 
   Future<Response> csoChangeDriver(int bookingId, int newDriverId) async {

@@ -25,11 +25,17 @@ class DriverProfile extends Model
         'airport_exits',
         'track_lat',
         'track_lng',
+        // Jejak dugaan fake GPS — lihat migrasi
+        // 2026_08_24_000003_add_spoof_detection_to_driver_profiles.
+        'spoof_strikes',
+        'last_spoof_at',
+        'last_spoof_reason',
     ];
 
     protected $casts = [
         'location_updated_at' => 'datetime',
         'last_in_area' => 'boolean',
+        'last_spoof_at' => 'datetime',
     ];
 
     public function user()

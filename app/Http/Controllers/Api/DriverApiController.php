@@ -122,6 +122,10 @@ class DriverApiController extends Controller
             'action' => 'required|in:join,leave',
             'latitude'  => 'required_if:action,join|numeric|between:-90,90',
             'longitude' => 'required_if:action,join|numeric|between:-180,180',
+            // `is_mocked` dibaca lewat bacaFlagMock(), tidak divalidasi di sini
+            // (lihat updateLocation). Pintu masuk antrian dijaga sama ketatnya
+            // dengan ping berkala — kalau tidak, supir cukup memalsukan lokasi
+            // sekali saja tepat ketika menekan "Masuk Antrian".
             'reason'             => 'required_if:action,leave|in:self,other',
             'manual_destination' => 'required_if:reason,self|string|nullable',
             'manual_price'       => 'required_if:reason,self|numeric|min:0',
@@ -132,7 +136,49 @@ class DriverApiController extends Controller
         $profile = $user->driverProfile;
 
         if ($validated['action'] === 'join') {
-            // ... (Logika Join Tetap Sama) ...
+            // GERBANG ANTI FAKE GPS — sebelum pemeriksaan jarak. Koordinat
+            // palsu yang "kebetulan" tepat di bandara akan lolos uji jarak
+            // dengan mulus, jadi keasliannya harus diuji lebih dulu.
+            $alasanPalsu = $this->periksaLokasiPalsu(
+                $profile,
+                (float) $request->latitude,
+                (float) $request->longitude,
+                $this->bacaFlagMock($request)
+            );
+
+            if ($alasanPalsu !== null) {
+                $this->hukumLokasiPalsu($profile, $user->id, $alasanPalsu);
+
+                return response()->json([
+                    'message' => $alasanPalsu === 'mock_provider'
+                        ? 'Lokasi palsu terdeteksi. Matikan aplikasi fake GPS terlebih dahulu.'
+                        : 'Perpindahan lokasi tidak wajar. Tunggu sebentar lalu coba lagi.',
+                    'spoof_detected' => true,
+                    'reason'         => $alasanPalsu,
+                ], 422);
+            }
+
+            // GERBANG ORDER AKTIF. Didahulukan dari gerbang utang karena
+            // inilah alasan yang paling mendesak & paling bisa ditindaklanjuti
+            // supir saat itu juga ("selesaikan ordermu"), dan pemeriksaannya
+            // pun paling murah (satu exists()).
+            if ($pesanOrder = $this->gerbangOrderAktif($user)) {
+                return response()->json([
+                    'message'           => $pesanOrder,
+                    'has_active_order'  => true,
+                ], 422);
+            }
+
+            // GERBANG UTANG. Ditaruh setelah pemeriksaan lokasi palsu tapi
+            // sebelum supir benar-benar masuk antrian: percuma memberi giliran
+            // kepada supir yang uang koperasinya sudah menumpuk di kantongnya.
+            if ($pesanUtang = $this->gerbangUtang($user)) {
+                return response()->json([
+                    'message'      => $pesanUtang,
+                    'debt_blocked' => true,
+                ], 422);
+            }
+
             $airportLat = Setting::airportLatitude();
             $airportLng = Setting::airportLongitude();
             $distance = $this->calculateDistance($airportLat, $airportLng, $request->latitude, $request->longitude);
@@ -292,6 +338,149 @@ class DriverApiController extends Controller
         return $earthRadius * $c;
     }
 
+    // =====================================================================
+    // ===  DETEKSI LOKASI PALSU (FAKE GPS)                               ===
+    // =====================================================================
+
+    /**
+     * Apakah satu fix lokasi patut dicurigai palsu?
+     *
+     * Seluruh mesin antrian mempercayai koordinat kiriman klien, jadi inilah
+     * satu-satunya tempat kepercayaan itu diuji. Dua detektor yang sengaja
+     * saling menutupi kelemahan masing-masing:
+     *
+     *  - `mock_provider`: Android sendiri menandai fix-nya berasal dari mock
+     *    provider (Position.isMocked). Bukti paling tegas yang bisa didapat —
+     *    tapi lenyap begitu supir memakai APK modifikasi atau memanggil API
+     *    langsung dengan curl.
+     *  - `teleport`: jarak dari fix tersimpan sebelumnya dibagi waktu tempuh
+     *    menghasilkan kecepatan yang mustahil bagi mobil. Dihitung SEPENUHNYA
+     *    di server dari data yang sudah tersimpan, jadi tidak ada yang bisa
+     *    dimatikan dari sisi klien.
+     *
+     * Ambangnya sengaja longgar (lihat config/taksi.php): tugasnya menangkap
+     * lompatan puluhan kilometer dalam hitungan detik, bukan supir yang ngebut.
+     *
+     * @return string|null  alasan ('mock_provider'|'teleport'), null bila wajar
+     */
+    /**
+     * Baca flag `is_mocked` dengan longgar: true/false, 1/0, "true"/"false".
+     *
+     * SENGAJA tidak divalidasi dengan rule `boolean`. Flag ini cuma petunjuk
+     * dari perangkat, sedangkan ping lokasi adalah denyut nadi antrian — nilai
+     * yang tidak bisa dibaca harus berarti "tidak tahu", BUKAN alasan menolak
+     * seluruh ping. Rule `boolean` menolak string "false" (yang muncul begitu
+     * ada klien mengirim form-encoded, bukan JSON) dan akibatnya pelacakan
+     * lokasi supir mati total karena sebuah petunjuk opsional.
+     *
+     * @return bool|null  null = perangkat tidak memberi tahu
+     */
+    private function bacaFlagMock(Request $request): ?bool
+    {
+        if (!$request->has('is_mocked')) {
+            return null;
+        }
+
+        // FILTER_NULL_ON_FAILURE: nilai aneh -> null ("tidak tahu"), bukan false.
+        return filter_var($request->input('is_mocked'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    }
+
+    private function periksaLokasiPalsu($profile, float $lat, float $lng, ?bool $isMocked): ?string
+    {
+        if ($isMocked === true) {
+            return 'mock_provider';
+        }
+
+        // Butuh fix sebelumnya sebagai pembanding. (0,0) adalah sentinel
+        // "belum ada fix" yang memang dipakai pre-fill rotasi harian — bukan
+        // baseline yang sah untuk menghitung jarak.
+        if (!$profile || !$profile->location_updated_at
+            || $profile->latitude === null || $profile->longitude === null) {
+            return null;
+        }
+
+        $lastLat = (float) $profile->latitude;
+        $lastLng = (float) $profile->longitude;
+        if ($lastLat === 0.0 && $lastLng === 0.0) {
+            return null;
+        }
+
+        // Jam perangkat bisa meleset; selisih negatif diperlakukan sebagai
+        // "tidak bisa dinilai", bukan sebagai bukti.
+        $detik = now()->timestamp - $profile->location_updated_at->timestamp;
+        if ($detik < (int) config('taksi.driver_queue.teleport_min_seconds')) {
+            return null;
+        }
+
+        $km = $this->calculateDistance($lastLat, $lastLng, $lat, $lng);
+        if ($km < (float) config('taksi.driver_queue.teleport_min_km')) {
+            return null;
+        }
+
+        $kmh = $km / ($detik / 3600);
+
+        return $kmh > (float) config('taksi.driver_queue.teleport_speed_kmh')
+            ? 'teleport'
+            : null;
+    }
+
+    /**
+     * Catat dugaan pemalsuan lokasi dan tentukan hukumannya.
+     *
+     * Hukumannya SENGAJA berbeda menurut kekuatan buktinya:
+     *
+     *  - `mock_provider` — tidak ada tafsir lain: keluarkan dari antrian dan
+     *    matikan auto-join, supaya supir harus menekan "Masuk Antrian" secara
+     *    sadar (dan pemeriksaan ini berjalan lagi di sana).
+     *  - `teleport` — bukti tak langsung, dan GPS yang rusak sesekali bisa
+     *    menghasilkannya. Fix-nya cukup DITOLAK, antriannya tidak diutak-atik.
+     *    Efeknya tetap nyata tanpa risiko salah tuduh: ping yang ditolak tidak
+     *    menyegarkan `location_updated_at`, sehingga supir yang benar-benar
+     *    memalsukan lokasi akan berhenti dianggap hadir dan tersapu sendiri
+     *    oleh `queue:sweep-stale` — sementara supir yang cuma apes satu fix
+     *    langsung pulih di ping berikutnya.
+     */
+    private function hukumLokasiPalsu($profile, int $userId, string $alasan): void
+    {
+        // Supir tanpa baris profil: tidak ada tempat menyimpan strike, tapi
+        // fix-nya tetap ditolak oleh pemanggil dan kejadiannya tetap tercatat.
+        // (Jalur `is_mocked` bisa sampai ke sini tanpa profil — pemeriksaan
+        // teleport tidak, karena ia butuh baseline dari profil.)
+        if (!$profile) {
+            $this->logActivity($userId, 'LOCATION_SPOOF_SUSPECT', "Lokasi palsu ({$alasan}) — supir tanpa profil");
+            return;
+        }
+
+        $profile->increment('spoof_strikes');
+        $profile->update([
+            'last_spoof_at'     => now(),
+            'last_spoof_reason' => $alasan,
+        ]);
+
+        if ($alasan === 'mock_provider') {
+            DriverQueue::where('user_id', $userId)->delete();
+            $profile->update([
+                'status'            => 'offline',
+                'out_of_area_since' => null,
+                'auto_join_blocked' => true,
+            ]);
+
+            $this->logActivity(
+                $userId,
+                'LOCATION_SPOOF_BLOCKED',
+                'Lokasi palsu terdeteksi (mock provider) — dikeluarkan dari antrian'
+            );
+
+            return;
+        }
+
+        $this->logActivity(
+            $userId,
+            'LOCATION_SPOOF_SUSPECT',
+            'Lompatan lokasi mustahil — fix ditolak (dugaan fake GPS)'
+        );
+    }
+
     /**
      * Menyelesaikan perjalanan.
      */
@@ -348,8 +537,22 @@ class DriverApiController extends Controller
      */
     public function getBalance(Request $request)
     {
-        $driver = $request->user();
+        return response()->json($this->hitungSaldo($request->user()));
+    }
 
+    /**
+     * Rumus dompet supir — SATU-SATUNYA tempat pemasukan, utang, dan saldo
+     * bersih dihitung.
+     *
+     * Dipisah dari getBalance() karena angkanya sekarang dipakai di tiga
+     * tempat dengan tujuan berbeda: menampilkan dompet, mengunci nominal saat
+     * pencairan, dan menjaga pintu antrian (lihat gerbangUtang()). Kalau
+     * rumusnya sampai bercabang, supir bisa melihat angka yang berbeda dari
+     * angka yang dipakai memblokirnya — dan itu jauh lebih merusak
+     * kepercayaan daripada bug hitungan biasa.
+     */
+    private function hitungSaldo(User $driver): array
+    {
         // Rate Komisi (mis. 0.2 = 20%). Disimpan desimal di settings.
         $rate = (float) Setting::getValue('commission_rate') ?: 0.2;
         $manualFlat = (int) (Setting::getValue('manual_fee_flat') ?: 10000);
@@ -395,11 +598,19 @@ class DriverApiController extends Controller
         // === 3. SALDO BERSIH ===
         $netBalance = $driverShare - $driverDebt;
 
-        return response()->json([
+        $batasUtang = Setting::maxDriverDebt();
+
+        return [
             // Kunci lama (kompatibilitas mundur)
             'balance'        => round($netBalance),
             'income_pending' => round($driverShare),
             'debt_pending'   => round($driverDebt),
+            // Batas utang & sisa jatah — ditampilkan di dompet supaya supir
+            // melihat dirinya mendekati batas SEBELUM antriannya diblokir,
+            // bukan mendadak ditolak di gerbang tanpa penjelasan.
+            'debt_limit'     => $batasUtang,
+            'debt_remaining' => $batasUtang > 0 ? max(0, $batasUtang - (int) round($driverDebt)) : null,
+            'debt_blocked'   => $batasUtang > 0 && round($driverDebt) > $batasUtang,
             // Rincian lengkap untuk UI dompet yang transparan
             'breakdown' => [
                 'commission_rate' => $rate,
@@ -420,9 +631,69 @@ class DriverApiController extends Controller
                 ],
                 'net' => round($netBalance),
             ],
-        ]);
+        ];
     }
-    
+
+    /**
+     * Bolehkah supir ini masuk antrian, dilihat dari order yang sedang jalan?
+     *
+     * BUKAN sekadar pengetatan — tanpa ini supir masuk antrian lagi SENDIRINYA,
+     * tanpa niat curang. Rantainya: processOrder() mengeluarkan supir dari
+     * antrian tapi tidak mengubah status profilnya (tetap 'standby');
+     * attachVirtualStatus() lalu melihat "standby tapi tidak ada di antrian"
+     * sebagai data nyangkut dan mengoreksinya jadi 'offline'; auto-join di
+     * updateLocation() menarik siapa pun yang 'offline' & berada di area.
+     * Hasilnya supir dengan order 'Assigned' yang belum ditekan "Mulai"
+     * nangkring lagi di antrian.
+     *
+     * Akibatnya nyata: processOrder() menolak memberi order kepada supir yang
+     * punya order aktif, jadi CSO melihat supir itu di puncak antrian tapi
+     * tidak bisa memilihnya — dan terpaksa melewati giliran. Override yang
+     * seharusnya jarang jadi rutin, lalu laporan override kehilangan artinya.
+     *
+     * @return string|null  pesan penolakan, atau null bila boleh
+     */
+    private function gerbangOrderAktif(User $driver): ?string
+    {
+        $aktif = Booking::where('driver_id', $driver->id)
+            ->whereIn('status', ['Assigned', 'OnTrip'])
+            ->first(['id', 'status']);
+
+        if (!$aktif) {
+            return null;
+        }
+
+        return $aktif->status === 'Assigned'
+            ? 'Anda masih punya order yang belum dijalankan (order #' . $aktif->id
+                . '). Selesaikan dulu, baru bisa masuk antrian lagi.'
+            : 'Anda sedang mengantar penumpang (order #' . $aktif->id
+                . '). Tekan "Selesai" dulu, baru bisa masuk antrian lagi.';
+    }
+
+    /**
+     * Bolehkah supir ini masuk antrian, dilihat dari utangnya?
+     *
+     * @return string|null  pesan penolakan, atau null bila boleh
+     */
+    private function gerbangUtang(User $driver): ?string
+    {
+        $batas = Setting::maxDriverDebt();
+
+        if ($batas <= 0) {
+            return null; // admin mematikan pembatasan
+        }
+
+        $utang = (int) round($this->hitungSaldo($driver)['debt_pending']);
+
+        if ($utang <= $batas) {
+            return null;
+        }
+
+        return 'Utang setoran Anda Rp ' . number_format($utang, 0, ',', '.')
+            . ' sudah melewati batas Rp ' . number_format($batas, 0, ',', '.')
+            . '. Silakan setor tunai ke admin lebih dulu lewat menu Setoran.';
+    }
+
     /**
      * Mengajukan penarikan dana.
      */
@@ -439,8 +710,7 @@ class DriverApiController extends Controller
         
 
         // 1. Cek Saldo lagi untuk memastikan
-        $balanceData = $this->getBalance($request)->getData();
-        $amountToWithdraw = $balanceData->balance;
+        $amountToWithdraw = $this->hitungSaldo($driver)['balance'];
 
         if ($amountToWithdraw < 10000) {
             return response()->json(['message' => 'Saldo bersih belum mencapai batas minimal pencairan (Rp 10.000).'], 422);
@@ -570,6 +840,20 @@ class DriverApiController extends Controller
         // diambil lewat filter date_from/date_to di atas. (Tetap array datar →
         // tidak memutus parsing di app.)
         $history = $query->orderBy('created_at', 'desc')->limit(200)->get();
+
+        // Aturan kelayakan sanggahan dievaluasi DI SERVER lalu dikirim sebagai
+        // flag, bukan disalin jadi kondisi if di Dart. Kalau aplikasi ikut
+        // menghitung sendiri, suatu saat aturannya akan berbeda dari yang
+        // ditegakkan endpoint dan supir melihat tombol yang selalu gagal.
+        $bisa = Transaction::bisaDisanggah()
+            ->whereIn('id', $history->pluck('id'))
+            ->pluck('id')
+            ->flip();
+
+        $history->each(function ($t) use ($bisa) {
+            $t->can_dispute = $bisa->has($t->id);
+        });
+
         return response()->json($history);
     }
 
@@ -630,6 +914,11 @@ class DriverApiController extends Controller
             // Akurasi (meter) dari perangkat. Opsional supaya versi aplikasi
             // lama tetap jalan — bila tidak dikirim, fix dianggap layak.
             'accuracy'  => 'nullable|numeric|min:0',
+            // Catatan: `is_mocked` (Position.isMocked dari Android) SENGAJA
+            // tidak divalidasi di sini — dibaca longgar lewat bacaFlagMock(),
+            // lihat alasannya di sana. Flag ini juga TIDAK bisa diandalkan
+            // sendirian: APK modifikasi tinggal tidak mengirimnya, makanya
+            // deteksi teleport di server melengkapinya.
         ]);
 
         // (0,0) bukan lokasi nyata — itu sentinel "belum ada fix" yang memang
@@ -644,6 +933,30 @@ class DriverApiController extends Controller
 
         $user = $request->user();
         $profile = $user->driverProfile;
+
+        // GERBANG ANTI FAKE GPS — WAJIB sebelum baris penyimpanan mana pun.
+        // Fix yang dicurigai palsu tidak boleh menyegarkan `location_updated_at`
+        // (itulah bukti kehadiran yang dibaca CSO & penyapu antrian), tidak
+        // boleh masuk breadcrumb rute, dan tidak boleh dipakai memutuskan
+        // geofence. Ditolak di sini, sebelum menyentuh apa pun.
+        $alasanPalsu = $this->periksaLokasiPalsu(
+            $profile,
+            (float) $request->latitude,
+            (float) $request->longitude,
+            $this->bacaFlagMock($request)
+        );
+
+        if ($alasanPalsu !== null) {
+            $this->hukumLokasiPalsu($profile, $user->id, $alasanPalsu);
+
+            return response()->json([
+                'message' => $alasanPalsu === 'mock_provider'
+                    ? 'Lokasi palsu terdeteksi. Matikan aplikasi fake GPS, lalu masuk antrian lagi secara manual.'
+                    : 'Perpindahan lokasi tidak wajar — data lokasi ini diabaikan.',
+                'spoof_detected' => true,
+                'reason'         => $alasanPalsu,
+            ], 422);
+        }
 
         // Selalu simpan lokasi terakhir di profil — termasuk saat driver sedang
         // OnTrip (tidak ada di tabel antrian). Inilah yang membuat peta CSO bisa
@@ -798,7 +1111,22 @@ class DriverApiController extends Controller
 
         // Logic Auto-Join (Jika Offline & Masuk Area) - Tetap sama
         if ($inArea && $profile->status === 'offline') {
-            
+
+            // GERBANG ORDER AKTIF — justru DI SINI bug-nya paling terasa.
+            // Supir yang baru dapat order berstatus 'offline' menurut profil
+            // (lihat gerbangOrderAktif untuk rantai lengkapnya), sehingga
+            // tanpa penjaga ini auto-join mengembalikannya ke antrian sambil
+            // ordernya masih menggantung — tanpa ia melakukan apa pun.
+            if ($pesanOrder = $this->gerbangOrderAktif($user)) {
+                return response()->json([
+                    'status'           => 'offline',
+                    'in_area'          => true,
+                    'tracking_open'    => $trackingOpen,
+                    'has_active_order' => true,
+                    'message'          => $pesanOrder,
+                ]);
+            }
+
             // CEK APAKAH DIBLOKIR?
             if ($profile->auto_join_blocked) {
                 return response()->json([
@@ -806,6 +1134,20 @@ class DriverApiController extends Controller
                     'in_area' => true,
                     'tracking_open' => $trackingOpen,
                     'message' => 'Anda harus menekan tombol "Masuk Antrian" secara manual.'
+                ]);
+            }
+
+            // GERBANG UTANG juga di pintu OTOMATIS. Kalau hanya join manual
+            // yang dijaga, supir berutang tinggal berjalan masuk area dan
+            // auto-join menariknya kembali ke antrian — pembatasannya jadi
+            // hiasan belaka.
+            if ($pesanUtang = $this->gerbangUtang($user)) {
+                return response()->json([
+                    'status'         => 'offline',
+                    'in_area'        => true,
+                    'tracking_open'  => $trackingOpen,
+                    'debt_blocked'   => true,
+                    'message'        => $pesanUtang,
                 ]);
             }
 
@@ -997,5 +1339,280 @@ class DriverApiController extends Controller
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Activiy Log Error: ' . $e->getMessage());
         }
+    }
+
+    // =====================================================================
+    // ===  SENGKETA METODE PEMBAYARAN                                    ===
+    // =====================================================================
+
+    /**
+     * Supir menyanggah bahwa ia menerima uang tunai atas satu order.
+     *
+     * CSO memilih sendiri metode pembayaran saat membuat order. Bila ia
+     * menerima tunai dari penumpang lalu mencatatnya 'CashDriver', uangnya ada
+     * di tangan CSO tetapi komisinya ditagihkan kepada supir. Server tidak
+     * mungkin tahu uang fisik berpindah ke siapa — jadi yang diberikan di sini
+     * bukan pencegahan, melainkan HAK SUARA: supir bisa membantah, dan
+     * bantahannya jadi antrean keputusan admin, bukan hilang jadi keluhan lisan.
+     */
+    public function disputeMethod(Request $request, Transaction $transaction)
+    {
+        $validated = $request->validate([
+            'note' => 'required|string|min:5|max:500',
+        ], [
+            'note.required' => 'Tulis alasan sanggahan agar admin tahu apa yang terjadi.',
+            'note.min'      => 'Alasan terlalu pendek — jelaskan singkat apa yang sebenarnya terjadi.',
+        ]);
+
+        $driver = $request->user();
+
+        // Kepemilikan diperiksa lewat booking — route model binding tidak
+        // memeriksa apa pun (pelajaran yang sama dengan depositDetail).
+        $transaction->loadMissing('booking');
+        if (!$transaction->booking || (int) $transaction->booking->driver_id !== (int) $driver->id) {
+            return response()->json(['message' => 'Transaksi ini bukan milik Anda.'], 403);
+        }
+
+        // Syarat kelayakan dipusatkan di satu scope supaya aturan yang dilihat
+        // aplikasi (tombol muncul/tidak) dan yang ditegakkan server tidak bisa
+        // berbeda. Alasan tiap syarat ada di Transaction::scopeBisaDisanggah().
+        $layak = Transaction::bisaDisanggah()->whereKey($transaction->id)->exists();
+        if (!$layak) {
+            return response()->json([
+                'message' => $transaction->method_dispute_status !== null
+                    ? 'Transaksi ini sudah pernah disanggah.'
+                    : 'Transaksi ini tidak bisa disanggah (bukan tunai ke supir, atau sudah diselesaikan).',
+            ], 422);
+        }
+
+        $transaction->update([
+            'method_dispute_status' => 'Open',
+            'method_dispute_note'   => $validated['note'],
+            'method_disputed_at'    => now(),
+        ]);
+
+        $this->logActivity(
+            $driver->id,
+            'PAYMENT_DISPUTE',
+            'Menyanggah metode pembayaran order #' . $transaction->booking_id
+        );
+
+        // Kabari admin — sengketa yang tidak pernah dibaca sama saja dengan
+        // tidak ada saluran sengketa.
+        try {
+            $waToken = Setting::getValue('wa_token');
+            $adminWa = Setting::getValue('admin_wa_number');
+            if ($waToken && $adminWa) {
+                $rp = number_format((float) $transaction->amount, 0, ',', '.');
+                \App\Jobs\SendWhatsAppMessage::dispatch(
+                    $adminWa,
+                    "*SANGGAHAN PEMBAYARAN*\n\nSupir *{$driver->name}* menyanggah order #{$transaction->booking_id} (Rp {$rp}) yang tercatat sebagai Tunai ke Supir.\n\nAlasan: {$validated['note']}\n\nSilakan periksa di menu Sengketa Pembayaran.",
+                    $waToken
+                );
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Gagal kirim WA sanggahan: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Sanggahan dikirim. Admin akan memeriksa dan memutuskan.',
+            'data'    => $transaction->fresh(),
+        ], 201);
+    }
+
+    // =====================================================================
+    // ===  SETORAN TUNAI SUPIR -> ADMIN (pelunasan utang komisi)         ===
+    // =====================================================================
+
+    /**
+     * Fee yang terutang atas SATU transaksi tunai-ke-supir.
+     *
+     * Aturannya sama persis dengan blok HUTANG di hitungSaldo(): order via
+     * zona kena persentase komisi, order manual (tanpa zona) kena fee flat per
+     * trip. Ditulis sekali di sini lalu dipakai baik untuk rekap maupun untuk
+     * mengunci nominal setoran — kalau bercabang, angka yang dilihat supir bisa
+     * berbeda dari angka yang ditagih.
+     */
+    private function feeTerutang(Transaction $t, float $rate, int $manualFlat): float
+    {
+        return $t->booking && $t->booking->zone_id === null
+            ? (float) $manualFlat
+            : (float) $t->amount * $rate;
+    }
+
+    /**
+     * Rekap utang yang BELUM disetor, dikelompokkan per tanggal.
+     *
+     * Inilah daftar yang dicentang supir di aplikasi — bentuknya sengaja
+     * dibuat sama dengan rekap setoran CSO.
+     */
+    public function depositOutstanding(Request $request)
+    {
+        $driver     = $request->user();
+        $rate       = (float) Setting::getValue('commission_rate') ?: 0.2;
+        $manualFlat = (int) (Setting::getValue('manual_fee_flat') ?: 10000);
+
+        // Fee per baris bergantung pada ada/tidaknya zona, jadi tidak bisa
+        // dijumlahkan murni di SQL seperti rekap CSO. Yang ditarik hanya kolom
+        // seperlunya, dan hanya transaksi yang memang masih berutang.
+        $rows = Transaction::cashDriverBelumLunas($driver->id)
+            ->with('booking:id,zone_id')
+            ->get(['id', 'amount', 'booking_id', 'created_at']);
+
+        $perTanggal = [];
+        foreach ($rows as $t) {
+            $tgl = $t->created_at->toDateString();
+            $perTanggal[$tgl] ??= ['date' => $tgl, 'total' => 0.0, 'count' => 0];
+            $perTanggal[$tgl]['total'] += $this->feeTerutang($t, $rate, $manualFlat);
+            $perTanggal[$tgl]['count']++;
+        }
+
+        krsort($perTanggal); // terbaru dulu
+        $days = array_values(array_map(
+            fn ($d) => ['date' => $d['date'], 'total' => round($d['total']), 'count' => $d['count']],
+            $perTanggal
+        ));
+
+        return response()->json([
+            'days'           => $days,
+            'grand_total'    => (float) array_sum(array_column($days, 'total')),
+            'grand_count'    => (int) array_sum(array_column($days, 'count')),
+            'debt_limit'     => Setting::maxDriverDebt(),
+            'commission_rate' => $rate,
+            'manual_fee_flat' => $manualFlat,
+        ]);
+    }
+
+    /**
+     * Buat setoran atas satu/beberapa tanggal.
+     *
+     * Nominal TIDAK diterima dari klien: server mengunci sendiri transaksi yang
+     * memenuhi syarat lalu menjumlahkan fee-nya. Inilah yang membuat dua
+     * perangkat yang menekan "Setor" bersamaan tidak bisa menyetor utang yang
+     * sama dua kali — pola yang sama dengan CsoApiController::storeDeposit().
+     */
+    public function storeDeposit(Request $request)
+    {
+        $validated = $request->validate([
+            'dates'       => 'required|array|min:1|max:62',
+            'dates.*'     => 'required|date_format:Y-m-d',
+            'note'        => 'nullable|string|max:500',
+            'proof_image' => 'nullable|image|mimes:jpeg,png,jpg|max:5120',
+        ], [
+            'dates.required' => 'Pilih minimal satu tanggal setoran.',
+        ]);
+
+        $driver     = $request->user();
+        $dates      = array_values(array_unique($validated['dates']));
+        $rate       = (float) Setting::getValue('commission_rate') ?: 0.2;
+        $manualFlat = (int) (Setting::getValue('manual_fee_flat') ?: 10000);
+
+        // Foto disimpan SEBELUM transaksi DB supaya kegagalan upload tidak
+        // menyisakan setoran setengah jadi.
+        $proofPath = $request->hasFile('proof_image')
+            ? $request->file('proof_image')->store('deposit_proofs', 'public')
+            : null;
+
+        $hasil = DB::transaction(function () use ($driver, $dates, $validated, $proofPath, $rate, $manualFlat) {
+            $placeholders = implode(',', array_fill(0, count($dates), '?'));
+
+            $rows = Transaction::cashDriverBelumLunas($driver->id)
+                ->whereRaw("DATE(transactions.created_at) IN ($placeholders)", $dates)
+                ->with('booking:id,zone_id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($rows->isEmpty()) {
+                return ['error' => 'Tidak ada utang yang perlu disetor pada tanggal tersebut.'];
+            }
+
+            $total = 0.0;
+            foreach ($rows as $t) {
+                $total += $this->feeTerutang($t, $rate, $manualFlat);
+            }
+
+            // period_dates diambil dari baris yang BENAR-BENAR terkunci, bukan
+            // dari permintaan klien — tanggal kosong tidak ikut tercatat.
+            $tanggalNyata = $rows
+                ->map(fn ($t) => $t->created_at->toDateString())
+                ->unique()->sort()->values()->all();
+
+            $deposit = \App\Models\DriverDeposit::create([
+                'driver_id'          => $driver->id,
+                'amount'             => round($total),
+                'status'             => 'Pending',
+                'period_dates'       => $tanggalNyata,
+                'transactions_count' => $rows->count(),
+                'note'               => $validated['note'] ?? null,
+                'proof_image'        => $proofPath,
+                'submitted_at'       => now(),
+            ]);
+
+            // 'Processing' memakai kolom yang SAMA dengan pencairan: sejak
+            // detik ini transaksinya tidak bisa lagi ikut pencairan maupun
+            // setoran lain.
+            Transaction::whereIn('id', $rows->pluck('id'))->update([
+                'payout_status'     => 'Processing',
+                'driver_deposit_id' => $deposit->id,
+            ]);
+
+            return ['deposit' => $deposit];
+        });
+
+        if (isset($hasil['error'])) {
+            // Utangnya tidak jadi terkunci -> fotonya pun tidak ada gunanya.
+            if ($proofPath) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($proofPath);
+            }
+            return response()->json(['message' => $hasil['error']], 422);
+        }
+
+        $deposit = $hasil['deposit'];
+
+        // Stempel dibakar SETELAH setoran terbentuk: nominal & nomornya baru
+        // pasti di titik ini, sehingga satu foto tidak bisa dipakai ulang untuk
+        // setoran lain. Pola & alasan sama dengan setoran CSO.
+        if ($proofPath) {
+            app(\App\Services\ImageWatermark::class)->stamp($proofPath, [
+                'BUKTI SETORAN SUPIR #' . $deposit->id,
+                'Supir    : ' . $driver->name,
+                'Nominal  : Rp ' . number_format((float) $deposit->amount, 0, ',', '.'),
+                'Tanggal  : ' . implode(', ', $deposit->period_dates ?? []),
+                'Transaksi: ' . $deposit->transactions_count . ' order tunai',
+                'Diunggah : ' . now()->format('d/m/Y H:i') . ' WIB',
+            ]);
+        }
+
+        $this->logActivity($driver->id, 'DEPOSIT_SUBMIT', 'Mengajukan setoran tunai Rp ' . number_format((float) $deposit->amount, 0, ',', '.'));
+
+        return response()->json([
+            'message' => 'Setoran diajukan, menunggu verifikasi admin.',
+            'data'    => $deposit,
+        ], 201);
+    }
+
+    /** Riwayat setoran milik supir yang sedang login. */
+    public function depositHistory(Request $request)
+    {
+        return response()->json(
+            \App\Models\DriverDeposit::where('driver_id', $request->user()->id)
+                ->orderByDesc('submitted_at')
+                ->paginate(20)
+        );
+    }
+
+    /** Detail satu setoran + transaksi yang tercakup di dalamnya. */
+    public function depositDetail(Request $request, \App\Models\DriverDeposit $deposit)
+    {
+        // Route model binding TIDAK memeriksa kepemilikan — tanpa baris ini,
+        // supir mana pun bisa membaca setoran supir lain hanya dengan menebak
+        // id. Pelajaran yang sama sudah dipetik di CsoApiController.
+        if ((int) $deposit->driver_id !== (int) $request->user()->id) {
+            return response()->json(['message' => 'Setoran ini bukan milik Anda.'], 403);
+        }
+
+        $deposit->load(['transactions.booking.zoneTo:id,name']);
+
+        return response()->json($deposit);
     }
 }

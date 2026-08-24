@@ -361,6 +361,17 @@
             <span class="font-medium">Setoran CSO</span>
           </a>
 
+          <a href="#driver-deposits" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m3 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H10a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            <span class="font-medium">Setoran Supir</span>
+          </a>
+
+          <a href="#method-disputes" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+            <span class="font-medium">Sengketa Pembayaran</span>
+            <span id="navDisputeBadge" class="hidden ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5"></span>
+          </a>
+
           <div class="nav-section">Laporan</div>
           
           <a href="#report-revenue" class="nav-link">
@@ -376,6 +387,11 @@
           <a href="#cso-performance" class="nav-link">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 18v-6a6 6 0 10-12 0v6M4 14h2a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm16 0v4a1 1 0 01-1 1h-1a1 1 0 01-1-1v-3a1 1 0 011-1h2z"></path></svg>
             <span class="font-medium">Performa CSO</span>
+          </a>
+
+          <a href="#fraud-signals" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19H19a2 2 0 001.75-2.97l-6.93-12a2 2 0 00-3.5 0l-6.93 12A2 2 0 005.07 19z"></path></svg>
+            <span class="font-medium">Sinyal Kecurangan</span>
           </a>
 
           <div class="nav-section">Live</div>
@@ -1030,6 +1046,229 @@
         </div>
       </section>
 
+      <!-- Setoran tunai SUPIR: pelunasan utang komisi atas order yang dibayar
+           tunai langsung ke supir. Bentuknya sengaja kembar dengan Setoran CSO
+           di atas supaya admin tidak perlu belajar dua alur yang berbeda. -->
+      <section id="view-driver-deposits" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Setoran Tunai Supir</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Pelunasan <b>utang komisi</b> supir atas order yang dibayar <b>Tunai ke Supir</b>. Nominalnya adalah bagian koperasi, bukan tarif penuh.</p>
+            </div>
+            <select id="ddepFilterStatus" class="zona-input" style="width:auto;min-width:170px">
+              <option value="Pending">Menunggu Verifikasi</option>
+              <option value="Approved">Disetujui</option>
+              <option value="Rejected">Ditolak</option>
+              <option value="">Semua Status</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Waktu Setor</th>
+                  <th class="py-4 px-5">Supir</th>
+                  <th class="py-4 px-5">Tanggal Dicakup</th>
+                  <th class="py-4 px-5 text-right">Nilai Setoran</th>
+                  <th class="py-4 px-5 text-center">Status</th>
+                  <th class="py-4 px-5 text-right w-56">Respons</th>
+                </tr>
+              </thead>
+              <tbody id="ddepTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+          <div id="ddepPager" class="mt-4"></div>
+        </div>
+      </section>
+
+      <div id="modalDdepDetails" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
+          <div class="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-700 dark:border-slate-600 rounded-t-xl">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Rincian Setoran Supir</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="ddepDetailSub">Order tunai yang utangnya dilunasi setoran ini.</p>
+            </div>
+            <button id="btnCloseDdepDetails" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 text-2xl">&times;</button>
+          </div>
+          <div class="p-0 overflow-y-auto flex-1">
+            <table class="w-full text-sm text-left">
+              <thead class="text-slate-500 dark:text-slate-400 sticky top-0 bg-slate-50 dark:bg-slate-700">
+                <tr>
+                  <th class="px-4 py-3">Waktu</th>
+                  <th class="px-4 py-3">Rute</th>
+                  <th class="px-4 py-3">CSO</th>
+                  <th class="px-4 py-3 text-right">Tarif</th>
+                </tr>
+              </thead>
+              <tbody id="ddepDetailBody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+            </table>
+          </div>
+          <div class="p-4 border-t dark:border-slate-600 flex justify-between items-center">
+            <div>
+              <span class="text-sm text-slate-500 dark:text-slate-400">Nilai setoran (komisi)</span>
+              <p class="text-[11px] text-slate-400">Tarif di atas adalah ongkos penumpang, bukan yang disetor.</p>
+            </div>
+            <span id="ddepDetailTotal" class="font-bold text-lg text-slate-800 dark:text-slate-100">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sengketa metode pembayaran: supir menyanggah menerima uang tunai.
+           Mengabulkannya MEMINDAHKAN kewajiban uang dari supir ke CSO, jadi
+           konsekuensinya harus terbaca jelas sebelum admin menekan tombol. -->
+      <section id="view-method-disputes" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Sengketa Pembayaran</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-3xl">
+                Supir menyanggah bahwa ia menerima uang tunai atas sebuah order. Sistem tidak bisa tahu uang fisik berpindah ke siapa —
+                keputusannya ada di tangan Anda, setelah bertanya ke kedua pihak.
+              </p>
+            </div>
+            <select id="mdFilterStatus" class="zona-input" style="width:auto;min-width:170px">
+              <option value="Open">Belum Diputus</option>
+              <option value="Upheld">Dikabulkan</option>
+              <option value="Rejected">Ditolak</option>
+              <option value="">Semua</option>
+            </select>
+          </div>
+
+          <div class="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 p-4 mb-5">
+            <p class="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              <b>Bila dikabulkan:</b> order dikoreksi menjadi <b>Tunai ke Kasir</b>. Utang komisi lepas dari supir dan berubah menjadi hak pemasukannya,
+              sementara <b>uangnya menjadi kewajiban setoran CSO</b> dan langsung muncul di menu Setoran CSO. Kedua pihak diberi tahu lewat WhatsApp.
+              Keputusan ini <b>tidak bisa dibatalkan</b> dari panel.
+            </p>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Waktu Sanggah</th>
+                  <th class="py-4 px-5">Order</th>
+                  <th class="py-4 px-5">Supir &rarr; CSO</th>
+                  <th class="py-4 px-5">Alasan Supir</th>
+                  <th class="py-4 px-5 text-right">Tarif</th>
+                  <th class="py-4 px-5 text-center">Status</th>
+                  <th class="py-4 px-5 text-right w-52">Keputusan</th>
+                </tr>
+              </thead>
+              <tbody id="mdTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+          <div id="mdPager" class="mt-4"></div>
+        </div>
+      </section>
+
+      <!-- Sinyal kecurangan: tiga daftar yang menuntut PERTANYAAN, bukan vonis. -->
+      <section id="view-fraud-signals" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Sinyal Kecurangan</h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-2xl">
+                Tiga pola yang <b>layak ditanyakan</b>, bukan bukti pelanggaran. Setiap angka disajikan bersama pembandingnya —
+                putuskan setelah bertanya ke orangnya, jangan menghukum berdasarkan tabel ini saja.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 mb-1">Dari</label>
+                <input type="date" id="fsFrom" class="zona-input" style="width:auto">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400 mb-1">Sampai</label>
+                <input type="date" id="fsTo" class="zona-input" style="width:auto">
+              </div>
+              <button id="fsApply" class="bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow">Terapkan</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- A. Override antrian -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+            <h4 class="font-bold text-gray-800 dark:text-white">Melewati Giliran Antrian</h4>
+            <span class="text-xs text-gray-500 dark:text-gray-400">Rata-rata semua CSO: <b id="fsAvgRate">-</b></span>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-3xl">
+            Melewati giliran itu <b>sah</b> — mobil mogok, penumpang menolak, supir tak muncul. Yang perlu ditanyakan adalah
+            CSO yang jauh menyimpang dari rata-rata rekannya, atau yang selalu mendahulukan supir yang sama dengan mengorbankan orang yang sama.
+          </p>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-3 px-5">CSO</th>
+                  <th class="py-3 px-5 text-right">Total Order</th>
+                  <th class="py-3 px-5 text-right">Override</th>
+                  <th class="py-3 px-5 text-right">Rasio</th>
+                  <th class="py-3 px-5">Pasangan Paling Sering</th>
+                </tr>
+              </thead>
+              <tbody id="fsOverrideBody" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-amber-600 dark:text-amber-400 mt-3">
+            Catatan: kolom ini baru terisi untuk order yang dibuat sejak fitur pencatatan override aktif. Order lama tampil sebagai 0.
+          </p>
+        </div>
+
+        <!-- B. Nomor penumpang berulang -->
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+            <h4 class="font-bold text-gray-800 dark:text-white">Nomor Penumpang Berulang</h4>
+            <label class="text-xs text-gray-500 dark:text-gray-400">Minimal dipakai
+              <input type="number" id="fsPhoneMin" min="2" max="100" value="3" class="zona-input inline-block ml-1" style="width:70px"> kali
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-3xl">
+            Nomor penumpang adalah satu-satunya jalur verifikasi independen: dari sanalah penumpang menerima struk berisi tarif yang benar-benar tercatat.
+            Berulang belum tentu curang — pelanggan tetap itu nyata. Yang mencolok adalah nomor yang <b>selalu dipakai CSO yang sama</b>.
+          </p>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-3 px-5">Nomor</th>
+                  <th class="py-3 px-5 text-right">Dipakai</th>
+                  <th class="py-3 px-5 text-right">Jumlah CSO</th>
+                  <th class="py-3 px-5">CSO Pemakai</th>
+                </tr>
+              </thead>
+              <tbody id="fsPhoneBody" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- C. Keluar area tanpa order -->
+        <div class="glass-card rounded-2xl p-5">
+          <h4 class="font-bold text-gray-800 dark:text-white mb-1">Keluar Area Tanpa Order Tercatat</h4>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-4 max-w-3xl">
+            Supir yang meninggalkan area bandara antara 15 menit &ndash; 4 jam lalu kembali, tanpa satu pun order miliknya yang menutupi rentang waktu itu.
+            Trip yang <b>jujur dilaporkan</b> (termasuk lewat tombol &ldquo;Dapat Penumpang Sendiri&rdquo;) otomatis tidak muncul di sini.
+            Tetap saja ini sinyal, bukan bukti — supir bisa saja sedang mengantar keluarganya sendiri.
+          </p>
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-3 px-5">Supir</th>
+                  <th class="py-3 px-5 text-right">Jumlah Kepergian</th>
+                  <th class="py-3 px-5 text-right">Total Durasi</th>
+                  <th class="py-3 px-5">Terakhir Kembali</th>
+                  <th class="py-3 px-5 text-right">Aktivitas</th>
+                </tr>
+              </thead>
+              <tbody id="fsTripBody" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <div id="modalDepDetails" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
           <div class="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-700 dark:border-slate-600 rounded-t-xl">
@@ -1577,6 +1816,14 @@
                       <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">%</span>
                     </div>
                     <p class="sthint">Potongan dari setiap transaksi supir.</p>
+                  </div>
+                  <div>
+                    <label for="maxDriverDebt" class="stlabel">Batas Utang Supir (Rp)</label>
+                    <input type="number" id="maxDriverDebt" min="0" step="1000" placeholder="0" class="stinput">
+                    <p class="sthint">
+                      Supir yang utang komisinya melewati angka ini tidak bisa masuk antrian sampai menyetor tunai.
+                      <b>Isi 0 untuk mematikan pembatasan.</b>
+                    </p>
                   </div>
                 </div>
 

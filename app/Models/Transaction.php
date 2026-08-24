@@ -32,7 +32,64 @@ class Transaction extends Model
         // 2026_08_24_000002_add_deposit_columns_to_transactions_table.
         'cso_deposit_id',
         'deposit_status',
+        // Setoran tunai SUPIR yang melunasi utang komisi transaksi ini.
+        // Berbagi `payout_status` dengan pencairan — lihat migrasi
+        // 2026_08_24_000005 untuk alasannya.
+        'driver_deposit_id',
+        // Sengketa metode pembayaran — lihat migrasi 2026_08_24_000006.
+        'method_dispute_status',
+        'method_dispute_note',
+        'method_disputed_at',
+        'method_admin_note',
+        'method_resolved_at',
+        'method_resolved_by',
+        'original_method',
     ];
+
+    protected $casts = [
+        'method_disputed_at' => 'datetime',
+        'method_resolved_at' => 'datetime',
+    ];
+
+    /**
+     * Transaksi yang metodenya BOLEH disanggah supir.
+     *
+     * Tiga syarat, masing-masing punya alasan:
+     *  - method 'CashDriver' — hanya arah ini yang masuk akal disanggah:
+     *    sistem mengklaim supir memegang uangnya, dan supir bilang tidak.
+     *  - payout_status 'Unpaid' — belum diselesaikan lewat pencairan maupun
+     *    setoran. Mengoreksi metode transaksi yang bukunya sudah tutup akan
+     *    mengubah angka yang sudah dibayarkan; itu koreksi manual admin,
+     *    bukan sesuatu yang boleh dipicu dari aplikasi supir.
+     *  - belum pernah disengketakan — satu suara per transaksi.
+     */
+    public function scopeBisaDisanggah($query)
+    {
+        return $query->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
+            ->whereNull('method_dispute_status');
+    }
+
+    /**
+     * Utang komisi supir yang BELUM dilunasi — baik lewat pencairan maupun
+     * setoran tunai.
+     *
+     * Satu-satunya definisi "utang supir belum lunas", dipakai rekap per
+     * tanggal maupun saat setoran dibuat, supaya angka yang dilihat supir dan
+     * angka yang dikunci server tidak mungkin berbeda aturan. Bandingkan
+     * [scopeCashCsoBelumSetor] yang melakukan hal sama untuk sisi CSO.
+     *
+     * Hanya booking 'Completed' yang dihitung: trip yang belum selesai belum
+     * melahirkan kewajiban apa pun.
+     */
+    public function scopeCashDriverBelumLunas($query, int $driverId)
+    {
+        return $query->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid')
+            ->whereHas('booking', function ($b) use ($driverId) {
+                $b->where('driver_id', $driverId)->where('status', 'Completed');
+            });
+    }
 
     /**
      * Setiap transaksi baru otomatis dapat token acak untuk URL struk.

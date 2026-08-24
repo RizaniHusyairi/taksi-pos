@@ -25,7 +25,15 @@ class Booking extends Model
         'price',
         'status',
         'manual_destination',
-        'passenger_phone'
+        'passenger_phone',
+        // Order ini diberikan ke supir yang BUKAN giliran berikutnya, dan
+        // siapa yang dilewati. Lihat migrasi 2026_08_24_000004.
+        'queue_override',
+        'skipped_driver_id',
+    ];
+
+    protected $casts = [
+        'queue_override' => 'boolean',
     ];
 
     /**

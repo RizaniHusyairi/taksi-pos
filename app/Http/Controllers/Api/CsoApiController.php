@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\CsoDeposit;
+use App\Services\ImageWatermark;
 use App\Models\DriverProfile;
 use App\Models\DriverQueue; 
 use App\Models\Setting; 
@@ -282,93 +283,6 @@ class CsoApiController extends Controller
         ]);
     }
 
-    /**
-     * Menyimpan booking baru.
-     */
-    public function storeBooking(Request $request)
-    {
-        $validated = $request->validate([
-            'driver_id' => 'required|exists:users,id',
-            'zone_id'   => 'required|exists:zones,id',
-        ]);
-
-
-
-        $zone = Zone::findOrFail($validated['zone_id']);
-        $cso = Auth::user();
-
-        // Mulai transaksi database untuk konsistensi
-        $booking = DB::transaction(function () use ($cso, $validated, $zone) {
-            // 1. Buat booking
-            $newBooking = Booking::create([
-                'cso_id'    => $cso->id,
-                'driver_id' => $validated['driver_id'],
-                'zone_id'   => $zone->id,
-                'price'     => $zone->price,
-                'status'    => 'Assigned',
-            ]);
-
-            // 2. HAPUS DARI ANTRIAN (Kick from queue)
-            DriverQueue::where('user_id', $validated['driver_id'])->delete();
-
-            // 3. LOG ACTIVITY (Supir)
-            $this->logDriverActivity($validated['driver_id'], 'ORDER_RECEIVED', 'Dapat Order dari CSO: ' . $cso->name . ' -> ' . $zone->name);
-            
-            // 4. LOG ACTIVITY (Keluar Antrian karena Order)
-            $this->logDriverActivity($validated['driver_id'], 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Dapat Order)');
-
-            return $newBooking;
-        });
-
-        return response()->json($booking, 201); // 201 Created
-    }
-
-    /**
-     * Mencatat pembayaran untuk sebuah booking.
-     */
-    public function recordPayment(Request $request)
-    {
-        $validated = $request->validate([
-            'booking_id' => 'required|exists:bookings,id',
-            'method'     => 'required|in:QRIS,CashCSO,CashDriver',
-            // Validasi: payment_proof wajib ada JIKA methodnya QRIS
-            'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120', // Max 5MB
-        ], [
-            'payment_proof.required_if' => 'Mohon upload foto bukti transfer QRIS.',
-            'payment_proof.image' => 'File bukti harus berupa gambar.',
-        ]);
-
-        $booking = Booking::findOrFail($validated['booking_id']);
-        
-        DB::transaction(function () use ($booking, $validated, $request) {
-            
-            $proofPath = null;
-
-            // Proses Upload Gambar jika ada
-            if ($request->hasFile('payment_proof')) {
-                // Simpan di folder 'public/payment_proofs'
-                $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
-            }
-
-            // 1. Buat record transaksi
-            Transaction::create([
-                'booking_id'    => $booking->id,
-                'method'        => $validated['method'],
-                'amount'        => $booking->price,
-                'payment_proof' => $proofPath, // Simpan path gambar ke database
-            ]);
-
-            // 2. Update status booking (Logika lama tetap jalan)
-            // Jika CashDriver statusnya beda, jika QRIS/CashCSO jadi 'Paid' (atau logic existing kamu)
-            $newStatus = ($validated['method'] === 'CashDriver') ? 'CashDriver' : 'Paid';
-            
-            // Khusus QRIS, status 'Paid' sudah valid karena bukti sudah diupload CSO
-            $booking->update(['status' => $newStatus]);
-        });
-        
-        return response()->json(['message' => 'Payment recorded successfully'], 201);
-    }
-
     public function processOrder(Request $request)
     {
         
@@ -420,8 +334,13 @@ class CsoApiController extends Controller
                 'driver_id' => $validated['driver_id'],
                 'zone_id'   => $zone->id,
                 'price'     => $zone->price,
-                'status'    => $status, 
-                'passenger_phone' => $validated['passenger_phone']
+                'status'    => $status,
+                'passenger_phone' => $validated['passenger_phone'],
+                // Direkam sebagai DATA, bukan hanya kalimat di log aktivitas —
+                // inilah yang membuat laporan rasio override per CSO bisa
+                // dipercaya. Lihat migrasi 2026_08_24_000004.
+                'queue_override'    => $isOverride,
+                'skipped_driver_id' => $isOverride ? $topDriverId : null,
             ]);
 
             // C. Simpan Transaksi (Jika ada pembayaran ke kantor/QRIS)
@@ -505,11 +424,17 @@ class CsoApiController extends Controller
             $driverPhone = $driver->phone_number ?? $driver->username;
             
             if ($waToken && $driverPhone) {
+                // SENGAJA TANPA link struk. `receipt_token` adalah satu-satunya
+                // kunci form penilaian penumpang (PublicReceiptController::rate,
+                // tanpa login). Selama link itu ikut dikirim ke supir, supir
+                // bisa membuka struknya sendiri dan mengirim bintang 5 sebelum
+                // penumpang sempat — `firstOrCreate` lalu mengunci nilai itu
+                // sehingga penilaian penumpang asli ditolak. Riwayat trip di
+                // aplikasi supir sudah memuat semua detail yang ia butuhkan.
                 $msgDriver = "*ORDER BARU MASUK!* 🚖\n\n"
                     . "Tujuan: *$zoneName*\n"
                     . "Penumpang: " . $validated['passenger_phone'] . "\n"
                     . "Tarif: Rp $priceRp\n\n"
-                    . "Struk Pembayaran:\n$receiptUrl\n\n"
                     . "Harap segera menuju titik jemput.";
 
                 \App\Jobs\SendWhatsAppMessage::dispatch($driverPhone, $msgDriver, $waToken);
@@ -517,8 +442,8 @@ class CsoApiController extends Controller
 
             // --- C. KIRIM EMAIL KE DRIVER ---
             if ($driver->email) {
-                // Pastikan Anda sudah membuat Mail Class: php artisan make:mail NewOrderForDriver
-                Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result, $receiptUrl));
+                // Tanpa link struk — alasan sama dengan pesan WA di atas.
+                Mail::to($driver->email)->send(new \App\Mail\NewOrderForDriver($result));
             }
 
             // --- D. NOTIFIKASI FCM KE DRIVER APP (async + retry via queue) ---
@@ -647,7 +572,14 @@ class CsoApiController extends Controller
 
         DB::transaction(function () use ($booking, $newDriverId, $oldDriverId, $newDriver, $cso, $isOverride, $topDriverId, $topDriverName) {
             // Alihkan order ke supir baru (status tetap 'Assigned').
-            $booking->update(['driver_id' => $newDriverId]);
+            // Jalur kedua yang bisa melewati giliran — ditandai sama seperti
+            // processOrder() supaya "Ganti Supir" tidak jadi pintu belakang
+            // yang luput dari laporan override.
+            $booking->update([
+                'driver_id'         => $newDriverId,
+                'queue_override'    => $isOverride,
+                'skipped_driver_id' => $isOverride ? $topDriverId : null,
+            ]);
 
             // Keluarkan supir baru dari antrian karena sekarang mendapat order.
             DriverQueue::where('user_id', $newDriverId)->delete();
@@ -783,7 +715,7 @@ class CsoApiController extends Controller
         $dates = array_values(array_unique($validated['dates']));
 
         // Foto disimpan SEBELUM transaksi DB supaya kegagalan upload tidak
-        // menyisakan setoran setengah jadi (pola sama dengan recordPayment).
+        // menyisakan setoran setengah jadi (pola sama dengan processOrder).
         $proofPath = $request->hasFile('proof_image')
             ? $request->file('proof_image')->store('deposit_proofs', 'public')
             : null;
@@ -826,12 +758,32 @@ class CsoApiController extends Controller
         });
 
         if (isset($hasil['error'])) {
+            // Uangnya tidak jadi terkunci -> fotonya pun tidak ada gunanya.
+            if ($proofPath) {
+                Storage::disk('public')->delete($proofPath);
+            }
             return response()->json(['message' => $hasil['error']], 422);
+        }
+
+        $deposit = $hasil['deposit'];
+
+        // Stempel dibakar SETELAH setoran terbentuk: nominal & nomor setoran
+        // baru pasti di titik ini. Hasilnya, satu foto tidak bisa dipakai ulang
+        // untuk setoran lain — lihat App\Services\ImageWatermark.
+        if ($proofPath) {
+            app(ImageWatermark::class)->stamp($proofPath, [
+                'BUKTI SETORAN TUNAI #' . $deposit->id,
+                'CSO      : ' . $cso->name,
+                'Nominal  : Rp ' . number_format((float) $deposit->amount, 0, ',', '.'),
+                'Tanggal  : ' . implode(', ', $deposit->period_dates ?? []),
+                'Transaksi: ' . $deposit->transactions_count . ' order tunai',
+                'Diunggah : ' . now()->format('d/m/Y H:i') . ' WIB',
+            ]);
         }
 
         return response()->json([
             'message' => 'Setoran diajukan, menunggu verifikasi admin.',
-            'data'    => $hasil['deposit'],
+            'data'    => $deposit,
         ], 201);
     }
 
