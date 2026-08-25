@@ -30,7 +30,16 @@
                 </tr>
                 <tr>
                     <td class="label">Penumpang:</td>
-                    <td><a href="tel:{{ $booking->passenger_phone }}">{{ $booking->passenger_phone }}</a></td>
+                    {{-- Nomor penumpang opsional. Tanpa penjagaan ini, order
+                         tanpa nomor menghasilkan tautan `tel:` kosong yang
+                         tetap bisa diketuk dan membuka dialer kosong. --}}
+                    <td>
+                        @if($booking->passenger_phone)
+                            <a href="tel:{{ $booking->passenger_phone }}">{{ $booking->passenger_phone }}</a>
+                        @else
+                            <span style="color:#9ca3af;">Tidak dicantumkan</span>
+                        @endif
+                    </td>
                 </tr>
                 <tr>
                     <td class="label">Tarif:</td>

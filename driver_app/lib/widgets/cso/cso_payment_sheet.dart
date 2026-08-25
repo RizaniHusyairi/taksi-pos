@@ -41,10 +41,35 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
     super.dispose();
   }
 
+  /// Nomor penumpang bersifat OPSIONAL.
+  ///
+  /// Mengembalikan:
+  ///   - `''`     bila sengaja dikosongkan — sah, order tetap diproses;
+  ///   - digitnya bila terisi dan panjangnya 10–15;
+  ///   - `null`   bila terisi tapi panjangnya salah.
+  ///
+  /// Bentuk lama mengembalikan `null` untuk "kosong" maupun "salah ketik",
+  /// sehingga pemanggil tidak bisa membedakan keduanya.
   String? _validPhone() {
     final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 10) return null;
+    if (digits.isEmpty) return '';
+    // Batas atas ikut ditegakkan di sini. Sebelumnya kolomnya tanpa batas
+    // panjang, jadi 16 digit lolos di aplikasi lalu ditolak server dengan
+    // galat yang tidak menjelaskan apa-apa.
+    if (digits.length < 10 || digits.length > 15) return null;
     return digits;
+  }
+
+  /// Tampilkan keluhan hanya bila nomornya DIISI tapi tidak valid.
+  bool _phoneBermasalah() {
+    if (_validPhone() != null) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No. WhatsApp penumpang harus 10–15 digit, '
+            'atau kosongkan saja.'),
+      ),
+    );
+    return true;
   }
 
   Future<void> _pickProof() async {
@@ -86,15 +111,9 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
   }
 
   void _verify(CsoPaymentMethod method) {
-    final phone = _validPhone();
-    if (phone == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No. WhatsApp penumpang wajib diisi (min. 10 digit).'),
-        ),
-      );
-      return;
-    }
+    if (_phoneBermasalah()) return;
+    final phone = _validPhone()!;   // '' bila sengaja dikosongkan
+
     if (method == CsoPaymentMethod.qris && _proofPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Wajib unggah foto bukti transfer QRIS.')),
@@ -110,14 +129,8 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
   }
 
   Future<void> _confirmCash(CsoPaymentMethod method) async {
-    if (_validPhone() == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No. WhatsApp penumpang wajib diisi (min. 10 digit).'),
-        ),
-      );
-      return;
-    }
+    if (_phoneBermasalah()) return;
+
     final label = method == CsoPaymentMethod.cashCso
         ? 'TUNAI KE KASIR'
         : 'TUNAI KE SUPIR';
@@ -213,7 +226,7 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
             ),
             const SizedBox(height: 18),
             const Text(
-              'No. WhatsApp Penumpang',
+              'No. WhatsApp Penumpang (opsional)',
               style: TextStyle(
                 color: AppColors.inkSoft,
                 fontSize: 13,
@@ -239,6 +252,19 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
                 ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Menyebut apa yang HILANG saat dikosongkan, bukan sekadar
+            // "opsional": struk digital dikirim lewat WhatsApp, dan tautan di
+            // dalamnya adalah satu-satunya jalan penumpang memberi penilaian.
+            const Text(
+              'Boleh dikosongkan. Penumpang tidak akan menerima struk digital '
+              'dan tidak bisa memberi penilaian.',
+              style: TextStyle(
+                color: AppColors.inkFaint,
+                fontSize: 11.5,
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 18),

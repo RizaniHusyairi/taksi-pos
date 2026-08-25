@@ -297,10 +297,25 @@ class CsoApiController extends Controller
             'method'        => 'required|in:QRIS,CashCSO,CashDriver',
             // Bukti foto wajib jika QRIS
             'payment_proof' => 'required_if:method,QRIS|image|mimes:jpeg,png,jpg|max:5120',
-            'passenger_phone' => 'required|string|min:10|max:15',
+            // OPSIONAL. Penumpang yang tidak punya WhatsApp atau menolak
+            // memberi nomor tidak boleh membuat order gagal diproses — uangnya
+            // sudah diterima dan supirnya sudah menunggu.
+            //
+            // Kolom kosong tiba sebagai null (middleware global
+            // ConvertEmptyStringsToNull), sehingga `nullable` melewati min/max.
+            // Bila DIISI, rentangnya tetap ditegakkan penuh.
+            'passenger_phone' => 'nullable|string|min:10|max:15',
         ], [
             'payment_proof.required_if' => 'Wajib upload foto bukti transfer untuk QRIS.',
+            'passenger_phone.min'       => 'Nomor WhatsApp penumpang harus 10–15 digit.',
+            'passenger_phone.max'       => 'Nomor WhatsApp penumpang harus 10–15 digit.',
         ]);
+
+        // `?? null` sekali di sini, bukan di tiap pemakaian: dengan aturan
+        // `nullable`, kuncinya bisa TIDAK ADA sama sekali di array bila klien
+        // memang tidak mengirim field-nya — akses langsung akan memicu
+        // "undefined array key".
+        $passengerPhone = $validated['passenger_phone'] ?? null;
 
         // Cek apakah driver sedang dalam perjalanan (Punya booking belum selesai)
         $hasActiveBooking = Booking::where('driver_id', $validated['driver_id'])
@@ -326,7 +341,7 @@ class CsoApiController extends Controller
             : null;
 
         // 2. Mulai Transaksi Database (Atomic)
-        $result = DB::transaction(function () use ($validated, $zone, $cso, $request, $isOverride, $topDriverId, $topDriverName) {
+        $result = DB::transaction(function () use ($validated, $zone, $cso, $request, $isOverride, $topDriverId, $topDriverName, $passengerPhone) {
             
             
             $status = 'Assigned';
@@ -338,7 +353,7 @@ class CsoApiController extends Controller
                 'zone_id'   => $zone->id,
                 'price'     => $zone->price,
                 'status'    => $status,
-                'passenger_phone' => $validated['passenger_phone'],
+                'passenger_phone' => $passengerPhone,
                 // Direkam sebagai DATA, bukan hanya kalimat di log aktivitas —
                 // inilah yang membuat laporan rasio override per CSO bisa
                 // dipercaya. Lihat migrasi 2026_08_24_000004.
@@ -410,7 +425,7 @@ class CsoApiController extends Controller
                 : "";
             
             // --- A. KIRIM WA KE PENUMPANG ---
-            if ($waToken && $validated['passenger_phone']) {
+            if ($waToken && $passengerPhone) {
                 $msgPassenger = "*STRUK PEMBAYARAN TAKSI*\n\n"
                     . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n\n"
                     . "📍 Tujuan: $zoneName\n"
@@ -419,7 +434,7 @@ class CsoApiController extends Controller
                     . "Lihat struk digital Anda di sini:\n"
                     . "$receiptUrl\n\n"
                     . "Selamat menikmati perjalanan!";
-            \App\Jobs\SendWhatsAppMessage::dispatch($validated['passenger_phone'], $msgPassenger, $waToken);
+            \App\Jobs\SendWhatsAppMessage::dispatch($passengerPhone, $msgPassenger, $waToken);
             }
 
             // --- B. KIRIM WA KE DRIVER ---
@@ -434,9 +449,12 @@ class CsoApiController extends Controller
                 // penumpang sempat — `firstOrCreate` lalu mengunci nilai itu
                 // sehingga penilaian penumpang asli ditolak. Riwayat trip di
                 // aplikasi supir sudah memuat semua detail yang ia butuhkan.
+                // Baris nomor hanya disertakan bila ada. Tanpa penjagaan ini
+                // supir menerima "Penumpang:" yang menggantung tanpa isi, dan
+                // pesan seperti itu terbaca seperti sistem yang rusak.
                 $msgDriver = "*ORDER BARU MASUK!* 🚖\n\n"
                     . "Tujuan: *$zoneName*\n"
-                    . "Penumpang: " . $validated['passenger_phone'] . "\n"
+                    . ($passengerPhone ? "Penumpang: {$passengerPhone}\n" : '')
                     . "Tarif: Rp $priceRp\n\n"
                     . "Harap segera menuju titik jemput.";
 
