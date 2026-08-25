@@ -33,17 +33,23 @@ class RoleMiddleware
 
         // 4. Jika tidak sesuai, alihkan pengguna ke dasbornya masing-masing
         //    Ini lebih baik daripada hanya menampilkan error "Forbidden".
-        switch ($user->role) {
-            case 'admin':
-                return redirect('/admin');
-            case 'cso':
-                return redirect('/cso');
-            case 'driver':
-                return redirect('/driver');
-            default:
-                // Jika rolenya tidak terdefinisi, logout saja untuk keamanan
-                Auth::logout();
-                return redirect('/login');
+        // Middleware ini juga dipasang di rute API (guard sanctum). Di sana
+        // tidak ada sesi web untuk ditutup dan mengarahkan klien API ke sebuah
+        // halaman HTML tidak ada gunanya — jawab 403 saja.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Akses ditolak: peran Anda tidak berhak atas sumber daya ini.',
+            ], 403);
         }
+
+        // Admin satu-satunya peran yang punya halaman web. CSO/driver (dan role
+        // tak terdefinisi) tidak boleh menyisakan sesi menggantung: tutup saja.
+        if ($user->role === 'admin') {
+            return redirect('/admin');
+        }
+
+        // Halaman login ada di '/' (route name: login), bukan '/login'.
+        Auth::logout();
+        return redirect()->route('login');
     }
 }

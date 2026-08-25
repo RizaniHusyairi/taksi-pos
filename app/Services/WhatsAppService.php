@@ -147,4 +147,33 @@ class WhatsAppService
             'body'         => $json,
         ];
     }
+
+    /**
+     * Kirim pesan ke nomor WhatsApp admin, lewat antrean.
+     *
+     * Pola "baca wa_token + admin_wa_number, jaga, dispatch, tangkap galat"
+     * sudah tersebar di beberapa controller; dipusatkan di sini supaya jalur
+     * setoran tidak menambah salinan berikutnya.
+     *
+     * Diam-diam dilewati bila gateway atau nomor admin belum dikonfigurasi —
+     * itu keadaan yang wajar, bukan galat. Dan seperti notifikasi lainnya,
+     * kegagalannya TIDAK BOLEH menggagalkan aksi utama yang memanggilnya.
+     */
+    public static function toAdmin(string $message): void
+    {
+        try {
+            $token   = Setting::getValue('wa_token');
+            $adminWa = Setting::getValue('admin_wa_number');
+
+            if (!$token || !$adminWa) {
+                return;
+            }
+
+            \App\Jobs\SendWhatsAppMessage::dispatch($adminWa, $message, $token);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'Gagal mengantre WhatsApp ke admin: ' . $e->getMessage()
+            );
+        }
+    }
 }

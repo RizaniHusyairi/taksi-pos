@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\Withdrawals;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\RevenueReport;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 
 class ExportController extends Controller
 {
@@ -105,6 +107,46 @@ class ExportController extends Controller
         return response($html, 200, [
             'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="Laporan-Transaksi-' . now()->format('Ymd_His') . '.xls"',
+        ]);
+    }
+
+    // =========================================================================
+    // === Export Laporan Pendapatan (PDF & Excel) ============================
+    // =========================================================================
+
+    /**
+     * Angkanya disusun App\Services\RevenueReport — service yang sama dipakai
+     * endpoint JSON halaman Laporan Pendapatan. Menghitung ulang di sini akan
+     * membuat berkas unduhan bisa berbeda dari yang dilihat di layar.
+     */
+    private function revenueData(Request $request): array
+    {
+        $from = $request->query('date_from');
+        $to   = $request->query('date_to');
+
+        $start = $from ? Carbon::createFromFormat('Y-m-d', $from)->startOfDay() : now()->startOfMonth();
+        $end   = $to ? Carbon::createFromFormat('Y-m-d', $to)->endOfDay() : now()->endOfDay();
+
+        return [
+            'report'      => app(RevenueReport::class)->build($start, $end),
+            'generatedAt' => now()->format('d M Y, H:i'),
+        ];
+    }
+
+    public function revenuePdf(Request $request)
+    {
+        return Pdf::loadView('pdf.revenue', $this->revenueData($request))
+            ->setPaper('a4', 'portrait')
+            ->stream('Laporan-Pendapatan-' . now()->format('Ymd_His') . '.pdf');
+    }
+
+    public function revenueExcel(Request $request)
+    {
+        $html = view('excel.revenue', $this->revenueData($request))->render();
+
+        return response($html, 200, [
+            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="Laporan-Pendapatan-' . now()->format('Ymd_His') . '.xls"',
         ]);
     }
 }

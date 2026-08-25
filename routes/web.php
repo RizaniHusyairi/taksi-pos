@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\CsoController;
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PageController;
@@ -27,12 +26,9 @@ Route::post('/receipt/{uuid}/rate', [PublicReceiptController::class, 'rate'])
 
 // Halaman yang butuh login
 Route::middleware('auth')->group(function () {
-    // Halaman CSO (hanya bisa diakses oleh role 'cso')
-    Route::get('/cso', [PageController::class, 'showCso'])->middleware('role:cso');
-    
-    // Halaman Driver (hanya bisa diakses oleh role 'driver')
-    Route::get('/driver', [PageController::class, 'showDriver'])->middleware('role:driver');
-    
+    // Halaman CSO & Driver web sudah dihapus — keduanya hanya lewat aplikasi
+    // mobile. Login web untuk role 'cso' dan 'driver' ditolak di AuthController.
+
     // Halaman Admin (hanya bisa diakses oleh role 'admin')
     Route::get('/admin', [PageController::class, 'showAdmin'])->middleware('role:admin');
     
@@ -42,4 +38,8 @@ Route::middleware('auth')->group(function () {
     // Export Log Transaksi (Admin Only) — pakai filter dari query string
     Route::get('/admin/transactions/export/pdf', [ExportController::class, 'transactionsPdf'])->middleware('role:admin');
     Route::get('/admin/transactions/export/excel', [ExportController::class, 'transactionsExcel'])->middleware('role:admin');
+
+    // Export Laporan Pendapatan (Admin Only) — rentang tanggal dari query string
+    Route::get('/admin/reports/revenue/export/pdf', [ExportController::class, 'revenuePdf'])->middleware('role:admin');
+    Route::get('/admin/reports/revenue/export/excel', [ExportController::class, 'revenueExcel'])->middleware('role:admin');
 });

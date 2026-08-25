@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lapisan latar adaptive icon. Putih dipilih supaya badan pesawat yang
+         memang berlubang (transparan) pada lapisan foreground tetap tampak
+         putih, sama seperti logo aslinya. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

@@ -326,7 +326,7 @@ class FraudSignalsReportTest extends TestCase
     public function test_endpoint_hanya_untuk_admin(): void
     {
         Sanctum::actingAs($this->cso('a'));
-        $this->getJson('/api/admin/reports/fraud-signals')->assertStatus(302);
+        $this->getJson('/api/admin/reports/fraud-signals')->assertStatus(403);
     }
 
     public function test_laporan_kosong_tidak_error(): void

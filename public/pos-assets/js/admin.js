@@ -16,7 +16,7 @@ document.getElementById('formUploadProof')?.addEventListener('submit', async (e)
   const id = document.getElementById('wdIdToPay').value;
   const fileInput = document.getElementById('fileProof');
 
-  if (fileInput.files.length === 0) return alert('Wajib upload bukti transfer untuk menyetujui!');
+  if (fileInput.files.length === 0) return Utils.showToast('Wajib upload bukti transfer untuk menyetujui!', 'error');
 
   const formData = new FormData();
   formData.append('proof_image', fileInput.files[0]);
@@ -37,14 +37,14 @@ document.getElementById('formUploadProof')?.addEventListener('submit', async (e)
 
     if (!res.ok) throw new Error('Gagal memproses.');
 
-    alert('Berhasil Disetujui & Bukti Terkirim!');
+    Utils.showToast('Berhasil Disetujui & Bukti Terkirim!', 'success');
     document.getElementById('modalUploadProof').classList.add('hidden');
     document.getElementById('modalUploadProof').classList.remove('flex');
 
     window.location.reload();
 
   } catch (err) {
-    alert('Terjadi kesalahan saat upload.');
+    Utils.showToast('Terjadi kesalahan saat upload.', 'error');
     console.error(err);
   } finally {
     submitBtn.textContent = 'Setujui & Kirim';
@@ -84,7 +84,7 @@ async function fetchApi(endpoint, options = {}) {
     return response.json();
   } catch (error) {
     console.error(`API Error on ${endpoint}:`, error);
-    alert(`Gagal berkomunikasi dengan server: ${error.message}`);
+    Utils.showToast(`Gagal berkomunikasi dengan server: ${error.message}`, 'error');
     throw error; // Lemparkan lagi agar bisa ditangkap oleh pemanggil
   }
 }
@@ -422,7 +422,7 @@ export class AdminApp {
         payload.password = password;
       } else if (!id) {
         // Jika ini adalah user baru dan password kosong
-        alert('Password wajib diisi untuk pengguna baru.');
+        Utils.showToast('Password wajib diisi untuk pengguna baru.', 'error');
         return;
       }
 
@@ -442,7 +442,7 @@ export class AdminApp {
           });
         }
 
-        alert('Data pengguna berhasil disimpan!');
+        Utils.showToast('Data pengguna berhasil disimpan!', 'success');
 
         this.closeUserForm();
 
@@ -452,7 +452,7 @@ export class AdminApp {
 
       } catch (error) {
         console.error("Gagal menyimpan data pengguna:", error);
-        alert('Gagal menyimpan data pengguna. Periksa kembali isian Anda.');
+        Utils.showToast('Gagal menyimpan data pengguna. Periksa kembali isian Anda.', 'error');
       }
     });
 
@@ -469,7 +469,13 @@ export class AdminApp {
     document.getElementById('btnTxExportExcel')?.addEventListener('click', () => this._exportTx('excel'));
 
     // Revenue report range
-    document.getElementById('formReportRevenue')?.addEventListener('submit', (e) => { e.preventDefault(); this.renderRevReport(); });
+    document.getElementById('repRevApply')?.addEventListener('click', () => this.renderRevReport());
+    document.querySelectorAll('.rev-preset').forEach((b) => {
+      b.addEventListener('click', () => {
+        this._applyRevPreset(b.dataset.revPreset);
+        this.renderRevReport();
+      });
+    });
     document.getElementById('driverRankBy')?.addEventListener('change', () => this.renderDriverReport());
     ['csoPerfMonth', 'csoRankBy'].forEach(id =>
       document.getElementById(id)?.addEventListener('change', () => this.renderCsoReport()));
@@ -519,6 +525,8 @@ export class AdminApp {
     });
 
     // Filter laporan sinyal kecurangan
+    document.getElementById('btnFcmTest')?.addEventListener('click', () => this.testFcm());
+    document.getElementById('btnFcmRefresh')?.addEventListener('click', () => this.renderFcm());
     document.getElementById('fsApply')?.addEventListener('click', () => this.renderFraudSignals());
     document.getElementById('fsPhoneMin')?.addEventListener('change', () => this.renderFraudSignals());
 
@@ -556,6 +564,7 @@ export class AdminApp {
     this.renderSettings();
     this.renderApiClients();
     this.renderQueue();
+    this.startNotifications();
   }
 
   route() {
@@ -578,6 +587,7 @@ export class AdminApp {
       this._mapPoll = setInterval(() => this.renderDriverMap(), 15000);
     }
     if (hash === 'wa') this.renderWa();
+    if (hash === 'wa') this.renderFcm();
     // Sinyal kecurangan sengaja TIDAK ikut renderAll(): tiga query agregatnya
     // berat dan tidak ada gunanya dijalankan setiap kali admin membuka panel.
     // Dimuat saat tabnya benar-benar dibuka.
@@ -894,6 +904,143 @@ export class AdminApp {
    * alih-alih angka, dan di sini ditampilkan sebagai "—" supaya tidak ada
    * "naik 100%" palsu dari basis kosong.
    */
+  // ----- Notifikasi (ikon lonceng) -----
+
+  /**
+   * Mulai memantau notifikasi. Dipanggil sekali dari renderAll().
+   *
+   * Handle interval disimpan dan dibersihkan lebih dulu: interval yang menumpuk
+   * adalah cara termudah membuat panel admin melambat setelah dibuka berjam-jam.
+   */
+  startNotifications() {
+    if (!document.getElementById('btnNotif')) return;
+
+    clearInterval(this._notifPoll);
+    this.renderNotifications();
+    this._notifPoll = setInterval(() => this.renderNotifications(), 60000);
+
+    if (this._notifBound) return;
+    this._notifBound = true;
+
+    const btn = document.getElementById('btnNotif');
+    const panel = document.getElementById('notifPanel');
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const akanDibuka = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden', !akanDibuka);
+      btn.setAttribute('aria-expanded', String(akanDibuka));
+      // Membuka lonceng = membaca semuanya. Ini yang diharapkan orang dari
+      // sebuah ikon lonceng, dan menghindari lencana yang menempel selamanya.
+      if (akanDibuka) this.markNotificationsRead();
+    });
+
+    document.getElementById('btnNotifReadAll')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.markNotificationsRead();
+    });
+
+    // Panel jangan tertutup saat isinya diklik-klik, tapi tautan tetap jalan.
+    panel.addEventListener('click', (e) => {
+      if (!e.target.closest('a')) e.stopPropagation();
+    });
+
+    document.addEventListener('click', () => panel.classList.add('hidden'));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') panel.classList.add('hidden');
+    });
+  }
+
+  async renderNotifications() {
+    try {
+      const r = await fetchApi('/admin/notifications');
+      this._notifData = r;
+
+      const badge = document.getElementById('notifBadge');
+      const jml = Number(r.unread_count) || 0;
+      if (badge) {
+        badge.textContent = jml > 99 ? '99+' : jml;
+        badge.classList.toggle('hidden', jml === 0);
+      }
+
+      // Lencana sidebar sengketa akhirnya terisi tanpa harus membuka halamannya
+      // lebih dulu — sebelumnya hanya terisi setelah tab-nya dikunjungi.
+      const disputeBadge = document.getElementById('navDisputeBadge');
+      const jmlSengketa = Number(r.pending?.method_dispute) || 0;
+      if (disputeBadge) {
+        disputeBadge.textContent = jmlSengketa;
+        disputeBadge.classList.toggle('hidden', jmlSengketa === 0);
+      }
+
+      this._renderNotifPending(r.pending || {});
+      this._renderNotifList(r.items || []);
+    } catch (e) {
+      console.error('Gagal memuat notifikasi:', e);
+    }
+  }
+
+  async markNotificationsRead() {
+    const badge = document.getElementById('notifBadge');
+    if (badge && badge.classList.contains('hidden')) return; // sudah bersih
+
+    try {
+      await fetchApi('/admin/notifications/read', { method: 'POST' });
+      if (badge) { badge.textContent = ''; badge.classList.add('hidden'); }
+    } catch (e) {
+      console.error('Gagal menandai notifikasi terbaca:', e);
+    }
+  }
+
+  _renderNotifPending(pending) {
+    const wrap = document.getElementById('notifPending');
+    if (!wrap) return;
+
+    const label = {
+      withdrawal: ['Pencairan dana', '#withdrawals'],
+      cso_deposit: ['Setoran CSO', '#cso-deposits'],
+      driver_deposit: ['Setoran supir', '#driver-deposits'],
+      method_dispute: ['Sengketa pembayaran', '#method-disputes'],
+    };
+
+    const baris = Object.entries(label)
+      .filter(([k]) => (Number(pending[k]) || 0) > 0)
+      .map(([k, [teks, link]]) => `
+        <a href="${link}" class="flex items-center justify-between text-[11px] hover:underline">
+          <span class="text-amber-700 dark:text-amber-300 font-medium">${teks} menunggu</span>
+          <span class="font-bold text-amber-700 dark:text-amber-300">${pending[k]}</span>
+        </a>`);
+
+    wrap.innerHTML = baris.join('');
+    wrap.classList.toggle('hidden', baris.length === 0);
+  }
+
+  _renderNotifList(items) {
+    const list = document.getElementById('notifList');
+    if (!list) return;
+
+    if (!items.length) {
+      list.innerHTML = '<div class="px-4 py-10 text-center text-sm text-gray-400">Belum ada notifikasi.</div>';
+      return;
+    }
+
+    const warna = {
+      info: 'bg-sky-500',
+      warning: 'bg-amber-500',
+      danger: 'bg-red-500',
+    };
+
+    const esc = AdminApp.escapeHtml;
+    list.innerHTML = items.map((n) => `
+      <a href="${esc(n.link || '#dashboard')}" class="notif-row flex gap-3 px-4 py-3 border-b notif-sep transition-colors">
+        <span class="mt-1.5 w-2 h-2 rounded-full shrink-0 ${warna[n.level] || warna.info}"></span>
+        <div class="min-w-0">
+          <div class="text-[13px] font-semibold notif-title leading-snug">${esc(n.title)}</div>
+          ${n.body ? `<div class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">${esc(n.body)}</div>` : ''}
+          <div class="text-[10px] text-gray-400 mt-1">${AdminApp.waktuRelatif(n.created_at)}</div>
+        </div>
+      </a>`).join('');
+  }
+
   _renderDelta(id, pct, konteks) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1250,12 +1397,16 @@ export class AdminApp {
     });
     tbody.querySelectorAll('[data-del-zone]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Hapus zona tujuan ini?')) return;
+        if (!await Utils.confirm({
+          title: 'Hapus zona tujuan?',
+          message: 'Zona ini akan hilang dari pilihan tujuan CSO. Order lama yang memakainya tetap tersimpan.',
+          confirmText: 'Ya, Hapus',
+        })) return;
         try {
           await fetchApi(`/admin/zones/${btn.dataset.delZone}`, { method: 'DELETE' });
           await this.renderZones();
         } catch (error) {
-          alert(error.message || 'Gagal menghapus zona. Silakan coba lagi.');
+          Utils.showToast(error.message || 'Gagal menghapus zona. Silakan coba lagi.', 'error');
         }
       });
     });
@@ -1364,16 +1515,21 @@ export class AdminApp {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.toggleU;
           const isActive = btn.dataset.active === 'true';
-          if (!confirm(isActive
-            ? 'Nonaktifkan pengguna ini? Sesi login & antriannya akan dihentikan.'
-            : 'Aktifkan kembali pengguna ini?')) return;
+          if (!await Utils.confirm({
+            variant: isActive ? 'danger' : 'success',
+            title: isActive ? 'Nonaktifkan pengguna ini?' : 'Aktifkan kembali pengguna ini?',
+            message: isActive
+              ? 'Sesi login dan antriannya akan langsung dihentikan.'
+              : 'Pengguna dapat masuk kembali seperti biasa.',
+            confirmText: isActive ? 'Ya, Nonaktifkan' : 'Ya, Aktifkan',
+          })) return;
           try {
             await fetchApi(`/admin/users/${id}/toggle-status`, { method: 'POST' });
             await this.renderUsers();
             if (this.populateFilterDropdowns) await this.populateFilterDropdowns();
           } catch (e) {
             console.error(e);
-            alert('Gagal mengubah status pengguna.');
+            Utils.showToast('Gagal mengubah status pengguna.', 'error');
           }
         });
       });
@@ -1418,13 +1574,13 @@ export class AdminApp {
 
           // Tutup Modal & Refresh
           closeDeleteModal();
-          alert(`Pengguna "${deleteTargetName}" berhasil dihapus.`);
+          Utils.showToast(`Pengguna "${deleteTargetName}" berhasil dihapus.`, 'success');
           await this.renderUsers();
           await this.populateFilterDropdowns();
 
         } catch (error) {
           console.error('Gagal menghapus pengguna:', error);
-          alert(error.message || 'Gagal menghapus pengguna.');
+          Utils.showToast(error.message || 'Gagal menghapus pengguna.', 'error');
           closeDeleteModal();
         } finally {
           btnConfirmDelete.textContent = 'Ya, Hapus';
@@ -1487,7 +1643,7 @@ export class AdminApp {
 
     } catch (error) {
       console.error("Crash during openUserForm:", error);
-      alert("Terjadi error JS saat membuka formulir: " + error.message);
+      Utils.showToast("Terjadi error JS saat membuka formulir: " + error.message, 'error');
     }
   }
 
@@ -1701,11 +1857,15 @@ export class AdminApp {
 
       tbody.querySelectorAll('[data-wd-act="reject"]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Yakin ingin MENOLAK pencairan ini?')) return;
+          if (!await Utils.confirm({
+            title: 'Tolak pencairan dana?',
+            message: 'Supir akan diberi tahu bahwa pengajuannya ditolak.',
+            confirmText: 'Ya, Tolak',
+          })) return;
           try {
             const id = btn.dataset.id;
             await fetchApi(`/admin/withdrawals/${id}/reject`, { method: 'POST' });
-            alert('Permintaan ditolak.');
+            Utils.showToast('Permintaan ditolak.', 'success');
             this.renderWithdrawals();
           } catch (e) { console.error(e); }
         });
@@ -1819,9 +1979,14 @@ export class AdminApp {
 
       tbody.querySelectorAll('[data-dep-act="approve"]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Konfirmasi bahwa uang tunai sudah Anda TERIMA dari CSO?')) return;
+          if (!await Utils.confirm({
+            variant: 'success',
+            title: 'Uang tunai sudah diterima?',
+            message: 'Setujui hanya bila uangnya benar-benar sudah ada di tangan Anda. Setelah ini tagihan setoran CSO dinyatakan lunas.',
+            confirmText: 'Ya, Sudah Diterima',
+          })) return;
           await fetchApi(`/admin/cso-deposits/${btn.dataset.id}/approve`, { method: 'POST', body: JSON.stringify({}) });
-          alert('Setoran diterima.');
+          Utils.showToast('Setoran diterima.', 'success');
           this.renderCsoDeposits();
         });
       });
@@ -1830,14 +1995,21 @@ export class AdminApp {
         btn.addEventListener('click', async () => {
           // Alasan WAJIB — CSO harus tahu apa yang perlu diperbaiki, dan
           // server pun menolak permintaan tanpa alasan.
-          const alasan = prompt('Alasan penolakan (wajib, akan dikirim ke CSO):');
+          const alasan = await Utils.prompt({
+            title: 'Alasan penolakan',
+            message: 'Alasan ini dikirim ke CSO, jadi tuliskan yang jelas.',
+            label: 'Alasan',
+            placeholder: 'mis. nominal tidak cocok dengan bukti setor',
+            required: true,
+            requiredMessage: 'Alasan wajib diisi.',
+            confirmText: 'Tolak Setoran',
+          });
           if (alasan === null) return;
-          if (!alasan.trim()) { alert('Alasan tidak boleh kosong.'); return; }
           await fetchApi(`/admin/cso-deposits/${btn.dataset.id}/reject`, {
             method: 'POST',
             body: JSON.stringify({ admin_note: alasan.trim() }),
           });
-          alert('Setoran ditolak, tagihan dikembalikan ke CSO.');
+          Utils.showToast('Setoran ditolak, tagihan dikembalikan ke CSO.', 'success');
           this.renderCsoDeposits();
         });
       });
@@ -1917,9 +2089,14 @@ export class AdminApp {
 
       tbody.querySelectorAll('[data-ddep-act="approve"]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!confirm('Konfirmasi bahwa uang tunai sudah Anda TERIMA dari supir? Utangnya akan ditandai lunas.')) return;
+          if (!await Utils.confirm({
+            variant: 'success',
+            title: 'Uang tunai sudah diterima?',
+            message: 'Setujui hanya bila uangnya benar-benar sudah ada di tangan Anda. Utang komisi supir akan ditandai lunas.',
+            confirmText: 'Ya, Sudah Diterima',
+          })) return;
           await fetchApi(`/admin/driver-deposits/${btn.dataset.id}/approve`, { method: 'POST', body: JSON.stringify({}) });
-          alert('Setoran diterima, utang supir lunas.');
+          Utils.showToast('Setoran diterima, utang supir lunas.', 'success');
           this.renderDriverDeposits();
         });
       });
@@ -1928,14 +2105,21 @@ export class AdminApp {
         btn.addEventListener('click', async () => {
           // Alasan WAJIB — supir harus tahu apa yang perlu diperbaiki, dan
           // server pun menolak permintaan tanpa alasan.
-          const alasan = prompt('Alasan penolakan (wajib, akan dikirim ke supir):');
+          const alasan = await Utils.prompt({
+            title: 'Alasan penolakan',
+            message: 'Alasan ini dikirim ke supir, jadi tuliskan yang jelas.',
+            label: 'Alasan',
+            placeholder: 'mis. nominal tidak cocok dengan bukti setor',
+            required: true,
+            requiredMessage: 'Alasan wajib diisi.',
+            confirmText: 'Tolak Setoran',
+          });
           if (alasan === null) return;
-          if (!alasan.trim()) { alert('Alasan tidak boleh kosong.'); return; }
           await fetchApi(`/admin/driver-deposits/${btn.dataset.id}/reject`, {
             method: 'POST',
             body: JSON.stringify({ admin_note: alasan.trim() }),
           });
-          alert('Setoran ditolak, utang dikembalikan ke supir.');
+          Utils.showToast('Setoran ditolak, utang dikembalikan ke supir.', 'success');
           this.renderDriverDeposits();
         });
       });
@@ -1969,6 +2153,73 @@ export class AdminApp {
         : '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">Tidak ada transaksi.</td></tr>';
     } catch (e) {
       body.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-red-500">Gagal memuat rincian.</td></tr>';
+    }
+  }
+
+  // ----- Push Notification (FCM) -----
+  async renderFcm() {
+    const badge = document.getElementById('fcmBadge');
+    if (!badge) return;
+
+    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+    const reason = document.getElementById('fcmReason');
+
+    try {
+      const s = await fetchApi('/admin/fcm/status');
+
+      badge.textContent = s.ready ? 'AKTIF' : 'BELUM AKTIF';
+      badge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full '
+        + (s.ready ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700');
+
+      if (s.ready) {
+        reason.classList.add('hidden');
+      } else {
+        // Alasannya ditampilkan apa adanya dari server — di sanalah dibedakan
+        // "file belum ada" dari "salah unduh google-services.json".
+        reason.className = 'rounded-xl p-4 mb-4 text-xs leading-relaxed bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300';
+        reason.innerHTML = `<b>Push belum aktif.</b> ${esc(s.reason)}`;
+      }
+
+      document.getElementById('fcmProject').textContent = s.project_id || '–';
+      document.getElementById('fcmTokens').textContent = `${s.driver_token} dari ${s.driver_total} supir`;
+      document.getElementById('fcmQueue').textContent = s.queue_driver;
+      document.getElementById('fcmQueueHint').textContent = s.queue_driver === 'sync'
+        ? 'sync = dikirim langsung saat request; retry otomatis tidak berlaku.'
+        : 'Pastikan worker antrean berjalan, kalau tidak notifikasi tidak akan terkirim.';
+
+      // Isi pilihan supir sekali saja.
+      const sel = document.getElementById('fcmTestDriver');
+      if (sel && !sel.dataset.filled) {
+        const drivers = await fetchApi('/admin/users/role/driver');
+        sel.innerHTML = (drivers || [])
+          .map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('')
+          || '<option value="">(tidak ada supir)</option>';
+        sel.dataset.filled = '1';
+      }
+    } catch (e) {
+      badge.textContent = 'GAGAL DIPERIKSA';
+      badge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-500';
+      console.error('Gagal memuat status FCM:', e);
+    }
+  }
+
+  async testFcm() {
+    const out = document.getElementById('fcmTestResult');
+    const id = document.getElementById('fcmTestDriver')?.value;
+    if (!id) { out.textContent = 'Pilih supir dulu.'; return; }
+
+    out.className = 'text-xs mt-3 text-slate-500';
+    out.textContent = 'Mengirim…';
+    try {
+      const r = await fetchApi('/admin/fcm/test', {
+        method: 'POST',
+        body: JSON.stringify({ driver_id: Number(id) }),
+      });
+      out.className = 'text-xs mt-3 ' + (r.ok ? 'text-emerald-600' : 'text-red-600');
+      out.textContent = r.message;
+    } catch (e) {
+      out.className = 'text-xs mt-3 text-red-600';
+      out.textContent = 'Gagal mengirim tes.';
     }
   }
 
@@ -2051,19 +2302,25 @@ export class AdminApp {
         btn.addEventListener('click', async () => {
           // Konfirmasi menyebut KONSEKUENSINYA, bukan cuma "yakin?" — ini
           // memindahkan kewajiban uang ke orang lain dan tidak bisa dibatalkan.
-          if (!confirm(
-            'Kabulkan sanggahan?\n\n'
-            + '• Order dikoreksi menjadi "Tunai ke Kasir"\n'
-            + '• Utang komisi lepas dari supir\n'
-            + '• Uangnya menjadi kewajiban setoran CSO\n\n'
-            + 'Keputusan ini tidak bisa dibatalkan dari panel.'
-          )) return;
-          const catatan = prompt('Catatan untuk arsip (opsional):') ?? '';
+          if (!await Utils.confirm({
+            title: 'Kabulkan sanggahan ini?',
+            message: 'Order dikoreksi menjadi "Tunai ke Kasir", utang komisi lepas dari supir, '
+              + 'dan uangnya menjadi kewajiban setoran CSO. '
+              + 'Keputusan ini tidak bisa dibatalkan dari panel.',
+            confirmText: 'Ya, Kabulkan',
+          })) return;
+          const catatan = await Utils.prompt({
+            title: 'Catatan untuk arsip',
+            message: 'Boleh dikosongkan.',
+            label: 'Catatan',
+            placeholder: 'mis. bukti chat penumpang sudah diperiksa',
+            confirmText: 'Simpan & Kabulkan',
+          }) ?? '';
           await fetchApi(`/admin/method-disputes/${btn.dataset.id}/uphold`, {
             method: 'POST',
             body: JSON.stringify({ admin_note: catatan.trim() || null }),
           });
-          alert('Sanggahan dikabulkan. Uangnya kini tercatat sebagai tagihan setoran CSO.');
+          Utils.showToast('Sanggahan dikabulkan. Uangnya kini tercatat sebagai tagihan setoran CSO.', 'success');
           this.renderMethodDisputes();
         });
       });
@@ -2072,14 +2329,21 @@ export class AdminApp {
         btn.addEventListener('click', async () => {
           // Alasan WAJIB — supir berhak tahu dasar keputusan yang membuatnya
           // tetap berutang; server pun menolak permintaan tanpa alasan.
-          const alasan = prompt('Alasan penolakan (wajib, akan dikirim ke supir):');
+          const alasan = await Utils.prompt({
+            title: 'Alasan penolakan',
+            message: 'Alasan ini dikirim ke supir, jadi tuliskan yang jelas.',
+            label: 'Alasan',
+            placeholder: 'mis. nominal tidak cocok dengan bukti setor',
+            required: true,
+            requiredMessage: 'Alasan wajib diisi.',
+            confirmText: 'Tolak Setoran',
+          });
           if (alasan === null) return;
-          if (!alasan.trim()) { alert('Alasan tidak boleh kosong.'); return; }
           await fetchApi(`/admin/method-disputes/${btn.dataset.id}/reject`, {
             method: 'POST',
             body: JSON.stringify({ admin_note: alasan.trim() }),
           });
-          alert('Sanggahan ditolak. Utang supir tetap berlaku.');
+          Utils.showToast('Sanggahan ditolak. Utang supir tetap berlaku.', 'success');
           this.renderMethodDisputes();
         });
       });
@@ -2190,34 +2454,148 @@ export class AdminApp {
     return `<span class="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${cls}">${s}</span>`;
   }
   // ----- Reports -----
-  async renderRevReport() {
-    const monthEl = document.getElementById('repRevMonth');
-    if (!monthEl) return;
+  /** yyyy-mm-dd dari objek Date, memakai waktu lokal (bukan UTC seperti toISOString). */
+  _tgl(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
 
-    // Default: bulan berjalan → laporan langsung tampil, tidak kosong.
-    if (!monthEl.value) {
-      const d = new Date();
-      monthEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  _applyRevPreset(preset) {
+    const from = document.getElementById('repRevFrom');
+    const to = document.getElementById('repRevTo');
+    if (!from || !to) return;
+
+    const kini = new Date();
+    let awal = kini, akhir = kini;
+
+    if (preset === 'today') {
+      awal = akhir = kini;
+    } else if (preset === '7d') {
+      awal = new Date(kini); awal.setDate(awal.getDate() - 6);
+    } else if (preset === 'month') {
+      awal = new Date(kini.getFullYear(), kini.getMonth(), 1);
+    } else if (preset === 'lastmonth') {
+      awal = new Date(kini.getFullYear(), kini.getMonth() - 1, 1);
+      akhir = new Date(kini.getFullYear(), kini.getMonth(), 0); // hari terakhir bulan lalu
     }
 
+    from.value = this._tgl(awal);
+    to.value = this._tgl(akhir);
+
+    document.querySelectorAll('.rev-preset').forEach((b) => {
+      b.classList.toggle('ring-2', b.dataset.revPreset === preset);
+      b.classList.toggle('ring-primary-400', b.dataset.revPreset === preset);
+    });
+  }
+
+  async renderRevReport() {
+    const from = document.getElementById('repRevFrom');
+    const to = document.getElementById('repRevTo');
+    if (!from || !to) return;
+
+    // Default: bulan berjalan → laporan langsung tampil, tidak kosong.
+    if (!from.value || !to.value) this._applyRevPreset('month');
+
+    const qs = `date_from=${from.value}&date_to=${to.value}`;
+
+    // Tautan export mengikuti rentang yang sama persis dengan yang di layar.
+    const pdf = document.getElementById('repRevExportPdf');
+    const xls = document.getElementById('repRevExportExcel');
+    if (pdf) pdf.href = `/admin/reports/revenue/export/pdf?${qs}`;
+    if (xls) xls.href = `/admin/reports/revenue/export/excel?${qs}`;
+
     try {
-      const r = await fetchApi(`/admin/reports/revenue?month=${monthEl.value}`);
-      const rp = (n) => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
+      const r = await fetchApi(`/admin/reports/revenue?${qs}`);
+      const rp = (n) => Utils.formatCurrency(Number(n) || 0);
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      const s = r.summary || {};
 
-      set('repRevCashCSO', rp(r.cash_cso));
-      set('repRevCashDriver', rp(r.cash_driver));
-      set('repRevQris', rp(r.qris));
-      set('repRevFee', rp(r.fee));
-      set('repRevTotal', rp(r.total));
+      set('repRevRangeLabel', `${r.range?.label ?? ''} · ${r.range?.days ?? 0} hari`);
 
-      // Label potongan mengikuti rate komisi aktual (bukan "15%" statis).
-      if (r.fee_rate != null) set('repRevFeeLabel', `Potongan Sistem ${Math.round(r.fee_rate * 100)}%`);
+      set('repRevGross', rp(s.gross));
+      this._renderDelta('repRevDelta', s.change_pct, `sebelumnya ${rp(s.prev_gross)}`);
+      set('repRevFee', rp(s.commission));
+      set('repRevNet', rp(s.net_driver));
+      set('repRevCount', (s.trx_count ?? 0).toLocaleString('id-ID'));
+      set('repRevAvg', `Rata-rata ${rp(s.avg_per_trx)} / transaksi`);
+
+      // Label potongan mengikuti setelan aktual, termasuk tarif flat order
+      // manual — angka ini tidak lagi sekadar persentase dari total.
+      if (r.commission_rate != null) {
+        set('repRevFeeLabel', `Potongan Sistem ${Math.round(r.commission_rate * 100)}%`);
+        set('repRevFeeNote', `Order manual tanpa zona: ${rp(r.manual_fee_flat)} per trip`);
+      }
+
+      this.renderLineChart(
+        'repRevTrendChart',
+        (r.daily || []).map((d) => d.date.slice(8) + '/' + d.date.slice(5, 7)),
+        (r.daily || []).map((d) => d.total),
+      );
+
+      this._renderRevMethods(r.by_method || [], rp);
+
+      const kas = r.cash_position || {};
+      set('repRevCashCsoUnsettled', rp(kas.cso_unsettled));
+      set('repRevCashCsoProcessing', rp(kas.cso_processing));
+      set('repRevCashDriverOut', rp(kas.driver_outstanding));
+      set('repRevCashTotal', rp(kas.total_outside));
+
+      this._isiTabelRev('repRevZoneTable', r.by_zone || [], (z) => `
+        <td class="py-3 px-5 font-medium text-gray-700 dark:text-slate-200">${AdminApp.escapeHtml(z.zone)}</td>
+        <td class="py-3 px-5 text-center dark:text-slate-300">${z.count}</td>
+        <td class="py-3 px-5 text-right text-gray-500 dark:text-slate-400">${rp(z.avg)}</td>
+        <td class="py-3 px-5 text-right font-semibold dark:text-slate-200">${rp(z.total)}</td>`, 4);
+
+      const barisPeran = (u) => `
+        <td class="py-3 px-5 font-medium text-gray-700 dark:text-slate-200">${AdminApp.escapeHtml(u.name ?? '-')}</td>
+        <td class="py-3 px-5 text-center dark:text-slate-300">${u.count}</td>
+        <td class="py-3 px-5 text-right font-semibold dark:text-slate-200">${rp(u.total)}</td>`;
+      this._isiTabelRev('repRevCsoTable', r.by_cso || [], barisPeran, 3);
+      this._isiTabelRev('repRevDriverTable', r.by_driver || [], barisPeran, 3);
 
       document.getElementById('repRevResult')?.classList.remove('hidden');
     } catch (error) {
       console.error("Gagal memuat laporan pendapatan:", error);
     }
+  }
+
+  /** Kartu metode bayar + bar proporsi. */
+  _renderRevMethods(rows, rp) {
+    const wrap = document.getElementById('repRevMethods');
+    if (!wrap) return;
+
+    const warna = {
+      CashCSO: ['text-primary-600 dark:text-primary-400', 'bg-primary-50 dark:bg-primary-500/10', 'border-primary-100 dark:border-primary-500/20', 'bg-primary-500'],
+      CashDriver: ['text-emerald-600 dark:text-emerald-400', 'bg-green-50 dark:bg-emerald-500/10', 'border-green-100 dark:border-emerald-500/20', 'bg-emerald-500'],
+      QRIS: ['text-purple-600 dark:text-purple-400', 'bg-purple-50 dark:bg-purple-500/10', 'border-purple-100 dark:border-purple-500/20', 'bg-purple-500'],
+    };
+
+    wrap.innerHTML = rows.map((m) => {
+      const [teks, bg, border, bar] = warna[m.method] || warna.QRIS;
+      return `
+        <div class="${bg} p-4 rounded-xl border ${border}">
+          <div class="flex items-baseline justify-between mb-1">
+            <div class="text-[10px] font-bold ${teks} uppercase tracking-wider">${AdminApp.escapeHtml(m.label)}</div>
+            <div class="text-[11px] font-semibold ${teks}">${m.pct}%</div>
+          </div>
+          <div class="text-xl font-extrabold text-gray-800 dark:text-white">${rp(m.total)}</div>
+          <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">${m.count} trx · rata-rata ${rp(m.avg)}</div>
+          <div class="mt-2 h-1.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
+            <div class="h-full ${bar} rounded-full transition-all duration-500" style="width:${Math.min(100, m.pct)}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  /** Isi tbody, atau tampilkan baris kosong yang jelas — bukan tabel melompong. */
+  _isiTabelRev(id, rows, baris, kolom) {
+    const tbody = document.getElementById(id);
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="${kolom}" class="py-8 text-center text-sm text-gray-400">Belum ada data pada rentang ini.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map((r) => `<tr class="hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">${baris(r)}</tr>`).join('');
   }
 
   // Fungsi getWeek() dan sumWeek() tidak lagi diperlukan dan bisa dihapus.
@@ -2855,7 +3233,7 @@ export class AdminApp {
       this.clearRoute();
       const pts = (res.points || []).map(p => [p.lat, p.lng]);
       if (pts.length < 2) {
-        alert('Belum ada cukup jejak rute untuk supir ini hari ini.');
+        Utils.showToast('Belum ada cukup jejak rute untuk supir ini hari ini.', 'warning');
         return;
       }
       this._routeLayer = L.layerGroup().addTo(this._driverMap);
@@ -2868,7 +3246,7 @@ export class AdminApp {
       document.getElementById('btnClearRoute')?.classList.remove('hidden');
     } catch (e) {
       console.error('Gagal memuat rute:', e);
-      alert('Gagal memuat rute supir.');
+      Utils.showToast('Gagal memuat rute supir.', 'error');
     }
   }
 
@@ -2907,7 +3285,16 @@ export class AdminApp {
   }
 
   async createApiKey() {
-    const name = prompt('Nama klien (mis. "Website Koperasi Pusat"):');
+    const name = await Utils.prompt({
+      title: 'Buat API key baru',
+      message: 'Beri nama yang menjelaskan siapa pemakainya, agar mudah dicabut nanti.',
+      label: 'Nama klien',
+      placeholder: 'mis. Website Koperasi Pusat',
+      multiline: false,
+      required: true,
+      requiredMessage: 'Nama klien wajib diisi.',
+      confirmText: 'Buat Key',
+    });
     if (!name || !name.trim()) return;
     try {
       const res = await fetchApi('/admin/api-clients', {
@@ -2922,7 +3309,7 @@ export class AdminApp {
       }
       this.renderApiClients();
     } catch (e) {
-      alert('Gagal membuat API key.');
+      Utils.showToast('Gagal membuat API key.', 'error');
     }
   }
 
@@ -2940,13 +3327,17 @@ export class AdminApp {
   }
 
   async revokeApiKey(id) {
-    if (!confirm('Cabut API key ini? Sistem yang memakainya langsung kehilangan akses.')) return;
+    if (!await Utils.confirm({
+      title: 'Cabut API key ini?',
+      message: 'Sistem yang memakainya langsung kehilangan akses, saat itu juga.',
+      confirmText: 'Ya, Cabut',
+    })) return;
     try {
       await fetchApi('/admin/api-clients/' + id, { method: 'DELETE' });
       document.getElementById('newApiKeyBox')?.classList.add('hidden');
       this.renderApiClients();
     } catch (e) {
-      alert('Gagal mencabut API key.');
+      Utils.showToast('Gagal mencabut API key.', 'error');
     }
   }
 
@@ -3029,10 +3420,10 @@ export class AdminApp {
     fd.append('wa_device_id', '0'); // 0 = pakai device bawaan API Key
     try {
       await fetchApi('/admin/settings', { method: 'POST', body: fd });
-      alert('Konfigurasi WhatsApp Gateway disimpan!');
+      Utils.showToast('Konfigurasi WhatsApp Gateway disimpan!', 'success');
       this.renderWa();
     } catch (err) {
-      alert('Gagal menyimpan konfigurasi.');
+      Utils.showToast('Gagal menyimpan konfigurasi.', 'error');
     }
   }
 
@@ -3376,26 +3767,40 @@ export class AdminApp {
       });
       this.renderQueue(); // Refresh tabel
     } catch (error) {
-      alert('Gagal mengubah urutan.');
+      Utils.showToast('Gagal mengubah urutan.', 'error');
     }
   }
 
   // Aksi: Kick Driver
   async kickQueue(userId, name) {
-    if (!confirm(`Keluarkan ${name} dari antrian ? Status driver akan menjadi Offline.`)) return;
+    if (!await Utils.confirm({
+      variant: 'warning',
+      title: `Keluarkan ${name} dari antrian?`,
+      message: 'Status supir menjadi Offline dan ia kehilangan gilirannya.',
+      confirmText: 'Ya, Keluarkan',
+    })) return;
 
     try {
       await fetchApi(`/admin/queue/${userId}`, { method: 'DELETE' });
       this.renderQueue(); // Refresh tabel
       // Update juga dashboard stats jika sedang tampil (opsional)
     } catch (error) {
-      alert('Gagal mengeluarkan driver.');
+      Utils.showToast('Gagal mengeluarkan driver.', 'error');
     }
   }
 
   // Aksi: Edit Line Number
   async editLineNumber(userId, currentVal) {
-    const newVal = prompt("Masukkan Line Number Baru:", currentVal);
+    const newVal = await Utils.prompt({
+      variant: 'info',
+      title: 'Ubah Line Number',
+      label: 'Line number baru',
+      defaultValue: String(currentVal ?? ''),
+      multiline: false,
+      required: true,
+      requiredMessage: 'Line number wajib diisi.',
+      confirmText: 'Simpan',
+    });
     if (newVal === null || newVal === currentVal) return;
 
     try {
@@ -3405,7 +3810,7 @@ export class AdminApp {
       });
       this.renderQueue(); // Refresh
     } catch (error) {
-      alert('Gagal update line number.');
+      Utils.showToast('Gagal update line number.', 'error');
     }
   }
 

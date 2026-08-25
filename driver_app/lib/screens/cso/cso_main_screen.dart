@@ -21,20 +21,24 @@ class CsoMainScreen extends StatefulWidget {
 class _CsoMainScreenState extends State<CsoMainScreen> {
   int _currentIndex = 0;
 
+  // Urutan sengaja menaruh "Pemesanan Baru" di tengah (indeks 2): itu aksi
+  // utama CSO, dan di nav ia diangkat jadi tombol bulat yang menonjol.
   static const _titles = [
     'Dashboard',
-    'Pemesanan Baru',
     'Riwayat Transaksi',
+    'Pemesanan Baru',
     'Setoran Tunai',
     'Profil Saya',
   ];
+
+  static const _orderTabIndex = 2;
 
   @override
   Widget build(BuildContext context) {
     final screens = [
       const CsoDashboardScreen(),
-      const CsoOrderScreen(),
       const CsoHistoryScreen(),
+      const CsoOrderScreen(),
       const CsoDepositScreen(),
       const CsoProfileScreen(),
     ];
@@ -49,7 +53,10 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
             children: [
               _Header(title: _titles[_currentIndex]),
               Expanded(
-                child: IndexedStack(index: _currentIndex, children: screens),
+                child: _TabTransition(
+                  index: _currentIndex,
+                  child: IndexedStack(index: _currentIndex, children: screens),
+                ),
               ),
             ],
           ),
@@ -57,15 +64,67 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
         bottomNavigationBar: AppBottomNav(
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
+          centerIndex: _orderTabIndex,
           items: const [
-            NavItemData(Icons.dashboard_rounded, 'Dashboard'),
-            NavItemData(Icons.point_of_sale_rounded, 'Pesan'),
+            NavItemData(Icons.dashboard_rounded, 'Home'),
             NavItemData(Icons.history_rounded, 'Riwayat'),
+            NavItemData(Icons.add_rounded, 'Pesan'),
             NavItemData(Icons.account_balance_wallet_rounded, 'Setoran'),
             NavItemData(Icons.person_rounded, 'Profil'),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Fade + slide singkat setiap kali tab berganti. Sengaja membungkus
+/// IndexedStack (bukan AnimatedSwitcher) supaya state tiap layar — posisi
+/// scroll, isi form pemesanan — tetap hidup saat berpindah tab.
+class _TabTransition extends StatefulWidget {
+  final int index;
+  final Widget child;
+  const _TabTransition({required this.index, required this.child});
+
+  @override
+  State<_TabTransition> createState() => _TabTransitionState();
+}
+
+class _TabTransitionState extends State<_TabTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: 1,
+  );
+
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _c,
+    curve: Curves.easeOut,
+  );
+
+  late final Animation<Offset> _slide =
+      Tween(begin: const Offset(0, 0.02), end: Offset.zero).animate(
+        CurvedAnimation(parent: _c, curve: Curves.easeOutCubic),
+      );
+
+  @override
+  void didUpdateWidget(_TabTransition old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

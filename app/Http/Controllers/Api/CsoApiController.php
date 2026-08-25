@@ -15,6 +15,9 @@ use App\Services\ImageWatermark;
 use App\Models\DriverProfile;
 use App\Models\DriverQueue; 
 use App\Models\Setting; 
+use App\Models\AdminNotification;
+use App\Services\AdminNotifier;
+use App\Services\PushNotifier;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
@@ -781,6 +784,41 @@ class CsoApiController extends Controller
             ]);
         }
 
+        // Kabari admin lewat ikon lonceng. Ditaruh SETELAH setoran benar-benar
+        // tersimpan, dan AdminNotifier menelan kegagalannya sendiri — setoran
+        // yang sudah sah tidak boleh batal gara-gara notifikasi.
+        app(AdminNotifier::class)->notify(
+            AdminNotification::TYPE_CSO_DEPOSIT,
+            'Setoran tunai CSO menunggu verifikasi',
+            $cso->name . ' menyetor Rp ' . number_format((float) $deposit->amount, 0, ',', '.')
+                . ' (' . $deposit->transactions_count . ' transaksi).',
+            '#cso-deposits',
+            'info',
+            $deposit
+        );
+
+        // Tanda terima ke CSO. Uang fisik sudah berpindah tangan, jadi penyetor
+        // berhak punya bukti di HP-nya bahwa pengajuannya tercatat — bukan
+        // sekadar balasan API yang hilang begitu layar ditutup.
+        app(PushNotifier::class)->toUser(
+            $cso,
+            'Setoran terkirim',
+            'Setoran Rp ' . number_format((float) $deposit->amount, 0, ',', '.')
+                . ' untuk ' . count($deposit->period_dates ?? []) . ' tanggal sudah kami terima '
+                . 'dan sedang menunggu verifikasi admin.',
+            ['type' => 'deposit', 'role' => 'cso', 'deposit_id' => (string) $deposit->id]
+        );
+
+        \App\Services\WhatsAppService::toAdmin(
+            "*SETORAN CSO MASUK*\n\n"
+            . "{$cso->name} mengajukan setoran tunai.\n\n"
+            . '💰 Rp ' . number_format((float) $deposit->amount, 0, ',', '.') . "\n"
+            . '🧾 ' . $deposit->transactions_count . ' transaksi · '
+            . count($deposit->period_dates ?? []) . " tanggal\n"
+            . '📅 ' . now()->format('d M Y H:i') . "\n\n"
+            . 'Menunggu verifikasi di panel admin.'
+        );
+
         return response()->json([
             'message' => 'Setoran diajukan, menunggu verifikasi admin.',
             'data'    => $deposit,
@@ -816,11 +854,9 @@ class CsoApiController extends Controller
      */
     private function pushFcmToDriver($driver, string $title, string $body, array $data = [])
     {
-        if (!$driver || !$driver->fcm_token) {
-            return;
-        }
-
-        // Async + retry via queue (lihat App\Jobs\SendFcmNotification).
-        \App\Jobs\SendFcmNotification::dispatch($driver->fcm_token, $title, $body, $data);
+        // Penjagaan token & antrean kini terpusat di PushNotifier, dipakai
+        // bersama jalur setoran CSO/supir. Perilakunya tidak berubah:
+        // supir tanpa token tetap dilewati diam-diam.
+        app(PushNotifier::class)->toUser($driver, $title, $body, $data);
     }
 }

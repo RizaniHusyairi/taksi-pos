@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PageController extends Controller
@@ -24,31 +23,6 @@ class PageController extends Controller
         // Mengembalikan view 'admin.blade.php'
         return view('pages.admin');
     }
-
-    /**
-
-    * Menampilkan dasbor CSO.
-    */
-    public function showCso(): View
-    {
-        // Ambil Global QRIS
-        $qrisPath = \App\Models\Setting::getValue('company_qris_path');
-        $qrisUrl = $qrisPath ? asset('storage/' . $qrisPath) : null;
-
-        return view('pages.cso', ['companyQrisUrl' => $qrisUrl]);
-    }
-
-    /**
-
-    * Menampilkan dasbor Driver.
-    */
-    public function showDriver(): View
-    {
-        // Mengembalikan view 'driver.blade.php'
-        return view('pages.driver');
-    }
-
-
 }
 
 

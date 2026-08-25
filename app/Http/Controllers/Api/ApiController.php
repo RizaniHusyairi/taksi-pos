@@ -675,9 +675,25 @@ class ApiController extends Controller
      */
     private function notifyCsoDeposit(CsoDeposit $deposit, bool $disetujui): void
     {
+        $cso = $deposit->cso;
+        $rpPush = number_format((float) $deposit->amount, 0, ',', '.');
+
+        // Push ke aplikasi CSO. Ditaruh SEBELUM penjagaan WhatsApp di bawah:
+        // gateway WA yang belum dikonfigurasi tidak boleh ikut membungkam
+        // push, karena keduanya kanal yang berdiri sendiri.
+        app(\App\Services\PushNotifier::class)->toUser(
+            $cso,
+            $disetujui ? 'Setoran diterima' : 'Setoran ditolak',
+            $disetujui
+                ? "Setoran Rp {$rpPush} sudah diverifikasi admin. Terima kasih."
+                : "Setoran Rp {$rpPush} ditolak. Alasan: "
+                    . ($deposit->admin_note ?: 'tidak disebutkan')
+                    . '. Tagihannya muncul lagi dan bisa diajukan ulang.',
+            ['type' => 'deposit', 'role' => 'cso', 'deposit_id' => (string) $deposit->id]
+        );
+
         try {
             $waToken = Setting::getValue('wa_token');
-            $cso     = $deposit->cso;
             $phone   = $cso->phone_number ?? $cso->username;
 
             if (!$waToken || !$phone) {
@@ -703,11 +719,38 @@ class ApiController extends Controller
 
     public function adminGetRevenueReport(Request $request)
     {
-        // MODE BARU (dipakai halaman Laporan Pendapatan): ?month=YYYY-MM →
-        // rincian pendapatan 1 bulan per metode bayar. Tanpa month → tetap
-        // time-series lama (kompatibilitas).
+        // Tiga mode, diperiksa dari yang paling spesifik:
+        //
+        //  1. ?date_from&date_to  -> laporan rinci rentang bebas (halaman
+        //     Laporan Pendapatan yang baru);
+        //  2. ?month=YYYY-MM      -> laporan rinci satu bulan; dipertahankan
+        //     agar tautan/kebiasaan lama tidak rusak;
+        //  3. tanpa keduanya      -> time-series lama untuk grafik dashboard,
+        //     SENGAJA tidak diubah.
+        if ($request->filled('date_from') || $request->filled('date_to')) {
+            $validated = $request->validate([
+                'date_from' => 'nullable|date_format:Y-m-d',
+                'date_to'   => 'nullable|date_format:Y-m-d',
+            ]);
+
+            $start = isset($validated['date_from'])
+                ? \Carbon\Carbon::createFromFormat('Y-m-d', $validated['date_from'])->startOfDay()
+                : now()->startOfMonth();
+            $end = isset($validated['date_to'])
+                ? \Carbon\Carbon::createFromFormat('Y-m-d', $validated['date_to'])->endOfDay()
+                : now()->endOfDay();
+
+            return $this->revenueDetail($start, $end);
+        }
+
         if ($request->filled('month')) {
-            return $this->revenueByMethod($request->query('month'));
+            try {
+                $start = \Carbon\Carbon::createFromFormat('Y-m', (string) $request->query('month'))->startOfMonth();
+            } catch (\Throwable $e) {
+                $start = now()->startOfMonth();
+            }
+
+            return $this->revenueDetail($start, (clone $start)->endOfMonth());
         }
 
         $range = $request->query('range', 'daily'); // default 'daily'
@@ -770,36 +813,97 @@ class ApiController extends Controller
      * + potongan komisi koperasi. Metode 'Transfer' tidak ada di sistem, jadi
      * tidak disertakan. Dipakai halaman Laporan Pendapatan admin.
      */
-    private function revenueByMethod(?string $month)
+    // =========================================================================
+    // === Ikon lonceng admin ==================================================
+    // =========================================================================
+
+    /**
+     * Isi lonceng: riwayat peristiwa + hitungan antrean yang masih menunggu.
+     *
+     * Dua angka yang sengaja dipisah dan menjawab pertanyaan berbeda:
+     *  - `unread_count` : apa yang BARU sejak admin ini terakhir membuka lonceng;
+     *  - `pending`      : apa yang MASIH menunggu keputusan, termasuk item lama
+     *                     yang notifikasinya sudah lama terbaca tapi belum
+     *                     diproses. Tanpa angka kedua ini, lonceng akan tampak
+     *                     bersih padahal antreannya menumpuk.
+     */
+    public function adminGetNotifications(Request $request)
     {
-        try {
-            $start = \Carbon\Carbon::createFromFormat('Y-m', (string) $month)->startOfMonth();
-        } catch (\Throwable $e) {
-            $start = now()->startOfMonth();
-        }
-        $end = (clone $start)->endOfMonth();
+        $admin = $request->user();
 
-        $rows = Transaction::whereBetween('created_at', [$start, $end])
-            ->selectRaw('method, SUM(amount) as total')
-            ->groupBy('method')
-            ->pluck('total', 'method');
-
-        $cashCso    = (float) ($rows['CashCSO'] ?? 0);
-        $cashDriver = (float) ($rows['CashDriver'] ?? 0);
-        $qris       = (float) ($rows['QRIS'] ?? 0);
-        $total      = $cashCso + $cashDriver + $qris;
-
-        $rate = (float) Setting::getValue('commission_rate') ?: 0.2;
-        $fee  = $total * $rate;
+        $items = \App\Models\AdminNotification::orderByDesc('created_at')
+            ->limit(20)
+            ->get(['id', 'type', 'title', 'body', 'link', 'level', 'created_at']);
 
         return response()->json([
+            'items' => $items,
+            'unread_count' => \App\Models\AdminNotification::belumDibaca($admin->notifications_read_at)->count(),
+            'pending' => $this->hitungAntreanAdmin(),
+            'read_at' => $admin->notifications_read_at,
+        ]);
+    }
+
+    /** Tandai seluruh notifikasi terbaca untuk admin yang sedang login. */
+    public function adminMarkNotificationsRead(Request $request)
+    {
+        $admin = $request->user();
+
+        // forceFill: kolom ini sengaja di luar $fillable supaya tidak bisa
+        // disetel dari input pengguna.
+        $admin->forceFill(['notifications_read_at' => now()])->save();
+
+        return response()->json([
+            'unread_count' => 0,
+            'read_at'      => $admin->notifications_read_at,
+        ]);
+    }
+
+    /**
+     * Jumlah item yang masih menunggu keputusan admin, per jenis.
+     * Kuncinya sengaja sama dengan `type` notifikasi agar mudah dipasangkan.
+     */
+    private function hitungAntreanAdmin(): array
+    {
+        return [
+            'withdrawal'     => (int) Withdrawals::where('status', 'Pending')->count(),
+            'cso_deposit'    => (int) \App\Models\CsoDeposit::where('status', 'Pending')->count(),
+            'driver_deposit' => (int) \App\Models\DriverDeposit::where('status', 'Pending')->count(),
+            'method_dispute' => (int) Transaction::where('method_dispute_status', 'Open')->count(),
+        ];
+    }
+
+    /**
+     * Laporan pendapatan rinci untuk satu rentang tanggal.
+     *
+     * Angkanya disusun App\Services\RevenueReport — service yang sama dipakai
+     * ExportController, supaya PDF/Excel tidak mungkin berbeda dari layar.
+     *
+     * Kunci lama (cash_cso, cash_driver, qris, total, fee, fee_rate) tetap
+     * disertakan agar klien lama tidak rusak, tetapi `fee` kini dihitung dengan
+     * aturan yang benar: order manual tanpa zona dipotong tarif FLAT, bukan
+     * persentase. Sebelumnya nilai ini `total * rate` untuk semua transaksi,
+     * sehingga tidak pernah cocok dengan tagihan setoran supir.
+     */
+    private function revenueDetail(\Carbon\Carbon $start, \Carbon\Carbon $end)
+    {
+        // Rentang sangat lebar hanya membebani database tanpa ada yang membaca
+        // hasilnya; dipangkas ke satu tahun terakhir dari tanggal akhir.
+        if ($start->diffInDays($end) > 366) {
+            $start = (clone $end)->subDays(366)->startOfDay();
+        }
+
+        $data = app(\App\Services\RevenueReport::class)->build($start, $end);
+
+        $perMetode = collect($data['by_method'])->keyBy('method');
+
+        return response()->json($data + [
             'month'       => $start->format('Y-m'),
-            'cash_cso'    => round($cashCso),
-            'cash_driver' => round($cashDriver),
-            'qris'        => round($qris),
-            'total'       => round($total),
-            'fee'         => round($fee),
-            'fee_rate'    => $rate,
+            'cash_cso'    => $perMetode['CashCSO']['total'] ?? 0,
+            'cash_driver' => $perMetode['CashDriver']['total'] ?? 0,
+            'qris'        => $perMetode['QRIS']['total'] ?? 0,
+            'total'       => $data['summary']['gross'],
+            'fee'         => $data['summary']['commission'],
+            'fee_rate'    => $data['commission_rate'],
         ]);
     }
 
@@ -1042,9 +1146,24 @@ class ApiController extends Controller
      */
     private function notifyDriverDeposit(\App\Models\DriverDeposit $deposit, bool $disetujui): void
     {
+        $driver = $deposit->driver;
+        $rpPush = number_format((float) $deposit->amount, 0, ',', '.');
+
+        // Push ke aplikasi supir — sengaja di luar try/catch WhatsApp di bawah
+        // supaya gateway WA yang belum dikonfigurasi tidak ikut membungkamnya.
+        app(\App\Services\PushNotifier::class)->toUser(
+            $driver,
+            $disetujui ? 'Setoran diterima' : 'Setoran ditolak',
+            $disetujui
+                ? "Setoran Rp {$rpPush} sudah diverifikasi admin. Utang setoran Anda berkurang."
+                : "Setoran Rp {$rpPush} ditolak. Alasan: "
+                    . ($deposit->admin_note ?: 'tidak disebutkan')
+                    . '. Tagihannya muncul lagi dan bisa diajukan ulang.',
+            ['type' => 'deposit', 'role' => 'driver', 'deposit_id' => (string) $deposit->id]
+        );
+
         try {
             $waToken = Setting::getValue('wa_token');
-            $driver  = $deposit->driver;
             $phone   = $driver->phone_number ?? $driver->username;
 
             if (!$waToken || !$phone) {
@@ -1666,6 +1785,76 @@ class ApiController extends Controller
      * Kirim tes notifikasi WhatsApp via gateway (pakai setting tersimpan) agar
      * admin bisa memverifikasi konfigurasi. Selalu balas 200 dengan flag `ok`.
      */
+    /**
+     * Kondisi push notification (FCM) — dipanggil panel admin.
+     *
+     * Selain kredensial, ikut melaporkan berapa supir yang PUNYA token. Dua
+     * hal itu sama-sama bisa membuat push mati total, tapi menuntut tindakan
+     * yang sama sekali berbeda: yang satu urusan admin, yang satu meminta
+     * supir membuka aplikasinya. Tanpa angka kedua, admin akan mengira
+     * kredensialnya yang salah.
+     */
+    public function adminFcmStatus()
+    {
+        $status = \App\Services\FcmService::status();
+
+        $totalDriver = User::where('role', 'driver')->count();
+        $adaToken    = User::where('role', 'driver')->whereNotNull('fcm_token')->count();
+
+        return response()->json([
+            'ready'         => $status['ready'],
+            'reason'        => $status['reason'],
+            'project_id'    => $status['project_id'],
+            'client_email'  => $status['client_email'],
+            'driver_total'  => $totalDriver,
+            'driver_token'  => $adaToken,
+            // sync = job dijalankan langsung di dalam request. Push tetap
+            // terkirim, tapi retry/backoff-nya tidak pernah berlaku dan
+            // lambatnya FCM ikut menahan respons CSO.
+            'queue_driver'  => config('queue.default'),
+        ]);
+    }
+
+    /**
+     * Kirim push percobaan ke satu supir. Meniru pola adminTestWa: SELALU
+     * balas 200 dengan flag `ok`, supaya panel bisa menampilkan sebabnya
+     * alih-alih sekadar "gagal".
+     */
+    public function adminTestFcm(Request $request)
+    {
+        $validated = $request->validate([
+            'driver_id' => 'required|exists:users,id',
+        ]);
+
+        $driver = User::find($validated['driver_id']);
+
+        if (!$driver || $driver->role !== 'driver') {
+            return response()->json(['ok' => false, 'message' => 'Pengguna itu bukan supir.']);
+        }
+
+        if (!$driver->fcm_token) {
+            return response()->json([
+                'ok'      => false,
+                'message' => "{$driver->name} belum punya token perangkat. Minta ia membuka aplikasi "
+                    . 'supir (dan mengizinkan notifikasi) sekali, lalu tes lagi.',
+            ]);
+        }
+
+        $hasil = \App\Services\FcmService::send(
+            $driver->fcm_token,
+            'Tes Notifikasi 🚖',
+            'Jika notifikasi ini muncul di HP Anda, push notification sudah aktif.',
+            ['type' => 'test']
+        );
+
+        return response()->json([
+            'ok'      => $hasil['ok'],
+            'message' => $hasil['ok']
+                ? "Terkirim ke {$driver->name}. Cek HP supir tersebut."
+                : $hasil['message'],
+        ]);
+    }
+
     public function adminTestWa(Request $request)
     {
         $validated = $request->validate(['to' => 'required|string|max:20']);

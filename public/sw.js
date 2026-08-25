@@ -1,5 +1,5 @@
 /*
- * Service Worker - Taksi POS (CSO & Admin PWA)
+ * Service Worker - Taksi POS (Admin PWA)
  *
  * Strategi:
  *  - Aset statis (CSS/JS/gambar/font, termasuk CDN)  -> stale-while-revalidate (cepat, tahan koneksi flaky)
@@ -8,16 +8,14 @@
  *
  * Naikkan VERSION setiap kali daftar aset berubah agar cache lama dibersihkan.
  */
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.3.0';
 const STATIC_CACHE = `taksi-pos-static-${VERSION}`;
 
 // Aset inti yang di-precache saat install (aman, bukan data transaksi)
 const PRECACHE_URLS = [
   '/pos-assets/css/style.css',
   '/pos-assets/js/utils.js',
-  '/pos-assets/js/cso.js',
   '/pos-assets/js/admin.js',
-  '/pos-assets/js/data.js',
   '/pos-assets/img/logo_taksi.png',
   '/pos-assets/img/logo-koperasi.png',
   '/pos-assets/img/qris-placeholder.svg',

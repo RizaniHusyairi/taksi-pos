@@ -10,6 +10,7 @@ import '../widgets/app_card.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
 import '../widgets/error_state.dart';
+import '../widgets/wallet_source_sheet.dart';
 import '../utils/api_error.dart';
 import 'driver_deposit_screen.dart';
 
@@ -584,10 +585,14 @@ class _WalletScreenState extends State<WalletScreen> {
                 _sectionHeader(Icons.trending_up_rounded, 'Pemasukan',
                     '$incomeCount transaksi', AppColors.success),
                 const SizedBox(height: 6),
-                _lineRow('Pendapatan kotor', currency.format(gross)),
+                _lineRow('Pendapatan kotor', currency.format(gross),
+                    // Baris bernilai 0 sengaja tidak dapat ditekan: membuka
+                    // lembar kosong hanya membuat orang mengira fiturnya rusak.
+                    bucket: incomeCount > 0 ? 'income' : null),
                 _lineRow('Komisi koperasi ($ratePct%)',
                     '− ${currency.format(commission)}',
-                    valueColor: AppColors.danger),
+                    valueColor: AppColors.danger,
+                    bucket: incomeCount > 0 ? 'income' : null),
                 _divider(),
                 _lineRow('Hak bersih Anda', currency.format(netIncome),
                     bold: true, valueColor: AppColors.success),
@@ -608,10 +613,12 @@ class _WalletScreenState extends State<WalletScreen> {
                 const SizedBox(height: 6),
                 if (stdCount > 0)
                   _lineRow('Setoran komisi tunai', currency.format(stdFee),
-                      sub: '$stdCount trip order sistem'),
+                      sub: '$stdCount trip order sistem',
+                      bucket: 'debt_standard'),
                 if (manualCount > 0)
                   _lineRow('Biaya order manual', currency.format(manualFee),
-                      sub: '$manualCount trip × ${currency.format(flat)}'),
+                      sub: '$manualCount trip × ${currency.format(flat)}',
+                      bucket: 'debt_manual'),
                 if (tripCount == 0)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -720,9 +727,14 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
+  /// Satu baris rincian.
+  ///
+  /// Bila [bucket] diisi, baris menjadi dapat ditekan untuk melihat transaksi
+  /// asalnya — dan diberi ikon panah kecil. Baris yang bisa ditekan tanpa
+  /// penanda apa pun hampir tidak pernah ditemukan pengguna.
   Widget _lineRow(String label, String value,
-      {String? sub, Color? valueColor, bool bold = false}) {
-    return Padding(
+      {String? sub, Color? valueColor, bool bold = false, String? bucket}) {
+    final baris = Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -731,13 +743,24 @@ class _WalletScreenState extends State<WalletScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: GoogleFonts.outfit(
-                    color: bold ? AppColors.ink : AppColors.inkSoft,
-                    fontSize: 13.5,
-                    fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: GoogleFonts.outfit(
+                          color: bold ? AppColors.ink : AppColors.inkSoft,
+                          fontSize: 13.5,
+                          fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (bucket != null) ...[
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 17, color: AppColors.skyBlue),
+                    ],
+                  ],
                 ),
                 if (sub != null)
                   Padding(
@@ -764,6 +787,14 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         ],
       ),
+    );
+
+    if (bucket == null) return baris;
+
+    return InkWell(
+      onTap: () => WalletSourceSheet.tampilkan(context, bucket),
+      borderRadius: BorderRadius.circular(10),
+      child: baris,
     );
   }
 
@@ -912,12 +943,12 @@ class _WalletScreenState extends State<WalletScreen> {
                     fontSize: 12,
                   ),
                 ),
-                if (item['proof_image_url'] != null)
+                if (_proofUrl(item) != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: InkWell(
                       onTap: () =>
-                          _showProofDialog(context, item['proof_image_url']),
+                          _showProofDialog(context, _proofUrl(item)!),
                       child: Text(
                         "Lihat Bukti Transfer",
                         style: GoogleFonts.outfit(
@@ -950,6 +981,24 @@ class _WalletScreenState extends State<WalletScreen> {
         ],
       ),
     );
+  }
+
+  /// URL bukti transfer, DIBANGUN DI KLIEN dari alamat API yang benar-benar
+  /// dipakai — bukan memakai `proof_image_url` kiriman server.
+  ///
+  /// Server membangunnya dengan `asset()`, yang bergantung pada APP_URL di
+  /// .env. Begitu APP_URL berbeda dari host yang dihubungi aplikasi, gambarnya
+  /// tidak akan pernah ketemu: saat pengujian lewat `adb reverse`,
+  /// APP_URL=http://localhost berarti "HP itu sendiri", bukan server. Sisi CSO
+  /// sudah lama memakai pola yang benar ini — lihat models/cso_transaction.dart.
+  String? _proofUrl(dynamic item) {
+    final path = item['proof_image'];
+    if (path != null && path.toString().trim().isNotEmpty) {
+      return '${ApiService.assetBaseUrl}/storage/$path';
+    }
+    // Cadangan: pakai URL dari server bila kolom mentahnya tidak dikirim.
+    final url = item['proof_image_url'];
+    return (url != null && url.toString().trim().isNotEmpty) ? url.toString() : null;
   }
 
   void _showProofDialog(BuildContext context, String imageUrl) {

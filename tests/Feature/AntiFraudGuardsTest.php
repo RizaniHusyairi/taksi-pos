@@ -62,14 +62,44 @@ class AntiFraudGuardsTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_cso_aktif_tetap_bisa_login_web(): void
+    public function test_admin_aktif_tetap_bisa_login_web(): void
     {
-        $cso = $this->user('cso');
+        $admin = $this->user('admin');
+
+        $this->post('/login', ['username' => 'admin', 'password' => 'rahasia123'])
+            ->assertRedirect('/admin');
+
+        $this->assertAuthenticatedAs($admin);
+    }
+
+    /**
+     * Halaman CSO web sudah dihapus — CSO hanya lewat aplikasi mobile. Sesinya
+     * harus ikut ditutup, bukan sekadar tidak punya halaman tujuan.
+     */
+    public function test_cso_aktif_ditolak_login_web(): void
+    {
+        $this->user('cso');
 
         $this->post('/login', ['username' => 'cso', 'password' => 'rahasia123'])
-            ->assertRedirect('/cso');
+            ->assertSessionHasErrors('username');
 
-        $this->assertAuthenticatedAs($cso);
+        $this->assertGuest();
+    }
+
+    public function test_rute_cso_dan_driver_web_sudah_tidak_ada(): void
+    {
+        $this->get('/cso')->assertNotFound();
+        $this->get('/driver')->assertNotFound();
+    }
+
+    public function test_driver_aktif_ditolak_login_web(): void
+    {
+        $this->user('driver');
+
+        $this->post('/login', ['username' => 'driver', 'password' => 'rahasia123'])
+            ->assertSessionHasErrors('username');
+
+        $this->assertGuest();
     }
 
     // === 3. Rem laju ======================================================

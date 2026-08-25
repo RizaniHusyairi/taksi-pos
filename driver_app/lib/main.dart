@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_screen.dart';
@@ -18,6 +20,12 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Kunci potret. Seluruh tata letak (dock nav, form pemesanan, struk) dirancang
+  // untuk potret; mode melintang hanya membuatnya melar tanpa manfaat.
+  // portraitDown tidak diikutsertakan: terbalik 180 derajat tidak ada gunanya
+  // di ponsel dan justru mengagetkan kalau HP tergeletak.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
   try {
     await Firebase.initializeApp(); // Init Firebase
     print("Firebase Initialized Successfully");
@@ -26,8 +34,10 @@ void main() async {
     // Lanjutkan loading app meski Firebase gagal, agar tidak stuck black screen
   }
 
-  // Init Background Service
-  await initializeBackgroundService();
+  // Init Background Service (tidak didukung di web)
+  if (!kIsWeb) {
+    await initializeBackgroundService();
+  }
 
   runApp(
     MultiProvider(
@@ -71,19 +81,32 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
 
-    // 1. Init Notification Service
-    NotificationService().initialize(ApiService(), (payload) {
-      // Handle Navigation on Tap
-      print("Navigate by Notification payload: $payload");
-      if (payload == 'new_order') {
-        // Navigasi ke MainScreen (Home)
-        // Karena kita pakai Global Key, kita bisa navigasi dari mana saja
+    // 1. Init Notification Service (FCM tidak tersedia di web tanpa FirebaseOptions)
+    if (!kIsWeb) {
+      NotificationService().initialize(ApiService(), (payload) {
+        // Handle Navigation on Tap
+        print("Navigate by Notification payload: $payload");
+
+        // Hanya payload yang dikenali yang memicu navigasi.
+        if (payload != 'new_order' && payload != 'deposit') return;
+
+        // Shell dipilih berdasarkan PERAN. Sebelumnya semua notifikasi membuka
+        // MainScreen — shell supir — sehingga CSO yang menekan notifikasi
+        // setoran akan dilempar ke layar yang bukan miliknya.
+        final ctx = navigatorKey.currentContext;
+        final role = ctx != null
+            ? Provider.of<AuthProvider>(ctx, listen: false).role
+            : null;
+
         navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
+          MaterialPageRoute(
+            builder: (context) =>
+                role == 'cso' ? const CsoMainScreen() : const MainScreen(),
+          ),
           (route) => false, // Hapus stack lama
         );
-      }
-    });
+      });
+    }
 
     // 2. Check login status
     Future.microtask(

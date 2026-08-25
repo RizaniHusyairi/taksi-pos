@@ -37,6 +37,20 @@ Route::middleware('auth:sanctum')->group(function() {
     // Tambahkan rute untuk withdrawal, dll. di sini nanti
     Route::post('/logout', [ApiAuthController::class, 'logout']);
 
+    // Pendaftaran token FCM, NETRAL PERAN.
+    //
+    // Sebelumnya satu-satunya jalan adalah /driver/update-fcm-token yang dijaga
+    // `role:driver`, padahal aplikasi memanggilnya untuk semua peran. Akibatnya
+    // perangkat CSO selalu ditolak 403 dan kolom fcm_token miliknya tidak
+    // pernah terisi — push ke CSO mustahil. Method-nya sendiri sudah netral
+    // (hanya menyimpan token milik user yang login), jadi yang salah memang
+    // penjagaan rutenya.
+    //
+    // Rute lama SENGAJA dipertahankan di bawah: aplikasi supir sudah terpasang
+    // di HP orang, dan mencabutnya membuat mereka berhenti menerima order
+    // sampai memperbarui aplikasi.
+    Route::post('/me/fcm-token', [DriverApiController::class, 'updateFcmToken']);
+
 
      // =========================================================
     // === RUTE BARU: Khusus untuk Panel Admin ===
@@ -86,6 +100,11 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/driver-deposits/{deposit}/approve', [ApiController::class, 'adminApproveDriverDeposit']);
         Route::post('/driver-deposits/{deposit}/reject', [ApiController::class, 'adminRejectDriverDeposit']);
         
+        // Ikon lonceng di header: riwayat peristiwa + hitungan antrean yang
+        // masih menunggu keputusan admin.
+        Route::get('/notifications', [ApiController::class, 'adminGetNotifications']);
+        Route::post('/notifications/read', [ApiController::class, 'adminMarkNotificationsRead']);
+
         // Laporan
         Route::get('/reports/revenue', [ApiController::class, 'adminGetRevenueReport']);
         Route::get('/reports/driver-performance', [ApiController::class, 'adminGetDriverPerformanceReport']);
@@ -110,6 +129,9 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/settings', [ApiController::class, 'adminUpdateSettings']);
         Route::post('/settings/password', [ApiController::class, 'adminChangePassword']);
         Route::post('/wa/test', [ApiController::class, 'adminTestWa']); // tes notifikasi WA gateway
+        // Push notification aplikasi supir (FCM)
+        Route::get('/fcm/status', [ApiController::class, 'adminFcmStatus']);
+        Route::post('/fcm/test', [ApiController::class, 'adminTestFcm']);
         Route::get('/wa/messages', [ApiController::class, 'adminWaMessages']); // log pengiriman WA
 
         Route::get('/queue', [ApiController::class, 'adminGetQueue']);
@@ -137,8 +159,8 @@ Route::middleware('auth:sanctum')->group(function() {
         // Aksi membuat booking + pembayaran: SATU pintu, `process-order`.
         //
         // Jalur lama dua langkah (`POST /bookings` lalu `POST /payment`) sudah
-        // DIHAPUS. Keduanya sudah tidak dipakai klien manapun — web memakai
-        // process-order (public/pos-assets/js/cso.js) dan aplikasi mobile juga
+        // DIHAPUS. Keduanya sudah tidak dipakai klien manapun — satu-satunya
+        // klien CSO sekarang aplikasi mobile
         // (driver_app/lib/services/api_service.dart) — tapi tetap terbuka
         // sebagai celah: `/bookings` membuat order TANPA baris Transaction
         // (uang berpindah tangan tanpa jejak di laporan & kewajiban setoran),
@@ -182,6 +204,8 @@ Route::middleware('auth:sanctum')->group(function() {
         
         // Fitur Dompet (Wallet)
         Route::get('/balance', [DriverApiController::class, 'getBalance']);
+        // Transaksi di balik satu angka pada kartu Rincian Saldo.
+        Route::get('/balance/transactions', [DriverApiController::class, 'balanceTransactions']);
         Route::get('/withdrawals', [DriverApiController::class, 'getWithdrawalHistory']);
         Route::post('/withdrawals', [DriverApiController::class, 'requestWithdrawal']);
         

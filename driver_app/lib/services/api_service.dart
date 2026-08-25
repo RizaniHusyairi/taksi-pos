@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/io.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'connectivity_service.dart';
@@ -41,15 +42,18 @@ class ApiService {
       ),
     );
 
-    // Bypass SSL Certificate Verifications for HandshakeException
-    _dio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.badCertificateCallback =
-            (X509Certificate cert, String host, int port) => true;
-        return client;
-      },
-    );
+    // Bypass SSL Certificate Verifications for HandshakeException.
+    // Hanya untuk platform dart:io — di web adapter bawaan browser yang dipakai.
+    if (!kIsWeb) {
+      _dio.httpClientAdapter = IOHttpClientAdapter(
+        createHttpClient: () {
+          final client = HttpClient();
+          client.badCertificateCallback =
+              (X509Certificate cert, String host, int port) => true;
+          return client;
+        },
+      );
+    }
 
     // Add interceptor to attach token
     _dio.interceptors.add(
@@ -157,6 +161,15 @@ class ApiService {
     return await _dio.get('/driver/balance');
   }
 
+  /// Transaksi di balik satu angka pada kartu Rincian Saldo.
+  /// [bucket] = income | debt_standard | debt_manual
+  Future<Response> getBalanceTransactions(String bucket) async {
+    return await _dio.get(
+      '/driver/balance/transactions',
+      queryParameters: {'bucket': bucket},
+    );
+  }
+
   Future<Response> getWithdrawalHistory() async {
     return await _dio.get('/driver/withdrawals');
   }
@@ -202,11 +215,14 @@ class ApiService {
     );
   }
 
+  /// Mendaftarkan token FCM perangkat ini.
+  ///
+  /// Memakai rute NETRAL PERAN. Sebelumnya menembak `/driver/update-fcm-token`
+  /// yang dijaga `role:driver`, padahal AuthProvider memanggilnya untuk semua
+  /// peran — akibatnya perangkat CSO selalu ditolak 403 dan tidak pernah bisa
+  /// menerima push sama sekali.
   Future<Response> updateFcmToken(String token) async {
-    return await _dio.post(
-      '/driver/update-fcm-token',
-      data: {'fcm_token': token},
-    );
+    return await _dio.post('/me/fcm-token', data: {'fcm_token': token});
   }
 
   // --- CSO Endpoints ---

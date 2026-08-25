@@ -312,6 +312,6 @@ class PaymentMethodDisputeTest extends TestCase
     public function test_endpoint_admin_tertutup_untuk_supir(): void
     {
         Sanctum::actingAs($this->driver);
-        $this->getJson('/api/admin/method-disputes')->assertStatus(302);
+        $this->getJson('/api/admin/method-disputes')->assertStatus(403);
     }
 }

@@ -59,6 +59,9 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'active' => 'boolean',
+            // Kapan admin ini terakhir membuka ikon lonceng. Sengaja TIDAK
+            // masuk $fillable: hanya server yang boleh menyetelnya.
+            'notifications_read_at' => 'datetime',
         ];
     }
 

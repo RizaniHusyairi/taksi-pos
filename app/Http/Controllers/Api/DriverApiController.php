@@ -11,7 +11,11 @@ use App\Models\Booking;
 use App\Models\Transaction;
 use App\Models\Withdrawals;
 use App\Models\Setting;
+use App\Models\AdminNotification;
 use App\Models\DriverQueue;
+use App\Services\AdminNotifier;
+use App\Services\CommissionCalculator;
+use App\Services\PushNotifier;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\WithdrawalRequestNotification;
@@ -540,6 +544,99 @@ class DriverApiController extends Controller
         return response()->json($this->hitungSaldo($request->user()));
     }
 
+    /** Batas baris yang dikirim ke aplikasi (mengikuti getTripHistory). */
+    private const BATAS_RINCIAN = 200;
+
+    /**
+     * Transaksi di balik satu angka pada kartu Rincian Saldo.
+     *
+     * Kartu itu sudah memperlihatkan RUMUSNYA, tapi berhenti di jumlah agregat:
+     * "18 transaksi", "3 trip". Supir bisa melihat berapa, tidak bisa melihat
+     * dari mana. Untuk fitur yang menyangkut uang, angka yang tidak bisa
+     * ditelusuri adalah angka yang tidak bisa dipercaya.
+     *
+     * Memakai kueri yang SAMA PERSIS dengan hitungSaldo(), sehingga penjumlahan
+     * baris di sini tidak mungkin berbeda dari angka yang tampil di kartu.
+     */
+    public function balanceTransactions(Request $request)
+    {
+        $validated = $request->validate([
+            'bucket' => 'required|in:income,debt_standard,debt_manual',
+        ]);
+
+        $driver = $request->user();
+        $bucket = $validated['bucket'];
+
+        $rate = (float) Setting::getValue('commission_rate') ?: 0.2;
+        $flat = (int) (Setting::getValue('manual_fee_flat') ?: 10000);
+
+        [$query, $label] = match ($bucket) {
+            'income'        => [$this->queryPemasukan($driver), 'Pemasukan'],
+            'debt_standard' => [$this->queryUtangZona($driver), 'Setoran komisi tunai'],
+            'debt_manual'   => [$this->queryUtangManual($driver), 'Biaya order manual'],
+        };
+
+        $jumlah = (clone $query)->count();
+
+        // Pada bucket manual zone_id selalu null, jadi memuat relasi zona hanya
+        // sia-sia — dan pada PHP 8.5 memicu peringatan deprecation dari
+        // Eloquent saat mencocokkan kunci null.
+        $muat = ['booking:id,zone_id,manual_destination'];
+        if ($bucket !== 'debt_manual') {
+            $muat[] = 'booking.zoneTo:id,name';
+        }
+
+        $rows = $query->with($muat)
+            ->orderByDesc('created_at')
+            ->limit(self::BATAS_RINCIAN)
+            ->get(['id', 'booking_id', 'method', 'amount', 'created_at']);
+
+        $items = $rows->map(function (Transaction $t) use ($bucket, $rate, $flat) {
+            return [
+                'id'         => $t->id,
+                'booking_id' => $t->booking_id,
+                'date'       => $t->created_at->toIso8601String(),
+                'destination' => $t->booking?->zoneTo?->name
+                    ?: ($t->booking?->manual_destination ?: 'Order manual'),
+                'method'     => $t->method,
+                'amount'     => round((float) $t->amount),
+                'contribution' => round($this->kontribusiBaris($t, $bucket, $rate, $flat)),
+            ];
+        })->values();
+
+        return response()->json([
+            'bucket'    => $bucket,
+            'label'     => $label,
+            'count'     => $jumlah,
+            'truncated' => $jumlah > self::BATAS_RINCIAN,
+            'total'     => round($items->sum('contribution')),
+            'items'     => $items,
+        ]);
+    }
+
+    /**
+     * Berapa yang disumbang satu transaksi ke angka pada kartu.
+     *
+     * PERHATIAN — kedua sisi sengaja BERBEDA rumus, mengikuti hitungSaldo():
+     *
+     *  - sisi UTANG memakai CommissionCalculator, yang tahu bedanya order
+     *    berzona (persentase) dan order manual (tarif flat);
+     *  - sisi PEMASUKAN memakai persentase rata untuk semua order, termasuk
+     *    order manual. Memakai CommissionCalculator di sini akan mengenakan
+     *    tarif flat pada order manual, sehingga penjumlahan baris tidak lagi
+     *    cocok dengan "Komisi koperasi" yang tampil di kartu.
+     *
+     * (Bahwa satu order manual bisa dikenai biaya berbeda tergantung siapa
+     * yang memegang uangnya adalah perilaku lama, bukan sesuatu yang diubah
+     * di sini — itu menyangkut uang dan perlu dibahas terpisah.)
+     */
+    private function kontribusiBaris(Transaction $t, string $bucket, float $rate, int $flat): float
+    {
+        return $bucket === 'income'
+            ? (float) $t->amount * $rate
+            : CommissionCalculator::compute($t, $rate, $flat);
+    }
+
     /**
      * Rumus dompet supir — SATU-SATUNYA tempat pemasukan, utang, dan saldo
      * bersih dihitung.
@@ -551,6 +648,50 @@ class DriverApiController extends Controller
      * angka yang dipakai memblokirnya — dan itu jauh lebih merusak
      * kepercayaan daripada bug hitungan biasa.
      */
+    /**
+     * Ketiga kantong pembentuk dompet supir, masing-masing SATU definisi.
+     *
+     * Dipakai dua kali dengan tujuan berbeda: dijumlahkan oleh hitungSaldo()
+     * untuk angka di kartu, dan dibaca baris demi baris oleh
+     * balanceTransactions() untuk memperlihatkan asal angkanya. Kalau daftar
+     * dan totalnya dihitung dari dua definisi terpisah, cepat atau lambat
+     * keduanya berselisih — dan layar yang justru dibuat untuk membangun
+     * kepercayaan akan menghancurkannya.
+     */
+    private function queryPemasukan(User $driver)
+    {
+        // Uang sudah ada di sistem (QRIS / tunai ke kasir) dan belum dicairkan.
+        return Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)->where('status', 'Completed');
+            })
+            ->whereIn('method', ['QRIS', 'CashCSO'])
+            ->where('payout_status', 'Unpaid');
+    }
+
+    /** Tunai dipegang supir, order BERZONA → potongan persentase. */
+    private function queryUtangZona(User $driver)
+    {
+        return Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)
+                  ->where('status', 'Completed')
+                  ->whereNotNull('zone_id');
+            })
+            ->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid');
+    }
+
+    /** Tunai dipegang supir, order MANUAL (tanpa zona) → tarif flat per trip. */
+    private function queryUtangManual(User $driver)
+    {
+        return Transaction::whereHas('booking', function ($q) use ($driver) {
+                $q->where('driver_id', $driver->id)
+                  ->where('status', 'Completed')
+                  ->whereNull('zone_id');
+            })
+            ->where('method', 'CashDriver')
+            ->where('payout_status', 'Unpaid');
+    }
+
     private function hitungSaldo(User $driver): array
     {
         // Rate Komisi (mis. 0.2 = 20%). Disimpan desimal di settings.
@@ -559,11 +700,7 @@ class DriverApiController extends Controller
 
         // === 1. PEMASUKAN (uang ada di sistem → hak driver) ===
         //     QRIS & CashCSO yang masih 'Unpaid'.
-        $incomeQ = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id)->where('status', 'Completed');
-            })
-            ->whereIn('method', ['QRIS', 'CashCSO'])
-            ->where('payout_status', 'Unpaid');
+        $incomeQ = $this->queryPemasukan($driver);
         $incomeGross = (float) (clone $incomeQ)->sum('amount');
         $incomeCount = (clone $incomeQ)->count();
         $commission  = $incomeGross * $rate;          // potongan komisi koperasi
@@ -571,26 +708,13 @@ class DriverApiController extends Controller
 
         // === 2. HUTANG (uang dipegang driver → setoran ke koperasi) ===
         // A. Booking via sistem (ada zona) → kena komisi rate.
-        $stdQ = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id)
-                  ->where('status', 'Completed')
-                  ->whereNotNull('zone_id');
-            })
-            ->where('method', 'CashDriver')
-            ->where('payout_status', 'Unpaid');
+        $stdQ = $this->queryUtangZona($driver);
         $standardGross    = (float) (clone $stdQ)->sum('amount');
         $standardCount    = (clone $stdQ)->count();
         $debtFromStandard = $standardGross * $rate;
 
         // B. Booking manual (tanpa zona) → fee flat per trip.
-        $manualCount = Transaction::whereHas('booking', function ($q) use ($driver) {
-                $q->where('driver_id', $driver->id)
-                  ->where('status', 'Completed')
-                  ->whereNull('zone_id');
-            })
-            ->where('method', 'CashDriver')
-            ->where('payout_status', 'Unpaid')
-            ->count();
+        $manualCount    = $this->queryUtangManual($driver)->count();
         $debtFromManual = $manualCount * $manualFlat;
 
         $driverDebt = $debtFromStandard + $debtFromManual;
@@ -767,6 +891,17 @@ class DriverApiController extends Controller
                 \Illuminate\Support\Facades\Log::error('Gagal kirim email notifikasi withdrawal: ' . $e->getMessage());
             }
         }
+
+        // Lonceng panel admin — berdampingan dengan email di atas, dengan
+        // jaminan kegagalan yang sama: tidak boleh menggagalkan pengajuan.
+        app(AdminNotifier::class)->notify(
+            AdminNotification::TYPE_WITHDRAWAL,
+            'Pencairan dana menunggu persetujuan',
+            $driver->name . ' mengajukan Rp ' . number_format((float) $newWithdrawal->amount, 0, ',', '.') . '.',
+            '#withdrawals',
+            'warning',
+            $newWithdrawal
+        );
 
         // --- NOTIFIKASI WHATSAPP ---
         try {
@@ -1397,6 +1532,16 @@ class DriverApiController extends Controller
             'Menyanggah metode pembayaran order #' . $transaction->booking_id
         );
 
+        app(AdminNotifier::class)->notify(
+            AdminNotification::TYPE_METHOD_DISPUTE,
+            'Sengketa metode pembayaran dibuka',
+            $driver->name . ' menyanggah metode bayar order #' . $transaction->booking_id
+                . ' (Rp ' . number_format((float) $transaction->amount, 0, ',', '.') . ').',
+            '#method-disputes',
+            'danger',
+            $transaction
+        );
+
         // Kabari admin — sengketa yang tidak pernah dibaca sama saja dengan
         // tidak ada saluran sengketa.
         try {
@@ -1435,9 +1580,11 @@ class DriverApiController extends Controller
      */
     private function feeTerutang(Transaction $t, float $rate, int $manualFlat): float
     {
-        return $t->booking && $t->booking->zone_id === null
-            ? (float) $manualFlat
-            : (float) $t->amount * $rate;
+        // Rumusnya kini tinggal satu salinan di CommissionCalculator, supaya
+        // Laporan Pendapatan admin tidak bisa lagi berbeda angka dengan tagihan
+        // setoran supir. $rate/$manualFlat tetap diteruskan apa adanya — sudah
+        // dibaca pemanggil di luar loop — jadi hasilnya identik seperti dulu.
+        return CommissionCalculator::compute($t, $rate, $manualFlat);
     }
 
     /**
@@ -1584,6 +1731,37 @@ class DriverApiController extends Controller
         }
 
         $this->logActivity($driver->id, 'DEPOSIT_SUBMIT', 'Mengajukan setoran tunai Rp ' . number_format((float) $deposit->amount, 0, ',', '.'));
+
+        app(AdminNotifier::class)->notify(
+            AdminNotification::TYPE_DRIVER_DEPOSIT,
+            'Setoran tunai supir menunggu verifikasi',
+            $driver->name . ' menyetor Rp ' . number_format((float) $deposit->amount, 0, ',', '.')
+                . ' (' . $deposit->transactions_count . ' transaksi).',
+            '#driver-deposits',
+            'info',
+            $deposit
+        );
+
+        // Tanda terima ke supir (alasan sama seperti pada setoran CSO: uang
+        // fisik sudah berpindah, penyetor berhak punya bukti di HP-nya).
+        app(PushNotifier::class)->toUser(
+            $driver,
+            'Setoran terkirim',
+            'Setoran Rp ' . number_format((float) $deposit->amount, 0, ',', '.')
+                . ' untuk ' . count($deposit->period_dates ?? []) . ' tanggal sudah kami terima '
+                . 'dan sedang menunggu verifikasi admin.',
+            ['type' => 'deposit', 'role' => 'driver', 'deposit_id' => (string) $deposit->id]
+        );
+
+        \App\Services\WhatsAppService::toAdmin(
+            "*SETORAN SUPIR MASUK*\n\n"
+            . "{$driver->name} mengajukan setoran tunai.\n\n"
+            . '💰 Rp ' . number_format((float) $deposit->amount, 0, ',', '.') . "\n"
+            . '🧾 ' . $deposit->transactions_count . ' transaksi · '
+            . count($deposit->period_dates ?? []) . " tanggal\n"
+            . '📅 ' . now()->format('d M Y H:i') . "\n\n"
+            . 'Menunggu verifikasi di panel admin.'
+        );
 
         return response()->json([
             'message' => 'Setoran diajukan, menunggu verifikasi admin.',

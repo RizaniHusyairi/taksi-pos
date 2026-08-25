@@ -2,15 +2,15 @@
   PWA <head> partial. Pasang di dalam <head> halaman.
   Pemakaian:
     @include('partials.pwa-head', [
-      'appName'    => 'CSO Panel',
+      'appName'    => 'Admin Panel',
       'themeColor' => '#4f46e5',
-      'manifest'   => asset('manifest-cso.webmanifest'),
+      'manifest'   => asset('manifest-admin.webmanifest'),
     ])
 --}}
 @php
   $pwaAppName    = $appName    ?? 'Taksi POS';
   $pwaThemeColor = $themeColor ?? '#4f46e5';
-  $pwaManifest   = $manifest   ?? asset('manifest-cso.webmanifest');
+  $pwaManifest   = $manifest   ?? asset('manifest-admin.webmanifest');
 @endphp
 
 <meta name="theme-color" content="{{ $pwaThemeColor }}">

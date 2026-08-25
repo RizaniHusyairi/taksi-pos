@@ -84,11 +84,22 @@ class Transaction extends Model
      */
     public function scopeCashDriverBelumLunas($query, int $driverId)
     {
+        return $query->cashDriverOutstanding()
+            ->whereHas('booking', fn ($b) => $b->where('driver_id', $driverId));
+    }
+
+    /**
+     * Sama seperti [scopeCashDriverBelumLunas] tetapi untuk SELURUH supir —
+     * dipakai Laporan Pendapatan admin untuk menghitung uang tunai yang masih
+     * ada di tangan supir. Sengaja dibuat sebagai induk dari scope per-supir:
+     * menulis kriterianya dua kali adalah cara termudah membuat angka admin
+     * dan angka di aplikasi supir diam-diam berbeda.
+     */
+    public function scopeCashDriverOutstanding($query)
+    {
         return $query->where('method', 'CashDriver')
             ->where('payout_status', 'Unpaid')
-            ->whereHas('booking', function ($b) use ($driverId) {
-                $b->where('driver_id', $driverId)->where('status', 'Completed');
-            });
+            ->whereHas('booking', fn ($b) => $b->where('status', 'Completed'));
     }
 
     /**
@@ -130,11 +141,34 @@ class Transaction extends Model
      */
     public function scopeCashCsoBelumSetor($query, int $csoId)
     {
+        return $query->cashCsoOutstanding()
+            ->whereHas('booking', fn ($b) => $b->where('cso_id', $csoId));
+    }
+
+    /**
+     * Sama seperti [scopeCashCsoBelumSetor] tetapi untuk SELURUH CSO — dipakai
+     * Laporan Pendapatan admin untuk menghitung uang tunai yang masih ada di
+     * tangan kasir. Induk dari scope per-CSO, dengan alasan yang sama seperti
+     * [scopeCashDriverOutstanding].
+     */
+    public function scopeCashCsoOutstanding($query)
+    {
         return $query->where('method', 'CashCSO')
             ->where('deposit_status', 'Unsettled')
-            ->whereHas('booking', function ($b) use ($csoId) {
-                $b->where('cso_id', $csoId)->where('status', '!=', 'Cancelled');
-            });
+            ->whereHas('booking', fn ($b) => $b->where('status', '!=', 'Cancelled'));
+    }
+
+    /**
+     * Tunai CSO yang sudah diajukan setorannya tetapi belum diverifikasi admin.
+     * Uangnya secara fisik sudah berpindah/diklaim, namun belum diakui — perlu
+     * ditampilkan terpisah agar tidak tercampur dengan yang benar-benar masih
+     * mengendap di kasir.
+     */
+    public function scopeCashCsoProcessing($query)
+    {
+        return $query->where('method', 'CashCSO')
+            ->where('deposit_status', 'Processing')
+            ->whereHas('booking', fn ($b) => $b->where('status', '!=', 'Cancelled'));
     }
 
     /**

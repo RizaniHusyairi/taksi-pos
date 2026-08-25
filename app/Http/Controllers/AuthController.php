@@ -38,12 +38,17 @@ class AuthController extends Controller
              ])->onlyInput('username');
          }
 
-         if ($userRole === 'driver') {
+         // Driver dan CSO hanya dilayani lewat aplikasi mobile — halaman web
+         // untuk kedua peran ini sudah tidak ada, jadi sesinya langsung ditutup
+         // agar tidak ada sesi menggantung tanpa halaman tujuan.
+         $mobileOnlyRoles = ['driver' => 'Supir', 'cso' => 'CSO'];
+         if (isset($mobileOnlyRoles[$userRole])) {
              Auth::logout();
              $request->session()->invalidate();
              $request->session()->regenerateToken();
              return back()->withErrors([
-                 'username' => 'Akun driver tidak dapat login melalui website.',
+                 'username' => 'Akun ' . $mobileOnlyRoles[$userRole]
+                     . ' hanya dapat login melalui aplikasi mobile.',
              ])->onlyInput('username');
          }
 
@@ -51,8 +56,6 @@ class AuthController extends Controller
          switch ($userRole) {
              case 'admin':
                  return redirect()->intended('/admin');
-             case 'cso':
-                 return redirect()->intended('/cso');
              default:
                  // Jika role tidak ada, fallback ke halaman utama
                  return redirect()->intended('/');

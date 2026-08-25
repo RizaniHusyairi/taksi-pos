@@ -7,8 +7,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\Services\FcmService;
 
 /**
  * Kirim push notification FCM (HTTP v1) secara async + retry.
@@ -38,42 +37,20 @@ class SendFcmNotification implements ShouldQueue
             return;
         }
 
-        $credentialsPath = storage_path('app/firebase_credentials.json');
-        if (!file_exists($credentialsPath)) {
-            Log::error("FCM: file kredensial tidak ditemukan di {$credentialsPath}");
-            return; // tak ada gunanya retry tanpa file kredensial
+        // Pemuatan kredensial & bentuk payload dipusatkan di FcmService supaya
+        // tombol "Tes Push" di panel admin menempuh jalur yang persis sama
+        // dengan notifikasi order sungguhan.
+        $hasil = FcmService::send($this->fcmToken, $this->title, $this->body, $this->data);
+
+        if ($hasil['ok']) {
+            return;
         }
 
-        $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-        $credentials = new \Google\Auth\Credentials\ServiceAccountCredentials($scopes, $credentialsPath);
-        $accessToken = $credentials->fetchAuthToken(\Google\Auth\HttpHandler\HttpHandlerFactory::build())['access_token'];
-        $projectId = json_decode(file_get_contents($credentialsPath), true)['project_id'];
-
-        $response = Http::withToken($accessToken)->post(
-            "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send",
-            [
-                'message' => [
-                    'token' => $this->fcmToken,
-                    'notification' => ['title' => $this->title, 'body' => $this->body],
-                    'data' => array_merge(['click_action' => 'FLUTTER_NOTIFICATION_CLICK'], $this->data),
-                    'android' => [
-                        'priority' => 'HIGH',
-                        'notification' => [
-                            'channel_id' => 'high_importance_channel',
-                            'default_sound' => true,
-                            'default_vibrate_timings' => true,
-                        ],
-                    ],
-                ],
-            ]
-        );
-
-        if ($response->failed()) {
-            // 5xx / transient -> lempar agar di-retry. 4xx (token mati) -> cukup catat.
-            if ($response->serverError()) {
-                throw new \RuntimeException("FCM 5xx: {$response->status()}");
-            }
-            Log::warning("FCM gagal (tidak di-retry): {$response->status()} {$response->body()}");
+        // 5xx / gangguan sesaat -> lempar agar di-retry.
+        // 4xx (token perangkat mati) & konfigurasi belum siap -> percuma
+        // diulang; FcmService sudah mencatatnya ke log.
+        if ($hasil['status'] !== null && $hasil['status'] >= 500) {
+            throw new \RuntimeException("FCM 5xx: {$hasil['status']}");
         }
     }
 }
