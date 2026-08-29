@@ -1341,7 +1341,7 @@
         <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg p-5 max-w-sm w-full">
             <h3 class="font-bold text-lg mb-2">Setujui Pencairan</h3>
             <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                Silakan transfer ke rekening supir, lalu upload bukti transfer di sini untuk menyetujui (Approve).
+                Silakan transfer ke tujuan pencairan supir (rekening bank atau e-wallet yang tertera pada baris pengajuan), lalu upload bukti transfer di sini untuk menyetujui (Approve).
             </p>
             
             <form id="formUploadProof">

@@ -22,12 +22,12 @@
             <td style="padding: 8px; border-bottom: 1px solid #ddd;">{{ $withdrawal->requested_at }}</td>
         </tr>
         <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">Bank</td>
-            <td style="padding: 8px; border-bottom: 1px solid #ddd;">{{ $driver->driverProfile->bank_name ?? '-' }}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">Tujuan Pencairan</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd;">{{ $withdrawal->payout_channel ?? '-' }}</td>
         </tr>
         <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">No. Rekening</td>
-            <td style="padding: 8px; border-bottom: 1px solid #ddd;">{{ $driver->driverProfile->account_number ?? '-' }}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">Nomor &amp; Nama</td>
+            <td style="padding: 8px; border-bottom: 1px solid #ddd;">{{ $withdrawal->payout_detail ?? '-' }}</td>
         </tr>
     </table>
 

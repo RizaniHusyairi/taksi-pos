@@ -190,10 +190,28 @@ class ApiService {
     return await _dio.post('/driver/bookings/$bookingId/complete');
   }
 
-  Future<Response> updateBankDetails(String accountNumber) async {
+  /// Tujuan pencairan: rekening Bank BTN (`method: 'bank'`) atau satu akun
+  /// e-wallet (`method: 'ewallet'`). Endpoint-nya tetap /driver/bank-details.
+  Future<Response> updatePayoutAccount({
+    required String method,
+    String? accountNumber,
+    String? provider,
+    String? number,
+    String? holderName,
+  }) async {
     return await _dio.post(
       '/driver/bank-details',
-      data: {'account_number': accountNumber},
+      data: method == 'ewallet'
+          ? {
+              'payout_method': 'ewallet',
+              'ewallet_provider': provider,
+              'ewallet_number': number,
+              'ewallet_holder_name': holderName,
+            }
+          : {
+              'payout_method': 'bank',
+              'account_number': accountNumber,
+            },
     );
   }
 

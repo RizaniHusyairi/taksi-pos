@@ -101,8 +101,7 @@
              </tr>
         </table>
         <div style="font-size:10px; color:#666; margin-top:5px;">
-            * Dana ini telah ditransfer ke rekening {{ $driver->driverProfile->bank_name ?? 'Bank' }} 
-            ({{ $driver->driverProfile->account_number ?? '-' }})
+            * Dana ini telah ditransfer ke {{ $withdrawal->payout_label ?? '-' }}
         </div>
     </div>
 

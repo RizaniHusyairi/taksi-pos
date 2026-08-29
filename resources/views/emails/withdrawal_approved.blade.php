@@ -16,12 +16,12 @@
                 <td style="font-weight: bold; font-size: 18px;">Rp {{ number_format($withdrawal->amount, 0, ',', '.') }}</td>
             </tr>
             <tr>
-                <td>Bank Tujuan:</td>
-                <td>{{ $withdrawal->driver->driverProfile->bank_name ?? 'Bank BTN' }}</td>
+                <td>Tujuan Pencairan:</td>
+                <td>{{ $withdrawal->payout_channel ?? '-' }}</td>
             </tr>
             <tr>
-                <td>No. Rekening:</td>
-                <td>{{ $withdrawal->driver->driverProfile->account_number ?? '-' }}</td>
+                <td>Nomor &amp; Nama:</td>
+                <td>{{ $withdrawal->payout_detail ?? '-' }}</td>
             </tr>
             <tr>
                 <td>Waktu Proses:</td>

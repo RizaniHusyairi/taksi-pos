@@ -6,12 +6,31 @@ use Illuminate\Database\Eloquent\Model;
 
 class DriverProfile extends Model
 {
+    /**
+     * Dompet elektronik yang boleh dipakai sebagai tujuan pencairan.
+     * Kunci = nilai tersimpan di kolom ewallet_provider, isi = label tampilan.
+     * Dipakai bersama oleh validasi API dan label di panel admin/PDF/WA supaya
+     * daftar providernya cuma hidup di satu tempat.
+     */
+    public const EWALLET_PROVIDERS = [
+        'shopeepay' => 'ShopeePay',
+        'dana'      => 'DANA',
+        'gopay'     => 'GoPay',
+        'ovo'       => 'OVO',
+    ];
+
     protected $fillable = [
-        'user_id', 
-        'car_model', 
-        'plate_number', 
-        'bank_name', 
-        'account_number', 
+        'user_id',
+        'car_model',
+        'plate_number',
+        'bank_name',
+        'account_number',
+        // Tujuan pencairan: 'bank' (BTN) atau 'ewallet'. Lihat migrasi
+        // 2026_08_29_000001_add_ewallet_payout_to_driver_profiles.
+        'payout_method',
+        'ewallet_provider',
+        'ewallet_number',
+        'ewallet_holder_name',
         'status',
         'line_number',
         'last_queue_date',

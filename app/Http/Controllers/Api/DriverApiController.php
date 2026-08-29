@@ -13,6 +13,7 @@ use App\Models\Withdrawals;
 use App\Models\Setting;
 use App\Models\AdminNotification;
 use App\Models\DriverQueue;
+use App\Models\DriverProfile;
 use App\Services\AdminNotifier;
 use App\Services\CommissionCalculator;
 use App\Services\PushNotifier;
@@ -825,13 +826,14 @@ class DriverApiController extends Controller
     {
         $driver = $request->user();
         
-        // --- VALIDASI : Cek Rekening ---
-        if (!$driver->driverProfile || empty($driver->driverProfile->account_number)) {
+        // --- VALIDASI : Cek Tujuan Pencairan (bank ATAU e-wallet) ---
+        $tujuan = $this->snapshotTujuanPencairan($driver);
+        if (!$tujuan) {
             return response()->json([
-                'message' => 'Anda belum mengatur rekening pencairan. Silakan isi nomor rekening Bank BTN di menu Profil.'
+                'message' => 'Anda belum mengatur tujuan pencairan. Silakan isi rekening Bank BTN atau akun e-wallet di menu Profil.'
             ], 422); // 422 Unprocessable Entity
         }
-        
+
 
         // 1. Cek Saldo lagi untuk memastikan
         $amountToWithdraw = $this->hitungSaldo($driver)['balance'];
@@ -844,14 +846,17 @@ class DriverApiController extends Controller
         $newWithdrawal = null;
 
         // 2. Mulai Transaksi Database
-        DB::transaction(function () use ($driver, $amountToWithdraw, &$newWithdrawal) {
-            
+        DB::transaction(function () use ($driver, $amountToWithdraw, $tujuan, &$newWithdrawal) {
+
             // A. Buat Record Penarikan
+            // Tujuan ikut disalin (bukan cuma direferensikan ke profil) supaya
+            // bukti & PDF pencairan ini tidak berubah kalau supir nanti ganti
+            // rekening/e-wallet.
             $newWithdrawal = $driver->withdrawals()->create([
                 'amount' => $amountToWithdraw,
                 'status' => 'Pending',
                 'requested_at' => now(),
-            ]);
+            ] + $tujuan);
 
             // B. KUNCI TRANSAKSI (Ubah status 'Unpaid' -> 'Processing')
             
@@ -897,7 +902,8 @@ class DriverApiController extends Controller
         app(AdminNotifier::class)->notify(
             AdminNotification::TYPE_WITHDRAWAL,
             'Pencairan dana menunggu persetujuan',
-            $driver->name . ' mengajukan Rp ' . number_format((float) $newWithdrawal->amount, 0, ',', '.') . '.',
+            $driver->name . ' mengajukan Rp ' . number_format((float) $newWithdrawal->amount, 0, ',', '.')
+                . ' ke ' . ($newWithdrawal->payout_label ?: 'tujuan tidak diketahui') . '.',
             '#withdrawals',
             'warning',
             $newWithdrawal
@@ -913,14 +919,14 @@ class DriverApiController extends Controller
                 $driverName = $driver->name;
                 $amountRp = number_format($amountToWithdraw, 0, ',', '.');
                 $time = now()->format('d M Y H:i');
-                $bank = $driver->driverProfile->bank_name ?? '-';
-                $rek = $driver->driverProfile->account_number ?? '-';
+                $ikon = $newWithdrawal->payout_method === 'ewallet' ? '📱' : '🏦';
+                $tujuanTeks = $newWithdrawal->payout_label ?: '-';
 
                 $message = "*PENCAIRAN DANA BARU*\n\n"
                     . "Halo Admin, ada pengajuan baru:\n"
                     . "👤 *Driver:* $driverName\n"
                     . "💰 *Jumlah:* Rp $amountRp\n"
-                    . "🏦 *Bank:* $bank ($rek)\n"
+                    . "$ikon *Tujuan:* $tujuanTeks\n"
                     . "🕒 *Waktu:* $time\n\n"
                     . "Mohon segera cek dashboard admin untuk memproses.";
 
@@ -941,7 +947,10 @@ class DriverApiController extends Controller
      */
     public function getWithdrawalHistory(Request $request)
     {
+        // driverProfile ikut dimuat karena accessor payout_* memakainya sebagai
+        // fallback untuk pengajuan lama yang belum punya snapshot tujuan.
         $withdrawals = $request->user()->withdrawals()
+            ->with('driver.driverProfile')
             ->orderBy('requested_at', 'desc')
             ->get()
             ->map(function ($withdrawal) {
@@ -993,29 +1002,109 @@ class DriverApiController extends Controller
     }
 
     /**
-     * Update Informasi Rekening Bank Driver
+     * Tujuan pencairan supir: rekening Bank BTN ATAU satu akun e-wallet.
+     *
+     * Rutenya tetap /driver/bank-details dan `payout_method` boleh tidak
+     * dikirim — build aplikasi lama yang hanya mengirim `account_number`
+     * masih tersimpan sebagai tujuan bank seperti sebelumnya.
      */
     public function updateBankDetails(Request $request)
     {
-        $validated = $request->validate([
-            'account_number' => 'required|string|max:50',
+        $metode = $request->input('payout_method', 'bank');
+
+        $rules = ['payout_method' => 'nullable|in:bank,ewallet'];
+
+        if ($metode === 'ewallet') {
+            $rules += [
+                'ewallet_provider'    => 'required|in:' . implode(',', array_keys(DriverProfile::EWALLET_PROVIDERS)),
+                // Batas 10–15 digit disamakan dengan validasi nomor WhatsApp
+                // penumpang di CsoApiController agar aturannya tidak bercabang.
+                'ewallet_number'      => 'required|string|min:10|max:15',
+                'ewallet_holder_name' => 'required|string|max:100',
+            ];
+        } else {
+            $rules += ['account_number' => 'required|string|max:50'];
+        }
+
+        $validated = $request->validate($rules, [
+            'ewallet_provider.required'    => 'Pilih dompet elektronik tujuan pencairan.',
+            'ewallet_provider.in'          => 'Dompet elektronik tersebut belum didukung.',
+            'ewallet_number.min'           => 'Nomor e-wallet harus 10–15 digit.',
+            'ewallet_number.max'           => 'Nomor e-wallet harus 10–15 digit.',
+            'ewallet_holder_name.required' => 'Nama pemilik akun e-wallet wajib diisi.',
         ]);
 
         $user = $request->user();
-        
+
+        // Hanya kolom milik metode terpilih yang ditulis: data metode lain
+        // dibiarkan utuh supaya supir bisa bolak-balik tanpa mengetik ulang.
+        $data = ['payout_method' => $metode];
+
+        if ($metode === 'ewallet') {
+            $data += [
+                'ewallet_provider'    => $validated['ewallet_provider'],
+                'ewallet_number'      => $validated['ewallet_number'],
+                'ewallet_holder_name' => $validated['ewallet_holder_name'],
+            ];
+            $pesan = 'Akun ' . DriverProfile::EWALLET_PROVIDERS[$validated['ewallet_provider']]
+                . ' berhasil disimpan sebagai tujuan pencairan.';
+        } else {
+            $data += [
+                'bank_name'      => 'Bank BTN',
+                'account_number' => $validated['account_number'],
+            ];
+            $pesan = 'Informasi rekening BTN berhasil disimpan.';
+        }
+
         // Update atau Create profile jika belum ada
-        $user->driverProfile()->updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'bank_name' => 'Bank BTN',
-                'account_number' => $validated['account_number']
-            ]
-        );
+        $user->driverProfile()->updateOrCreate(['user_id' => $user->id], $data);
 
         return response()->json([
-            'message' => 'Informasi rekening BTN berhasil disimpan.',
+            'message' => $pesan,
             'data' => $user->load('driverProfile')
         ]);
+    }
+
+    /**
+     * Tujuan pencairan aktif supir dalam bentuk siap disalin ke baris
+     * withdrawals. Mengembalikan null bila tujuannya belum lengkap — itulah
+     * satu-satunya penjaga kelengkapan sebelum pengajuan dibuat.
+     */
+    private function snapshotTujuanPencairan($driver): ?array
+    {
+        $profil = $driver->driverProfile;
+
+        if (!$profil) {
+            return null;
+        }
+
+        if ($profil->payout_method === 'ewallet') {
+            if (
+                empty($profil->ewallet_provider)
+                || empty($profil->ewallet_number)
+                || empty($profil->ewallet_holder_name)
+            ) {
+                return null;
+            }
+
+            return [
+                'payout_method'      => 'ewallet',
+                'payout_provider'    => $profil->ewallet_provider,
+                'payout_account'     => $profil->ewallet_number,
+                'payout_holder_name' => $profil->ewallet_holder_name,
+            ];
+        }
+
+        if (empty($profil->account_number)) {
+            return null;
+        }
+
+        return [
+            'payout_method'      => 'bank',
+            'payout_provider'    => $profil->bank_name ?: 'Bank BTN',
+            'payout_account'     => $profil->account_number,
+            'payout_holder_name' => null,
+        ];
     }
 
     /**

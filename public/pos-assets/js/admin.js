@@ -1804,14 +1804,14 @@ export class AdminApp {
       // Nama supir kini bisa diakses langsung via w.driver.name
       tbody.innerHTML = withdrawals.map(w => {
 
-        // --- BAGIAN INI YANG HILANG SEBELUMNYA (Definisi bankInfo) ---
-        const bankInfo = w.driver && w.driver.driver_profile
-          ? `<div class="text-xs font-bold text-slate-700 dark:text-slate-200">${w.driver.driver_profile.bank_name || '-'}</div>
-               <div class="text-xs font-mono text-slate-500 dark:text-slate-400">${w.driver.driver_profile.account_number || '-'}</div>`
-          : '<span class="text-xs text-red-500 italic">Belum set rekening</span>';
-        // ---
-        console.log("driver:", w);
-        // Tampilkan Info Bank
+        // Tujuan pencairan (Bank BTN atau e-wallet) sudah dirangkai server di
+        // model Withdrawals — jangan susun ulang di sini agar formatnya sama
+        // dengan email, PDF, dan notifikasi WhatsApp.
+        const bankInfo = w.payout_channel
+          ? `<div class="text-xs font-bold text-slate-700 dark:text-slate-200">${w.payout_channel}</div>
+               <div class="text-xs font-mono text-slate-500 dark:text-slate-400">${w.payout_detail || '-'}</div>`
+          : '<span class="text-xs text-red-500 italic">Belum set tujuan pencairan</span>';
+
         const currentStatus = w.status.toLowerCase();
         let actionButtons = '';
         // Tambahkan tombol DETAIL di semua status
