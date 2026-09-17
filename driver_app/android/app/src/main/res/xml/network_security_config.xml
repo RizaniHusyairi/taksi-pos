@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rilis: HTTPS saja. Server produksi (kaj.aptpairport.id) sudah TLS, jadi
+     tidak ada alasan mengizinkan HTTP polos di APK yang dipegang driver.
+     Build debug memakai versi override di app/src/debug/res/xml/ yang tetap
+     mengizinkan cleartext untuk server lokal (adb reverse / Wi-Fi LAN). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

@@ -30,10 +30,20 @@ class Booking extends Model
         // siapa yang dilewati. Lihat migrasi 2026_08_24_000004.
         'queue_override',
         'skipped_driver_id',
+        // Karcis terbit saat supir "SAYA JEMPUT". Lihat migrasi 2026_09_17_000001.
+        'assigned_lat',
+        'assigned_lng',
+        'pickup_confirmed_at',
+        'pickup_lat',
+        'pickup_lng',
+        'pickup_source',
+        'ticket_wa_sent_at',
     ];
 
     protected $casts = [
-        'queue_override' => 'boolean',
+        'queue_override'      => 'boolean',
+        'pickup_confirmed_at' => 'datetime',
+        'ticket_wa_sent_at'   => 'datetime',
     ];
 
     /**

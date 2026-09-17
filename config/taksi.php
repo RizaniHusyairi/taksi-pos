@@ -76,4 +76,15 @@ return [
         'start'    => '05:00',
         'end'      => '23:30',
     ],
+
+    // Karcis terbit saat supir mengonfirmasi berangkat menjemput.
+    'pickup' => [
+        // Supir yang lupa menekan "SAYA JEMPUT" tapi mobilnya sudah bergerak
+        // sejauh ini (meter) dari posisi saat order diterima dianggap sudah
+        // berangkat. Cukup besar supaya jitter GPS di parkiran tidak memicu.
+        'auto_confirm_meters' => 75,
+
+        // Jeda minimum (detik) antar kirim-ulang WA karcis ke penumpang.
+        'wa_resend_seconds' => 60,
+    ],
 ];

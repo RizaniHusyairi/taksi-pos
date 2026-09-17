@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" /> <!-- For Android 14+ -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Dering order: menyalakan layar HP terkunci seperti panggilan masuk -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Minta pengecualian optimasi baterai (OEM agresif spt MIUI/Redmi suka membunuh service latar) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -18,7 +21,7 @@
     <application
         android:label="Taxi Angkasa Jaya"
         android:name="${applicationName}"
-        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:icon="@mipmap/ic_launcher">
         <!-- android:screenOrientation="portrait" mengunci layar agar tidak
              pernah melintang. Sengaja di manifest, bukan hanya lewat
@@ -33,6 +36,8 @@
             android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
@@ -58,6 +63,11 @@
             android:foregroundServiceType="location"
             android:exported="true"
         />
+
+        <!-- Tombol "SAYA JEMPUT" langsung dari notifikasi, tanpa membuka aplikasi -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
 
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

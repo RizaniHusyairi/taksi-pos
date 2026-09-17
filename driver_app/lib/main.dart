@@ -7,6 +7,7 @@ import 'screens/login_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/cso/cso_main_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/incoming_order_screen.dart';
 import 'theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
@@ -88,7 +89,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
         print("Navigate by Notification payload: $payload");
 
         // Hanya payload yang dikenali yang memicu navigasi.
-        if (payload != 'new_order' && payload != 'deposit') return;
+        const dikenali = {'new_order', 'deposit', 'ticket_ready', 'queue_heads_up'};
+        if (!dikenali.contains(payload)) return;
 
         // Shell dipilih berdasarkan PERAN. Sebelumnya semua notifikasi membuka
         // MainScreen — shell supir — sehingga CSO yang menekan notifikasi
@@ -105,6 +107,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
           ),
           (route) => false, // Hapus stack lama
         );
+
+        // Order masuk untuk supir: langsung layar "panggilan" dengan tombol
+        // SAYA JEMPUT besar, bukan sekadar beranda.
+        if (payload == 'new_order' && role != 'cso') {
+          final nav = navigatorKey.currentState;
+          if (nav != null) IncomingOrderScreen.open(nav);
+        }
       });
     }
 

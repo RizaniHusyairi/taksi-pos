@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../utils/api_error.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
@@ -67,6 +68,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       const Duration(seconds: 60),
       (_) => _ensureTrackingIfWithinHours(),
     );
+
+    // Tombol "SAYA JEMPUT" di notifikasi / push order: segarkan kartu order.
+    _pushSubscription = NotificationService().events.listen((e) {
+      final type = e['type'];
+      if (type == 'pickup_confirmed' || type == 'new_order') {
+        if (mounted) {
+          Provider.of<AuthProvider>(context, listen: false).fetchProfile();
+        }
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askAlarmPermission());
   }
 
   // Saat app kembali ke depan: evaluasi ulang jam operasi & nyalakan layanan
@@ -75,6 +88,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _ensureTrackingIfWithinHours();
+      // "SAYA JEMPUT" bisa saja ditekan dari notifikasi saat aplikasi tertutup.
+      Provider.of<AuthProvider>(context, listen: false).fetchProfile();
     }
   }
 
@@ -262,6 +277,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _countdownTimer?.cancel();
     _windowTimer?.cancel();
     _serviceSubscription?.cancel();
+    _pushSubscription?.cancel();
     _errorSubscription?.cancel();
     super.dispose();
   }
@@ -289,6 +305,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // Listen to background service
   StreamSubscription? _serviceSubscription;
+  StreamSubscription? _pushSubscription;
   StreamSubscription? _errorSubscription;
 
   /// [minta] = true boleh memunculkan dialog izin (dipanggil dari initState /
@@ -382,6 +399,60 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _locationStatus = "Belum dapat sinyal GPS — coba ke tempat terbuka";
       }
     });
+  }
+
+  /// Sekali saja: jelaskan kenapa aplikasi butuh izin layar penuh sebelum
+  /// supir dibawa ke Pengaturan. Tanpa izin ini dering order tetap berbunyi,
+  /// hanya tidak menyalakan layar HP yang terkunci.
+  Future<void> _askAlarmPermission() async {
+    await NotificationService().askFullScreenPermissionOnce(() async {
+      if (!mounted) return false;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.notifications_active_rounded,
+              color: AppColors.success, size: 36),
+          title: const Text('Izinkan Dering Order'),
+          content: const Text(
+            'Supaya order tidak terlewat saat Anda di luar mobil, aplikasi akan '
+            'berdering seperti panggilan telepon dan menyalakan layar HP.\n\n'
+            'Di layar berikutnya, aktifkan izin "Notifikasi layar penuh" untuk '
+            'Taxi Angkasa Jaya.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Nanti'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Izinkan'),
+            ),
+          ],
+        ),
+      );
+      return ok == true;
+    });
+  }
+
+  Future<void> _confirmPickup(int bookingId) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    try {
+      await _apiService.confirmPickup(bookingId);
+      await NotificationService().cancelOrderAlarm();
+      await auth.fetchProfile();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Karcis diterbitkan — silakan menuju penumpang")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiErrorMessage(e))),
+        );
+      }
+    }
   }
 
   Future<void> _startTrip(int bookingId) async {
@@ -951,6 +1022,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       paymentMethod = 'Tunai ke Supir';
     }
     final isOntrip = booking['status'] == 'OnTrip';
+    // Assigned punya dua fase: belum berangkat (tombol SAYA JEMPUT, karcis di
+    // konter CSO masih terkunci) dan sudah menuju penumpang.
+    final isPickedUp = booking['pickup_confirmed_at'] != null;
     final accent = isOntrip ? AppColors.skyBlue : AppColors.success;
 
     return AppCard(
@@ -987,7 +1061,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  isOntrip ? "DALAM PERJALANAN" : "ORDERAN MASUK",
+                  isOntrip
+                      ? "DALAM PERJALANAN"
+                      : (isPickedUp ? "MENUJU PENUMPANG" : "ORDERAN MASUK"),
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -1012,7 +1088,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _orderRow("CSO", csoName),
                 _orderRow("Pembayaran", paymentMethod),
                 const SizedBox(height: 24),
-                if (!isOntrip)
+                if (!isOntrip && !isPickedUp) ...[
+                  // Sekali tekan, tanpa dialog: supir memang tidak bisa menolak
+                  // order, jadi tidak ada salah tekan yang perlu dicegah.
+                  GradientButton(
+                    label: "SAYA JEMPUT",
+                    icon: Icons.directions_car_filled_rounded,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF12A06B), AppColors.success],
+                    ),
+                    onPressed: () => _confirmPickup(booking['id']),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      "Tekan saat mulai menuju penumpang — karcis dicetak di konter CSO",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppColors.inkSoft,
+                      ),
+                    ),
+                  ),
+                ] else if (!isOntrip)
                   GradientButton(
                     label: "MULAI PERJALANAN",
                     icon: Icons.play_arrow_rounded,

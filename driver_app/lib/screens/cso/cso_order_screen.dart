@@ -6,7 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
 import '../../widgets/cso/cso_payment_sheet.dart';
 import '../../widgets/cso/cso_select_driver_sheet.dart';
-import '../../widgets/cso/cso_receipt_sheet.dart';
+import '../../widgets/cso/cso_ticket_sheet.dart';
 
 /// Tab "Pemesanan Baru": pilih zona → Input Pembayaran → pilih supir → struk.
 /// UI diperhalus: stepper berikon, kartu zona dengan state terpilih bergradien,
@@ -47,7 +47,9 @@ class _CsoOrderScreenState extends State<CsoOrderScreen> {
     final result = await CsoSelectDriverSheet.show(context);
     if (result == null || !mounted) return;
 
-    await CsoReceiptSheet.show(context, result);
+    // Karcis belum terbit: sheet menunggu supir menekan "SAYA JEMPUT", lalu
+    // berubah menjadi karcis dengan opsi cetak / WhatsApp.
+    await CsoTicketSheet.show(context, result);
     if (!mounted) return;
     provider.reset();
     _searchController.clear();

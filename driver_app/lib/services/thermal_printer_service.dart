@@ -90,8 +90,27 @@ class ThermalPrinterService {
             width: PosTextSize.size2));
     b += g.text('Bandar Udara APT. Pranoto Samarinda',
         styles: const PosStyles(align: PosAlign.center));
-    b += g.text('KARCIS RESMI TAKSI',
+    b += g.text('KARCIS TAKSI',
         styles: const PosStyles(align: PosAlign.center, bold: true));
+    b += g.hr();
+
+    // Penunjuk mobil: yang pertama dicari penumpang di pintu keluar, jadi
+    // plat nomor & nomor lambung dicetak paling besar.
+    if (f.plate != '-') {
+      b += g.text(f.plate,
+          styles: const PosStyles(
+              align: PosAlign.center,
+              bold: true,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2));
+    }
+    b += g.text(f.lineLabel.isEmpty ? f.driverName : '${f.lineLabel}  ${f.driverName}',
+        styles: const PosStyles(
+            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+    if (f.pickupTimeStr != null) {
+      b += g.text('Supir berangkat menjemput ${f.pickupTimeStr}',
+          styles: const PosStyles(align: PosAlign.center));
+    }
     b += g.hr();
 
     b += _kv(g, 'No.', f.code, bold: true);
@@ -168,6 +187,10 @@ class _TicketData {
   final String dateTimeStr;
   final String amountStr;
   final String publicUrl;
+  final String plate;
+  final String lineLabel;
+  final String driverName;
+  final String? pickupTimeStr;
 
   _TicketData({
     required this.code,
@@ -178,6 +201,10 @@ class _TicketData {
     required this.dateTimeStr,
     required this.amountStr,
     required this.publicUrl,
+    required this.plate,
+    required this.lineLabel,
+    required this.driverName,
+    required this.pickupTimeStr,
   });
 
   factory _TicketData.from(Map<String, dynamic> booking) {
@@ -204,6 +231,8 @@ class _TicketData {
     final code = s(tx['id'] ?? booking['id']);
     final dt = DateTime.tryParse('${tx['created_at'] ?? ''}')?.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
+    final pickup =
+        DateTime.tryParse('${booking['pickup_confirmed_at'] ?? ''}')?.toLocal();
     final dateTimeStr = dt == null
         ? '-'
         : '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
@@ -217,6 +246,10 @@ class _TicketData {
       dateTimeStr: dateTimeStr,
       amountStr: formatRupiah(amount),
       publicUrl: '${ApiService.assetBaseUrl}/receipt/${s(tx['receipt_token'], code)}',
+      plate: s(profile['plate_number']).toUpperCase(),
+      lineLabel: profile['line_number'] == null ? '' : '#L${profile['line_number']}',
+      driverName: s(driver['name']),
+      pickupTimeStr: pickup == null ? null : '${two(pickup.hour)}:${two(pickup.minute)}',
     );
   }
 }

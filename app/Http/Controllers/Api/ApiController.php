@@ -1994,6 +1994,8 @@ class ApiController extends Controller
             ]);
         });
 
+        app(\App\Services\QueueHeadsUpService::class)->notify();
+
         return response()->json(['message' => 'Driver berhasil dikeluarkan dari antrian.']);
     }
 
@@ -2029,6 +2031,8 @@ class ApiController extends Controller
                 $neighbor->update(['sort_order' => $temp]);
             });
         }
+
+        app(\App\Services\QueueHeadsUpService::class)->notify();
 
         return response()->json(['message' => 'Urutan berhasil diubah.']);
     }

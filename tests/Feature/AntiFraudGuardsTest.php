@@ -246,7 +246,15 @@ class AntiFraudGuardsTest extends TestCase
         $blok = substr($isi, $mulai, strpos($isi, ';', $mulai) - $mulai);
 
         $this->assertStringNotContainsString('receiptUrl', $blok);
-        // Penumpang TETAP harus menerima struknya.
-        $this->assertStringContainsString('$receiptUrl', $isi);
+        $this->assertStringNotContainsString('receipt.show', $blok);
+
+        // Penumpang TETAP harus menerima struknya — sejak karcis terbit saat
+        // supir "SAYA JEMPUT", link itu dikirim dari sendTicketWhatsApp().
+        $mulaiKarcis = strpos($isi, 'function sendTicketWhatsApp');
+        $this->assertNotFalse($mulaiKarcis, 'Endpoint WA karcis penumpang tidak ditemukan.');
+        $this->assertStringContainsString(
+            "route('receipt.show'",
+            substr($isi, $mulaiKarcis, strpos($isi, 'function driverPositionNow') - $mulaiKarcis)
+        );
     }
 }

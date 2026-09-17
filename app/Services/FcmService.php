@@ -101,6 +101,47 @@ class FcmService
      *
      * @return array{ok:bool, status:?int, message:string}
      */
+    /**
+     * Bentuk payload FCM v1 menurut jenis pesan.
+     *
+     * `new_order` dikirim sebagai pesan DATA saja: aplikasi supir yang
+     * menampilkannya sendiri sebagai dering alarm layar penuh dengan tombol
+     * "SAYA JEMPUT" (notification_service.dart). Bila blok `notification`
+     * ikut dikirim, Android menampilkan notifikasi biasa saat aplikasi di
+     * latar dan handler aplikasi tidak pernah dipanggil.
+     *
+     * channel_id wajib cocok dengan kanal di notification_service.dart.
+     */
+    public static function buildMessage(string $token, string $title, string $body, array $data): array
+    {
+        $type = $data['type'] ?? null;
+        $data = array_merge(['click_action' => 'FLUTTER_NOTIFICATION_CLICK'], $data);
+
+        if ($type === 'new_order') {
+            return [
+                'token'   => $token,
+                'data'    => array_merge($data, ['title' => $title, 'body' => $body]),
+                'android' => ['priority' => 'HIGH', 'ttl' => '180s'],
+            ];
+        }
+
+        return [
+            'token'        => $token,
+            'notification' => ['title' => $title, 'body' => $body],
+            'data'         => $data,
+            'android'      => [
+                'priority'     => 'HIGH',
+                'notification' => [
+                    'channel_id'              => $type === 'queue_heads_up'
+                        ? 'queue_heads_up_channel'
+                        : 'high_importance_channel',
+                    'default_sound'           => true,
+                    'default_vibrate_timings' => true,
+                ],
+            ],
+        ];
+    }
+
     public static function send(string $token, string $title, string $body, array $data = []): array
     {
         $status = static::status();
@@ -137,24 +178,7 @@ class FcmService
         // channel_id wajib cocok dengan channel di notification_service.dart.
         $response = Http::withToken($accessToken)->post(
             "https://fcm.googleapis.com/v1/projects/{$status['project_id']}/messages:send",
-            [
-                'message' => [
-                    'token'        => $token,
-                    'notification' => ['title' => $title, 'body' => $body],
-                    'data'         => array_merge(
-                        ['click_action' => 'FLUTTER_NOTIFICATION_CLICK'],
-                        $dataString
-                    ),
-                    'android' => [
-                        'priority'     => 'HIGH',
-                        'notification' => [
-                            'channel_id'              => 'high_importance_channel',
-                            'default_sound'           => true,
-                            'default_vibrate_timings' => true,
-                        ],
-                    ],
-                ],
-            ]
+            ['message' => static::buildMessage($token, $title, $body, $dataString)]
         );
 
         if ($response->successful()) {

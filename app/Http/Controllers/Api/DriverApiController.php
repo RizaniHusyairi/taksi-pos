@@ -17,6 +17,8 @@ use App\Models\DriverProfile;
 use App\Services\AdminNotifier;
 use App\Services\CommissionCalculator;
 use App\Services\PushNotifier;
+use App\Services\PickupConfirmation;
+use App\Services\QueueHeadsUpService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\WithdrawalRequestNotification;
@@ -245,6 +247,7 @@ class DriverApiController extends Controller
                 
                 // 1. Hapus dari Antrian
                 DriverQueue::where('user_id', $user->id)->delete();
+                app(QueueHeadsUpService::class)->notify();
 
                 // 2. Jika alasan "Dapat Penumpang Sendiri"
                 if ($request->reason === 'self') {
@@ -1193,6 +1196,34 @@ class DriverApiController extends Controller
             ]);
         }
 
+        // Supir yang lupa menekan "SAYA JEMPUT" tapi mobilnya sudah bergerak
+        // menjauh dari posisi saat order diterima: anggap sudah berangkat,
+        // supaya karcis di konter CSO tetap terbit. Hanya fix yang lolos
+        // gerbang anti fake GPS di atas yang sampai ke sini.
+        $pendingPickup = Booking::where('driver_id', $user->id)
+            ->where('status', 'Assigned')
+            ->whereNull('pickup_confirmed_at')
+            ->whereNotNull('assigned_lat')
+            ->first();
+        if ($pendingPickup) {
+            $movedMeters = $this->calculateDistance(
+                (float) $pendingPickup->assigned_lat, (float) $pendingPickup->assigned_lng,
+                $request->latitude, $request->longitude
+            ) * 1000;
+            if ($movedMeters >= (int) config('taksi.pickup.auto_confirm_meters', 75)) {
+                app(PickupConfirmation::class)->confirm(
+                    $pendingPickup, 'auto_location', $request->latitude, $request->longitude
+                );
+            }
+        }
+
+        // Jaring pengaman peringatan pra-giliran: antrian juga bisa bergeser
+        // lewat jalur yang tidak memanggil service-nya (mis. supir di depan
+        // menjadi basi). Hanya supir yang sedang mengantri yang memicu.
+        if (DriverQueue::where('user_id', $user->id)->exists()) {
+            app(QueueHeadsUpService::class)->notify();
+        }
+
         // Rekam jejak pergerakan (breadcrumb) untuk gambaran RUTE di panel admin.
         // Throttle per jarak (~20 m) agar trail rapi & hemat storage.
         if ($profile) {
@@ -1446,7 +1477,46 @@ class DriverApiController extends Controller
     }
 
     
-    public function startBooking(Request $request, Booking $booking)
+    /**
+     * Supir menekan "SAYA JEMPUT" — dari aplikasi atau langsung dari tombol
+     * notifikasi. Status order TETAP 'Assigned' (penumpang belum naik); yang
+     * berubah hanya karcis di aplikasi CSO menjadi bisa dicetak.
+     *
+     * Idempoten: menekan dua kali, atau kalah balapan dengan konfirmasi
+     * otomatis lokasi, bukan galat — supir cukup melihat kartunya berubah.
+     */
+    public function confirmPickup(Request $request, Booking $booking, PickupConfirmation $pickup)
+    {
+        if ($request->user()->id !== $booking->driver_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $request->validate([
+            'source'    => 'nullable|in:button,notification',
+            'latitude'  => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+        ]);
+
+        if ($booking->pickup_confirmed_at === null && $booking->status !== 'Assigned') {
+            return response()->json([
+                'message' => 'Order ini tidak bisa dikonfirmasi (status saat ini: ' . $booking->status . ').',
+            ], 422);
+        }
+
+        // Posisi dari request lebih segar; bila tidak dikirim (aksi notifikasi
+        // di latar belakang), pakai lokasi terakhir yang tersimpan.
+        $profile = $request->user()->driverProfile;
+        $pickup->confirm(
+            $booking,
+            $request->input('source', 'button'),
+            $request->input('latitude', $profile?->latitude),
+            $request->input('longitude', $profile?->longitude)
+        );
+
+        return $this->getProfile($request);
+    }
+
+    public function startBooking(Request $request, Booking $booking, PickupConfirmation $pickup)
     {
         if ($request->user()->id !== $booking->driver_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
@@ -1462,6 +1532,11 @@ class DriverApiController extends Controller
         }
 
         $booking->update(['status' => 'OnTrip']);
+
+        // Supir yang langsung menekan MULAI PERJALANAN tanpa "SAYA JEMPUT" tetap
+        // menerbitkan karcis — tanpa ini CSO menunggu karcis yang tak pernah datang.
+        $profile = $request->user()->driverProfile;
+        $pickup->confirm($booking, 'button', $profile?->latitude, $profile?->longitude);
 
         // Update status profil jadi 'ontrip' (biar UI driver tahu dia sedang sibuk)
         $request->user()->driverProfile()->update(['status' => 'ontrip']);

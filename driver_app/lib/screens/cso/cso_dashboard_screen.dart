@@ -8,7 +8,9 @@ import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
 import '../../utils/api_error.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/cso/cso_receipt_sheet.dart';
+import '../../widgets/cso/cso_ticket_sheet.dart';
 
 /// Dashboard CSO: ringkasan yang dikelola CSO — pendapatan & transaksi hari ini,
 /// rincian Tunai/QRIS, peta posisi supir, dan transaksi terakhir.
@@ -101,6 +103,10 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
   int _count = 0, _queueReady = 0;
   List<CsoTransaction> _recent = [];
 
+  /// Order yang karcisnya masih menunggu supir / siap diserahkan.
+  List<Map<String, dynamic>> _tickets = [];
+  StreamSubscription? _push;
+
   bool _loading = true;
   String? _error;
   Timer? _timer;
@@ -111,11 +117,16 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
     _moveCtrl = AnimationController(vsync: this, duration: _pollEvery);
     _load(initial: true);
     _timer = Timer.periodic(_pollEvery, (_) => _load());
+    // Karcis terbit (supir SAYA JEMPUT): segarkan tanpa menunggu polling.
+    _push = NotificationService().events.listen((e) {
+      if (e['type'] == 'ticket_ready') _load();
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _push?.cancel();
     _moveCtrl.dispose();
     super.dispose();
   }
@@ -207,6 +218,10 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
 
       // Mulai animasi glide marker ke posisi terbaru.
       _retargetMarkers(drivers);
+
+      // Terpisah dari Future.wait: kartu karcis tidak boleh menjatuhkan
+      // seluruh dashboard bila endpoint-nya sesaat gagal.
+      _loadTickets();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -224,6 +239,10 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
         children: [
           if (_error != null) _errorBanner(),
+          if (_tickets.isNotEmpty) ...[
+            _ticketsCard(),
+            const SizedBox(height: 12),
+          ],
           _heroCard(),
           const SizedBox(height: 12),
           Row(
@@ -542,6 +561,172 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _loadTickets() async {
+    try {
+      final res = await _api.getCsoPendingTickets();
+      final list = ((res.data['data'] as List?) ?? const [])
+          .map((e) => (e as Map).cast<String, dynamic>())
+          // Hanya yang masih perlu perhatian CSO: supir belum berangkat, atau
+          // sudah berangkat tapi penumpang belum naik.
+          .where((b) => b['status'] == 'Assigned')
+          .toList()
+        ..sort((a, b) {
+          final aWait = a['pickup_confirmed_at'] == null ? 0 : 1;
+          final bWait = b['pickup_confirmed_at'] == null ? 0 : 1;
+          return aWait.compareTo(bWait);
+        });
+      if (mounted) setState(() => _tickets = list);
+    } catch (_) {
+      // Biarkan kartu terakhir tetap tampil; dicoba lagi di polling berikutnya.
+    }
+  }
+
+  Widget _ticketsCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.skyBlue.withValues(alpha: 0.25)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A0B4DA2),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.confirmation_number_rounded,
+                  color: AppColors.deepBlue, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Karcis Tertunda',
+                style: GoogleFonts.outfit(
+                  color: AppColors.ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.deepBlue,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_tickets.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final b in _tickets) _ticketRow(b),
+        ],
+      ),
+    );
+  }
+
+  Widget _ticketRow(Map<String, dynamic> b) {
+    Map<String, dynamic> m(dynamic v) =>
+        (v as Map?)?.cast<String, dynamic>() ?? const {};
+    final driver = m(b['driver']);
+    final profile = m(driver['driver_profile']);
+    final ready = b['pickup_confirmed_at'] != null;
+    final created = DateTime.tryParse('${b['created_at'] ?? ''}')?.toLocal();
+    final waited =
+        created == null ? Duration.zero : DateTime.now().difference(created);
+    final late = !ready && waited >= CsoTicketSheet.lateAfter;
+    final color = ready
+        ? AppColors.success
+        : (late ? AppColors.warning : AppColors.skyBlue);
+    final line = profile['line_number'];
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () async {
+        await CsoTicketSheet.show(context, b);
+        if (mounted) _loadTickets();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                ready
+                    ? Icons.print_rounded
+                    : (late
+                        ? Icons.priority_high_rounded
+                        : Icons.hourglass_top_rounded),
+                color: color,
+                size: 21,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${line == null ? '' : '#L$line · '}${driver['name'] ?? '-'}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.ink,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Bandara → ${m(b['zone_to'])['name'] ?? '-'}',
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(color: AppColors.inkSoft, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                ready ? 'Karcis siap' : (late ? 'Terlambat' : 'Menunggu'),
+                style: TextStyle(
+                  color: color == AppColors.warning
+                      ? const Color(0xFFB86A00)
+                      : color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.inkFaint),
+          ],
+        ),
       ),
     );
   }

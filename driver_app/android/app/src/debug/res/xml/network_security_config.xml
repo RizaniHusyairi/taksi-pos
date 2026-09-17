@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Override khusus build debug: izinkan HTTP polos supaya `flutter run` bisa
+     menembak `php artisan serve` di PC (adb reverse ke 127.0.0.1:8000 atau IP
+     LAN). Tidak ikut ter-bundle ke build release. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -5,6 +5,7 @@ import '../../services/thermal_printer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
 import 'cso_printer_picker_sheet.dart';
+import 'cso_ticket_sheet.dart';
 
 /// Ringkasan struk setelah order berhasil dibuat, dengan QR ke struk publik.
 /// Tombol "Cetak/Simpan" & "Bagikan" menghasilkan PDF struk (share ke WhatsApp dll).
@@ -13,6 +14,12 @@ class CsoReceiptSheet extends StatelessWidget {
   const CsoReceiptSheet({super.key, required this.booking});
 
   static Future<void> show(BuildContext context, Map<String, dynamic> booking) {
+    // Order yang penumpangnya belum naik memakai sheet karcis: cetak & WA
+    // terkunci sampai supir "SAYA JEMPUT". Semua pintu masuk (dashboard,
+    // riwayat) otomatis ikut aturan yang sama.
+    if (booking['status'] == 'Assigned') {
+      return CsoTicketSheet.show(context, booking);
+    }
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,

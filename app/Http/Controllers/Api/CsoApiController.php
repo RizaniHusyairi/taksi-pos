@@ -18,6 +18,7 @@ use App\Models\Setting;
 use App\Models\AdminNotification;
 use App\Services\AdminNotifier;
 use App\Services\PushNotifier;
+use App\Services\QueueHeadsUpService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\NewOrderForDriver; // Kita akan buat Mailable ini nanti
@@ -95,36 +96,12 @@ class CsoApiController extends Controller
     }
 
     /**
-     * Antrian supir yang BENAR-BENAR siap menerima order, terurut giliran:
-     * sort_order ASC (0,1,2 ... 1000+ = rejoin), lalu created_at ASC
-     * (sesama sort_order: siapa cepat dia dapat).
-     *
-     * Satu-satunya definisi "giliran berikutnya" — dipakai getAvailableDrivers(),
-     * processOrder(), dan changeDriver() supaya tidak ada dua versi kriteria.
+     * Antrian supir siap, terurut giliran. Definisinya ada di
+     * DriverQueue::scopeReady() — dipakai bersama QueueHeadsUpService.
      */
     private function readyQueueQuery()
     {
-        return DriverQueue::with(['driver.driverProfile'])
-            ->whereHas('driver.driverProfile', function ($query) {
-                // Hanya driver yang BENAR-BENAR siap: sudah tiba & standby, dan tidak
-                // sedang di luar area. Cegah order jatuh ke driver yang belum datang
-                // (mis. hasil pre-fill rotasi harian yang masih offline & lat/lng 0).
-                $query->whereIn('status', ['standby', 'available'])
-                      ->whereNull('out_of_area_since')
-                      // ...DAN masih mengirim kabar. Tanpa syarat ini, supir
-                      // yang mematikan aplikasi lalu pulang tetap memegang
-                      // gilirannya: `out_of_area_since` hanya terisi kalau ada
-                      // ping, jadi HP yang diam terlihat sama seperti supir
-                      // yang setia menunggu di bandara. Aplikasi mengirim
-                      // heartbeat tiap 75 detik, jadi ambang menit-an ini tidak
-                      // akan mengganggu supir yang benar-benar hadir.
-                      ->whereNotNull('location_updated_at')
-                      ->where('location_updated_at', '>=', now()->subMinutes(
-                          (int) config('taksi.driver_queue.stale_location_minutes')
-                      ));
-            })
-            ->orderBy('sort_order', 'asc')
-            ->orderBy('created_at', 'asc');
+        return DriverQueue::with(['driver.driverProfile'])->ready();
     }
 
     /**
@@ -345,6 +322,7 @@ class CsoApiController extends Controller
             
             
             $status = 'Assigned';
+            [$assignedLat, $assignedLng] = $this->driverPositionNow((int) $validated['driver_id']);
 
             // B. Simpan Data Booking
             $booking = Booking::create([
@@ -359,6 +337,9 @@ class CsoApiController extends Controller
                 // dipercaya. Lihat migrasi 2026_08_24_000004.
                 'queue_override'    => $isOverride,
                 'skipped_driver_id' => $isOverride ? $topDriverId : null,
+                // Titik acuan konfirmasi jemput otomatis (lihat updateLocation).
+                'assigned_lat'      => $assignedLat,
+                'assigned_lng'      => $assignedLng,
             ]);
 
             // C. Simpan Transaksi (Jika ada pembayaran ke kantor/QRIS)
@@ -410,32 +391,15 @@ class CsoApiController extends Controller
         try {
             $driver = $result->driver;
             $waToken = Setting::getValue('wa_token');
-            
-            // Link Struk (menggunakan ID transaksi)
-            $receiptUrl = route('receipt.show', $result->transaction->receipt_token);
-            
+
             $zoneName = $result->zoneTo->name;
             $priceRp = number_format($result->price, 0, ',', '.');
 
-            // --- AMBIL DATA SUPIR & LINE NUMBER ---
-            $driverName = $driver->name;
-            // Cek apakah ada line number, jika ada format jadi (#L5), jika tidak kosongkan
-            $driverLine = !empty($driver->driverProfile->line_number) 
-                ? "(#L" . $driver->driverProfile->line_number . ")" 
-                : "";
-            
-            // --- A. KIRIM WA KE PENUMPANG ---
-            if ($waToken && $passengerPhone) {
-                $msgPassenger = "*STRUK PEMBAYARAN TAKSI*\n\n"
-                    . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n\n"
-                    . "📍 Tujuan: $zoneName\n"
-                    . "🚖 Supir: *$driverName $driverLine*\n" // <--- BARIS INI DITAMBAHKAN
-                    . "💰 Tarif: Rp $priceRp\n\n"
-                    . "Lihat struk digital Anda di sini:\n"
-                    . "$receiptUrl\n\n"
-                    . "Selamat menikmati perjalanan!";
-            \App\Jobs\SendWhatsAppMessage::dispatch($passengerPhone, $msgPassenger, $waToken);
-            }
+            // --- A. WA KE PENUMPANG: TIDAK lagi otomatis di sini ---
+            // Karcis baru terbit setelah supir "SAYA JEMPUT", dan CSO sendiri
+            // yang memilih mengirimnya lewat WA (sendTicketWhatsApp) atau
+            // mencetaknya. Mengirim sekarang berarti penumpang bisa memegang
+            // nama supir yang akhirnya diganti.
 
             // --- B. KIRIM WA KE DRIVER ---
             // Asumsi driver punya no HP di kolom 'phone_number' atau 'username'
@@ -484,6 +448,9 @@ class CsoApiController extends Controller
         } catch (\Exception $e) {
             Log::error("Notifikasi Gagal: " . $e->getMessage());
         }
+
+        // Antrian bergeser satu — beri tahu supir yang kini di posisi 1–2.
+        app(QueueHeadsUpService::class)->notify();
 
         return response()->json([
             'message'        => 'Order berhasil diproses',
@@ -596,10 +563,21 @@ class CsoApiController extends Controller
             // Jalur kedua yang bisa melewati giliran — ditandai sama seperti
             // processOrder() supaya "Ganti Supir" tidak jadi pintu belakang
             // yang luput dari laporan override.
+            [$assignedLat, $assignedLng] = $this->driverPositionNow($newDriverId);
             $booking->update([
                 'driver_id'         => $newDriverId,
                 'queue_override'    => $isOverride,
                 'skipped_driver_id' => $isOverride ? $topDriverId : null,
+                // Supir baru harus mengonfirmasi jemput sendiri. Konfirmasi
+                // supir lama tidak boleh ikut terbawa — karcisnya akan
+                // menunjuk mobil yang tidak datang.
+                'assigned_lat'        => $assignedLat,
+                'assigned_lng'        => $assignedLng,
+                'pickup_confirmed_at' => null,
+                'pickup_lat'          => null,
+                'pickup_lng'          => null,
+                'pickup_source'       => null,
+                'ticket_wa_sent_at'   => null,
             ]);
 
             // Keluarkan supir baru dari antrian karena sekarang mendapat order.
@@ -647,6 +625,8 @@ class CsoApiController extends Controller
         } catch (\Exception $e) {
             Log::error('Notifikasi ganti supir gagal: ' . $e->getMessage());
         }
+
+        app(QueueHeadsUpService::class)->notify();
 
         return response()->json([
             'message' => 'Supir berhasil diganti.',
@@ -870,6 +850,99 @@ class CsoApiController extends Controller
     /**
      * Helper pengiriman push notification FCM (HTTP v1) ke satu supir.
      */
+    /**
+     * Order milik CSO ini yang karcisnya belum/baru terbit: masih menunggu
+     * supir berangkat, atau supir sudah berangkat hari ini. Cadangan polling
+     * untuk push `ticket_ready` yang bisa saja tidak sampai.
+     */
+    public function pendingTickets(Request $request)
+    {
+        $bookings = Booking::where('cso_id', $request->user()->id)
+            // Completed ikut: supir yang sangat cepat mengantar tidak boleh
+            // membuat karcisnya hilang dari layar CSO sebelum sempat dicetak.
+            ->whereIn('status', ['Assigned', 'OnTrip', 'Completed'])
+            ->whereDate('created_at', now()->toDateString())
+            ->with(['driver.driverProfile', 'zoneTo', 'cso', 'transaction'])
+            ->latest()
+            ->limit(20)
+            ->get();
+
+        return response()->json(['data' => $bookings]);
+    }
+
+    /**
+     * Opsi kedua penyerahan karcis: kirim ke WhatsApp penumpang.
+     *
+     * Dulu terkirim otomatis saat order dibuat. Kini hanya setelah supir
+     * mengonfirmasi jemput, supaya nama & plat di pesan pasti mobil yang datang.
+     */
+    public function sendTicketWhatsApp(Request $request, Booking $booking)
+    {
+        if ((int) $booking->cso_id !== (int) $request->user()->id) {
+            return response()->json(['message' => 'Order ini bukan milik Anda.'], 403);
+        }
+        if ($booking->pickup_confirmed_at === null) {
+            return response()->json(['message' => 'Karcis belum terbit — supir belum berangkat menjemput.'], 422);
+        }
+        if (empty($booking->passenger_phone)) {
+            return response()->json(['message' => 'Nomor WhatsApp penumpang tidak diisi.'], 422);
+        }
+
+        $jeda = (int) config('taksi.pickup.wa_resend_seconds', 60);
+        if ($booking->ticket_wa_sent_at && $booking->ticket_wa_sent_at->diffInSeconds(now()) < $jeda) {
+            return response()->json(['message' => "Tunggu {$jeda} detik sebelum mengirim ulang."], 429);
+        }
+
+        $waToken = Setting::getValue('wa_token');
+        if (!$waToken) {
+            return response()->json(['message' => 'WhatsApp gateway belum dikonfigurasi admin.'], 503);
+        }
+
+        $booking->loadMissing(['driver.driverProfile', 'zoneTo', 'transaction']);
+        $driver  = $booking->driver;
+        $profile = $driver?->driverProfile;
+
+        $mobil = trim(implode(' · ', array_filter([
+            $profile?->plate_number,
+            $profile?->line_number ? "#L{$profile->line_number}" : null,
+        ])));
+
+        $pesan = "*KARCIS TAKSI*\n\n"
+            . "Terima kasih telah menggunakan jasa Koperasi Angkasa Jaya.\n\n"
+            . "🚖 Supir: *" . ($driver->name ?? '-') . "*\n"
+            . ($mobil !== '' ? "🔖 Mobil: *{$mobil}*\n" : '')
+            . "📍 Tujuan: " . ($booking->zoneTo->name ?? $booking->manual_destination ?? '-') . "\n"
+            . "💰 Tarif: Rp " . number_format($booking->price, 0, ',', '.') . "\n\n"
+            . "Supir sedang menuju Anda.\n"
+            . ($booking->transaction?->receipt_token
+                ? "Struk digital:\n" . route('receipt.show', $booking->transaction->receipt_token) . "\n\n"
+                : "\n")
+            . "Selamat menikmati perjalanan!";
+
+        \App\Jobs\SendWhatsAppMessage::dispatch($booking->passenger_phone, $pesan, $waToken);
+        $booking->update(['ticket_wa_sent_at' => now()]);
+
+        return response()->json([
+            'message' => 'Karcis dikirim ke WhatsApp penumpang.',
+            'data'    => $booking->fresh(['driver.driverProfile', 'zoneTo', 'cso', 'transaction']),
+        ]);
+    }
+
+    /**
+     * Posisi supir saat order diberikan — acuan konfirmasi jemput otomatis.
+     * (0,0) adalah sentinel "belum ada fix", bukan lokasi.
+     */
+    private function driverPositionNow(int $driverId): array
+    {
+        $profile = DriverProfile::where('user_id', $driverId)->first(['latitude', 'longitude']);
+        if (!$profile || $profile->latitude === null
+            || ((float) $profile->latitude === 0.0 && (float) $profile->longitude === 0.0)) {
+            return [null, null];
+        }
+
+        return [$profile->latitude, $profile->longitude];
+    }
+
     private function pushFcmToDriver($driver, string $title, string $body, array $data = [])
     {
         // Penjagaan token & antrean kini terpusat di PushNotifier, dipakai

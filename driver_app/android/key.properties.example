@@ -1,0 +1,11 @@
+# Salin file ini jadi `key.properties` (tidak di-commit) lalu isi nilainya.
+# Bikin keystore-nya sekali saja, simpan baik-baik: kalau hilang, update APK
+# berikutnya tidak bisa menimpa yang sudah terpasang di HP driver.
+#
+#   keytool -genkey -v -keystore C:/kunci/kaj-driver.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias kaj-driver
+#
+storeFile=C:/kunci/kaj-driver.jks
+storePassword=isi-password-keystore
+keyAlias=kaj-driver
+keyPassword=isi-password-key

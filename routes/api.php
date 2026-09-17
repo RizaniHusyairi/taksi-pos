@@ -181,6 +181,10 @@ Route::middleware('auth:sanctum')->group(function() {
 
         Route::post('/bookings/{booking}/change-driver', [CsoApiController::class, 'changeDriver']);
 
+        // Karcis: terbit setelah supir "SAYA JEMPUT"; diserahkan lewat cetak (di app) atau WA.
+        Route::get('/pending-tickets', [CsoApiController::class, 'pendingTickets']);
+        Route::post('/bookings/{booking}/ticket/whatsapp', [CsoApiController::class, 'sendTicketWhatsApp']);
+
         // Setoran tunai CSO ke admin. `outstanding` didaftarkan SEBELUM
         // `{deposit}` supaya tidak tertelan route model binding.
         Route::get('/deposits/outstanding', [CsoApiController::class, 'depositOutstanding']);
@@ -201,6 +205,8 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/status', [DriverApiController::class, 'setStatus']);
         Route::post('/bookings/{booking}/complete', [DriverApiController::class, 'completeBooking']);
         Route::post('/bookings/{booking}/start', [DriverApiController::class, 'startBooking']);
+        // "SAYA JEMPUT": supir berangkat menjemput -> karcis di aplikasi CSO terbit.
+        Route::post('/bookings/{booking}/pickup', [DriverApiController::class, 'confirmPickup']);
         
         // Fitur Dompet (Wallet)
         Route::get('/balance', [DriverApiController::class, 'getBalance']);

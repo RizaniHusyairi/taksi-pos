@@ -186,6 +186,25 @@ class ApiService {
     return await _dio.post('/driver/bookings/$bookingId/start');
   }
 
+  /// "SAYA JEMPUT": supir berangkat menjemput -> karcis di konter CSO terbit.
+  /// [source] 'notification' bila ditekan dari tombol di notifikasi.
+  Future<Response> confirmPickup(int bookingId, {String source = 'button'}) async {
+    return await _dio.post(
+      '/driver/bookings/$bookingId/pickup',
+      data: {'source': source},
+    );
+  }
+
+  /// Order milik CSO yang karcisnya menunggu / baru terbit (cadangan push).
+  Future<Response> getCsoPendingTickets() async {
+    return await _dio.get('/cso/pending-tickets');
+  }
+
+  /// Opsi kedua penyerahan karcis: kirim ke WhatsApp penumpang.
+  Future<Response> csoSendTicketWhatsApp(int bookingId) async {
+    return await _dio.post('/cso/bookings/$bookingId/ticket/whatsapp');
+  }
+
   Future<Response> completeBooking(int bookingId) async {
     return await _dio.post('/driver/bookings/$bookingId/complete');
   }
