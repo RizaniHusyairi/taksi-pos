@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/thermal_printer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/api_error.dart';
+import '../../widgets/cso/cso_printer_picker_sheet.dart';
 
 /// Tab Profil CSO — desain bold & interaktif: hero gradien dengan avatar
 /// (ring + indikator online berdenyut), animasi masuk fade/slide, kartu
@@ -25,6 +27,9 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
 
   bool _savingProfile = false;
   bool _savingPass = false;
+  bool _printOpen = false;
+  bool _printingTest = false;
+  String? _printerName;
 
   bool _editOpen = false;
   bool _passOpen = false;
@@ -38,6 +43,41 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
       _nameCtrl.text = (user?['name'] ?? '').toString();
       _usernameCtrl.text = (user?['username'] ?? '').toString();
     });
+    _loadPrinterName();
+  }
+
+  Future<void> _loadPrinterName() async {
+    final name = await ThermalPrinterService.savedName();
+    if (mounted) setState(() => _printerName = name);
+  }
+
+  Future<void> _pickPrinter() async {
+    await CsoPrinterPickerSheet.show(context);
+    await _loadPrinterName();
+  }
+
+  /// Cetak karcis contoh untuk cek printer & kertas tanpa membuat transaksi.
+  Future<void> _testPrint() async {
+    final mac = await ThermalPrinterService.savedMac();
+    if (mac == null || mac.isEmpty) {
+      if (!mounted) return;
+      final picked = await CsoPrinterPickerSheet.show(context);
+      await _loadPrinterName();
+      if (picked != true) return;
+    }
+    if (!mounted) return;
+    setState(() => _printingTest = true);
+    try {
+      final name = context.read<AuthProvider>().user?['name']?.toString();
+      await ThermalPrinterService.printTest(csoName: name);
+      _toast('Tes print terkirim ke printer.');
+    } on PrinterException catch (e) {
+      _toast(e.message);
+    } catch (_) {
+      _toast('Gagal mencetak. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _printingTest = false);
+    }
   }
 
   @override
@@ -220,6 +260,41 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
                   _savingPass,
                   _changePassword,
                   AppColors.gold,
+                ),
+              ],
+            ),
+          ),
+          _expandable(
+            icon: Icons.print_rounded,
+            color: AppColors.skyBlue,
+            title: 'Printer Karcis',
+            subtitle: _printerName == null || _printerName!.isEmpty
+                ? 'Belum ada printer dipilih'
+                : _printerName!,
+            open: _printOpen,
+            onToggle: () => setState(() => _printOpen = !_printOpen),
+            child: Column(
+              children: [
+                const Text(
+                  'Cetak karcis contoh untuk mengecek printer, kertas & tampilan. '
+                  'Tidak membuat transaksi.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 14),
+                _primaryButton(
+                  'Tes Print Karcis',
+                  Icons.print_rounded,
+                  _printingTest,
+                  _testPrint,
+                  AppColors.skyBlue,
+                ),
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: _printingTest ? null : _pickPrinter,
+                  icon: const Icon(Icons.bluetooth_rounded, size: 16),
+                  label: const Text('Pilih / ganti printer'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: AppColors.inkSoft),
                 ),
               ],
             ),

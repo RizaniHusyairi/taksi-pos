@@ -48,6 +48,31 @@ class ThermalPrinterService {
   /// Pastikan tersambung ke printer tersimpan lalu cetak karcis dari [booking].
   /// Melempar [PrinterException] berisi pesan ramah bila gagal.
   static Future<void> printReceipt(Map<String, dynamic> booking) async {
+    await _send(await _buildTicket(booking));
+  }
+
+  /// Cetak karcis contoh (data rekaan, bertanda TES PRINT) untuk mengecek
+  /// printer, kertas & tampilan tanpa membuat transaksi. [csoName] = kasir.
+  static Future<void> printTest({String? csoName}) async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    await _send(await _buildTicket({
+      'id': 0,
+      'price': 150000,
+      'driver': {
+        'name': 'Contoh Supir',
+      },
+      'zone_to': {'name': 'Samarinda Kota'},
+      'cso': {'name': csoName ?? 'Kasir'},
+      'transaction': {
+        'id': 'TES',
+        'method': 'QRIS',
+        'created_at': now,
+        'receipt_token': 'tes-print',
+      },
+    }, test: true));
+  }
+
+  static Future<void> _send(List<int> bytes) async {
     final mac = await savedMac();
     if (mac == null || mac.isEmpty) {
       throw PrinterException('Belum ada printer dipilih. Pilih printer dulu.');
@@ -62,87 +87,75 @@ class ThermalPrinterService {
             'Gagal menyambung ke printer. Pastikan printer menyala & dekat.');
       }
     }
-    final bytes = await _buildTicket(booking);
     final printed = await PrintBluetoothThermal.writeBytes(bytes);
     if (!printed) {
       throw PrinterException('Gagal mengirim data ke printer. Coba lagi.');
     }
   }
 
-  static Future<List<int>> _buildTicket(Map<String, dynamic> booking) async {
+  /// Lebar kertas 58 mm = 384 dot = 32 karakter Font A per baris. Semua baris
+  /// dirakit manual (padding spasi) supaya rapi di printer murah sekalipun —
+  /// tidak bergantung pada perintah posisi kolom ESC/POS.
+  static const _cols = 32;
+
+  static Future<List<int>> _buildTicket(Map<String, dynamic> booking,
+      {bool test = false}) async {
     final f = _TicketData.from(booking);
     final profile = await CapabilityProfile.load();
     final g = Generator(PaperSize.mm58, profile);
-    List<int> b = [];
+    List<int> b = g.reset();
 
-    // Logo koperasi (hitam-putih) di atas karcis.
+    // ── Kop ──────────────────────────────────────────
     final logo = await _loadLogo();
     if (logo != null) {
       b += g.image(logo);
-      b += g.feed(1);
     }
-
     b += g.text('KOPERASI ANGKASA JAYA',
         styles: const PosStyles(
-            align: PosAlign.center,
+            align: PosAlign.center, bold: true, height: PosTextSize.size2));
+    b += g.text('Bandara APT Pranoto Samarinda',
+        styles: const PosStyles(align: PosAlign.center));
+    b += g.feed(1);
+    if (test) {
+      b += _center(g, '*** TES PRINT ***', bold: true, tall: true);
+    }
+    b += _kv(g, 'No.', '#${f.code}', bold: true);
+    b += g.hr(ch: '=');
+
+    // ── Rincian ──────────────────────────────────────
+    b += _kv(g, 'Tanggal', f.dateStr);
+    b += _kv(g, 'Jam', f.timeStr);
+    b += _kv(g, 'Supir', f.driverName);
+    b += _kv(g, 'Kasir', f.kasir);
+    b += _kv(g, 'Bayar', f.methodLabel);
+    b += g.hr(ch: '.');
+    b += _center(g, 'TUJUAN');
+    b += _center(g, f.zoneName.toUpperCase(), bold: true, tall: true);
+    b += g.hr(ch: '=');
+
+    // ── Total ────────────────────────────────────────
+    // Muat 16 karakter lebar ganda → cetak besar; nominal jutaan → tinggi saja.
+    final wide = 'TOTAL'.length + 1 + f.amountStr.length <= _cols ~/ 2;
+    final w = wide ? _cols ~/ 2 : _cols;
+    b += g.text('TOTAL${f.amountStr.padLeft(w - 5)}',
+        styles: PosStyles(
             bold: true,
             height: PosTextSize.size2,
-            width: PosTextSize.size2));
-    b += g.text('Bandar Udara APT. Pranoto Samarinda',
-        styles: const PosStyles(align: PosAlign.center));
-    b += g.text('KARCIS TAKSI',
-        styles: const PosStyles(align: PosAlign.center, bold: true));
-    b += g.hr();
-
-    // Penunjuk mobil: yang pertama dicari penumpang di pintu keluar, jadi
-    // plat nomor & nomor lambung dicetak paling besar.
-    if (f.plate != '-') {
-      b += g.text(f.plate,
-          styles: const PosStyles(
-              align: PosAlign.center,
-              bold: true,
-              height: PosTextSize.size2,
-              width: PosTextSize.size2));
-    }
-    b += g.text(f.lineLabel.isEmpty ? f.driverName : '${f.lineLabel}  ${f.driverName}',
-        styles: const PosStyles(
-            align: PosAlign.center, bold: true, height: PosTextSize.size2));
-    if (f.pickupTimeStr != null) {
-      b += g.text('Supir berangkat menjemput ${f.pickupTimeStr}',
-          styles: const PosStyles(align: PosAlign.center));
-    }
-    b += g.hr();
-
-    b += _kv(g, 'No.', f.code, bold: true);
-    b += _kv(g, 'Waktu', f.dateTimeStr);
-    b += _kv(g, 'Kasir', f.kasir);
-    b += _kv(g, 'Supir', f.driverDisplay);
-    b += g.hr(ch: '.');
-    b += _kv(g, 'Tujuan', f.zoneName, bold: true);
-    b += _kv(g, 'Bayar', f.methodLabel);
-    b += g.hr();
-
-    b += g.row([
-      PosColumn(
-          text: 'TOTAL',
-          width: 5,
-          styles: const PosStyles(bold: true, height: PosTextSize.size2)),
-      PosColumn(
-          text: f.amountStr,
-          width: 7,
-          styles: const PosStyles(
-              align: PosAlign.right, bold: true, height: PosTextSize.size2)),
-    ]);
-    b += g.hr();
+            width: wide ? PosTextSize.size2 : PosTextSize.size1));
+    b += g.hr(ch: '=');
     b += g.feed(1);
 
+    // ── QR & penutup ─────────────────────────────────
+    if (test) {
+      b += _center(g, 'BUKAN BUKTI PEMBAYARAN', bold: true);
+      b += g.feed(1);
+    }
     b += g.qrcode(f.publicUrl, size: QRSize.size6);
-    b += g.text('Scan untuk cek struk online',
-        styles: const PosStyles(align: PosAlign.center));
-    b += g.feed(1);
-    b += g.text('Terima kasih & selamat jalan',
-        styles: const PosStyles(align: PosAlign.center));
-    b += g.feed(2);
+    b += _center(g, 'Scan untuk cek struk online');
+    b += g.hr();
+    b += _center(g, 'Terima kasih & selamat jalan', bold: true);
+    b += _center(g, 'Simpan karcis sbg bukti bayar');
+    b += g.feed(3);
     b += g.cut();
     return b;
   }
@@ -166,14 +179,60 @@ class ThermalPrinterService {
     }
   }
 
+  /// Baris "label ........ nilai": label rata kiri, nilai rata kanan; nilai
+  /// panjang dibungkus ke baris berikut tetap rata kanan.
   static List<int> _kv(Generator g, String k, String v, {bool bold = false}) {
-    return g.row([
-      PosColumn(text: k, width: 4),
-      PosColumn(
-          text: v,
-          width: 8,
-          styles: PosStyles(align: PosAlign.right, bold: bold)),
-    ]);
+    const labelW = 8;
+    final lines = _wrap(v, _cols - labelW);
+    List<int> b = [];
+    for (var i = 0; i < lines.length; i++) {
+      b += g.text((i == 0 ? k : '').padRight(labelW) + lines[i].padLeft(_cols - labelW),
+          styles: PosStyles(bold: bold));
+    }
+    return b;
+  }
+
+  /// Teks rata tengah yang dibungkus per kata sesuai lebar efektif
+  /// ([wide] = huruf lebar ganda → 16 karakter per baris).
+  static List<int> _center(Generator g, String text,
+      {bool bold = false, bool tall = false, bool wide = false}) {
+    List<int> b = [];
+    for (final line in _wrap(text, wide ? _cols ~/ 2 : _cols)) {
+      b += g.text(line,
+          styles: PosStyles(
+              align: PosAlign.center,
+              bold: bold,
+              height: tall ? PosTextSize.size2 : PosTextSize.size1,
+              width: wide ? PosTextSize.size2 : PosTextSize.size1));
+    }
+    return b;
+  }
+
+  /// Bungkus per kata ke baris selebar [width]; kata kepanjangan dipotong paksa.
+  static List<String> _wrap(String s, int width) {
+    final lines = <String>[];
+    var cur = '';
+    for (var word in s.split(RegExp(r'\s+'))) {
+      if (word.isEmpty) continue;
+      while (word.length > width) {
+        if (cur.isNotEmpty) {
+          lines.add(cur);
+          cur = '';
+        }
+        lines.add(word.substring(0, width));
+        word = word.substring(width);
+      }
+      if (cur.isEmpty) {
+        cur = word;
+      } else if (cur.length + 1 + word.length <= width) {
+        cur += ' $word';
+      } else {
+        lines.add(cur);
+        cur = word;
+      }
+    }
+    if (cur.isNotEmpty || lines.isEmpty) lines.add(cur);
+    return lines;
   }
 }
 
@@ -181,46 +240,40 @@ class ThermalPrinterService {
 class _TicketData {
   final String code;
   final String zoneName;
-  final String driverDisplay;
   final String kasir;
   final String methodLabel;
-  final String dateTimeStr;
+  final String dateStr;
+  final String timeStr;
   final String amountStr;
   final String publicUrl;
-  final String plate;
-  final String lineLabel;
   final String driverName;
-  final String? pickupTimeStr;
 
   _TicketData({
     required this.code,
     required this.zoneName,
-    required this.driverDisplay,
     required this.kasir,
     required this.methodLabel,
-    required this.dateTimeStr,
+    required this.dateStr,
+    required this.timeStr,
     required this.amountStr,
     required this.publicUrl,
-    required this.plate,
-    required this.lineLabel,
     required this.driverName,
-    required this.pickupTimeStr,
   });
 
   factory _TicketData.from(Map<String, dynamic> booking) {
     Map<String, dynamic> m(dynamic v) =>
         (v as Map?)?.cast<String, dynamic>() ?? const {};
     final driver = m(booking['driver']);
-    final profile = m(driver['driver_profile']);
     final zone = m(booking['zone_to']);
     final cso = m(booking['cso']);
     final tx = m(booking['transaction']);
 
-    String s(dynamic v, [String fb = '-']) =>
-        (v == null || v.toString().isEmpty) ? fb : v.toString();
+    // Printer thermal hanya paham ASCII; huruf lain (é, emoji) diganti '?'
+    // supaya encoder tak gagal di tengah cetak.
+    String s(dynamic v, [String fb = '-']) => (v == null || v.toString().isEmpty)
+        ? fb
+        : v.toString().replaceAll(RegExp(r'[^ -~]'), '?');
 
-    final line =
-        profile['line_number'] == null ? '' : ' #L${profile['line_number']}';
     final method = s(tx['method'], 'QRIS');
     final methodLabel = method == 'CashDriver'
         ? 'Tunai (Supir)'
@@ -231,25 +284,17 @@ class _TicketData {
     final code = s(tx['id'] ?? booking['id']);
     final dt = DateTime.tryParse('${tx['created_at'] ?? ''}')?.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
-    final pickup =
-        DateTime.tryParse('${booking['pickup_confirmed_at'] ?? ''}')?.toLocal();
-    final dateTimeStr = dt == null
-        ? '-'
-        : '${two(dt.day)}/${two(dt.month)}/${dt.year} ${two(dt.hour)}:${two(dt.minute)}';
 
     return _TicketData(
       code: code,
       zoneName: s(zone['name']),
-      driverDisplay: '${s(driver['name'])}$line',
       kasir: s(cso['name']).split(' ').first,
       methodLabel: methodLabel,
-      dateTimeStr: dateTimeStr,
+      dateStr: dt == null ? '-' : '${two(dt.day)}/${two(dt.month)}/${dt.year}',
+      timeStr: dt == null ? '-' : '${two(dt.hour)}:${two(dt.minute)} WITA',
       amountStr: formatRupiah(amount),
       publicUrl: '${ApiService.assetBaseUrl}/receipt/${s(tx['receipt_token'], code)}',
-      plate: s(profile['plate_number']).toUpperCase(),
-      lineLabel: profile['line_number'] == null ? '' : '#L${profile['line_number']}',
       driverName: s(driver['name']),
-      pickupTimeStr: pickup == null ? null : '${two(pickup.hour)}:${two(pickup.minute)}',
     );
   }
 }
