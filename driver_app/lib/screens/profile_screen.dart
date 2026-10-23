@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/fade_in.dart';
+import '../widgets/profile_avatar.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
 
@@ -88,7 +89,7 @@ class ProfileScreen extends StatelessWidget {
                       icon: Icons.logout_rounded,
                       label: 'Keluar',
                       color: AppColors.danger,
-                      onTap: () => auth.logout(),
+                      onTap: () => _konfirmasiKeluar(context, auth),
                     ),
                   ),
                 ],
@@ -100,20 +101,79 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  /// Satu-satunya jalan keluar akun supir (tombol di beranda sudah dihapus),
+  /// jadi diberi konfirmasi: salah ketuk berarti order tidak masuk.
+  Future<void> _konfirmasiKeluar(
+    BuildContext context,
+    AuthProvider auth,
+  ) async {
+    final keluar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        icon: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.danger.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.logout_rounded,
+            color: AppColors.danger,
+            size: 30,
+          ),
+        ),
+        title: Text(
+          'Keluar dari akun?',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.w800,
+            color: AppColors.ink,
+          ),
+        ),
+        content: Text(
+          'Anda perlu masuk lagi untuk bisa menerima order.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(color: AppColors.inkSoft, height: 1.4),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Batal',
+              style: GoogleFonts.outfit(
+                color: AppColors.inkSoft,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Ya, Keluar',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (keluar == true) await auth.logout();
+  }
+
+  static String _inisial(dynamic nama) {
+    final n = '${nama ?? ''}'.trim();
+    return n.isEmpty ? 'D' : n[0].toUpperCase();
+  }
+
   Widget _profileHero(Map<String, dynamic>? user) {
     return Row(
       children: [
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
-          ),
-          child: const CircleAvatar(
-            radius: 32,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.person_rounded, size: 36, color: AppColors.deepBlue),
-          ),
+        ProfileAvatar(
+          photoPath: user?['photo_path']?.toString(),
+          inisial: _inisial(user?['name']),
+          size: 76,
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -224,8 +284,10 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Icon(Icons.chevron_right_rounded,
-                  color: color.withValues(alpha: 0.6)),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: color.withValues(alpha: 0.6),
+              ),
             ],
           ),
         ),

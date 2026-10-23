@@ -710,13 +710,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onTap: () => auth.fetchProfile(),
                 tooltip: 'Segarkan',
               ),
-              HeaderIconButton(
-                icon: Icons.logout_rounded,
-                onTap: () => auth.logout(),
-                tooltip: 'Keluar',
-              ),
             ],
-            child: _driverHeaderCard(name, profile, status),
+            child: _driverHeaderCard(
+              name,
+              profile,
+              status,
+              user?['photo_path']?.toString(),
+            ),
           ),
           Expanded(
             child: RefreshIndicator(
