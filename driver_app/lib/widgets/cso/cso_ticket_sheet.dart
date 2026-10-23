@@ -224,6 +224,31 @@ class _CsoTicketSheetState extends State<CsoTicketSheet>
     await launchUrl(Uri(scheme: 'tel', path: phone));
   }
 
+  /// WhatsApp supir dengan pesan siap kirim — untuk supir yang tidak
+  /// mengangkat telepon (sedang di luar mobil / ponsel senyap).
+  Future<void> _waDriver() async {
+    final digits = _s(_driver['phone_number'], '').replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Nomor HP supir belum terdaftar.'),
+      ));
+      return;
+    }
+    final nomor = digits.startsWith('0') ? '62${digits.substring(1)}' : digits;
+    final pesan = 'Halo ${_s(_driver['name'], 'Pak')}, ada order ke '
+        '${_s(_m(_b['zone_to'])['name'])} untuk Anda. Mohon segera tekan '
+        'SAYA JEMPUT di aplikasi. Terima kasih.';
+    final ok = await launchUrl(
+      Uri.parse('https://wa.me/$nomor?text=${Uri.encodeComponent(pesan)}'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('WhatsApp tidak bisa dibuka.'),
+      ));
+    }
+  }
+
   Future<void> _changeDriver() async {
     final changed = await CsoChangeDriverSheet.show(context, _b['id'] as int);
     if (changed == true) {
@@ -450,6 +475,13 @@ class _CsoTicketSheetState extends State<CsoTicketSheet>
               ),
             ],
           ],
+        ),
+        const SizedBox(height: 10),
+        _outlineAction(
+          icon: Icons.chat_rounded,
+          label: 'WhatsApp Supir',
+          color: const Color(0xFF1DA851),
+          onTap: _waDriver,
         ),
         const SizedBox(height: 10),
         TextButton(
