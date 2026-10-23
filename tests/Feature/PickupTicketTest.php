@@ -184,6 +184,30 @@ class PickupTicketTest extends TestCase
         $this->assertNull($booking->fresh()->pickup_confirmed_at);
     }
 
+    /**
+     * Keputusan koperasi 2026-09-20: supir yang tidak menekan "SAYA JEMPUT"
+     * hanya kehilangan ordernya, bukan gilirannya. Tanpa penjaga ini dia
+     * keluar antrian dan auto-join melemparnya ke barisan paling belakang.
+     */
+    public function test_supir_yang_diganti_kembali_ke_posisi_paling_depan(): void
+    {
+        [$cso, $driver, $booking] = $this->order();
+        $baru = $this->supir('2', 5);
+
+        Sanctum::actingAs($cso);
+        $this->postJson("/api/cso/bookings/{$booking->id}/change-driver", ['new_driver_id' => $baru->id])
+            ->assertOk();
+
+        $antrian = DriverQueue::ready()->get();
+        $this->assertSame($driver->id, (int) $antrian->first()->user_id);
+
+        // Supir pengganti keluar antrian karena sekarang memegang order.
+        $this->assertNull(DriverQueue::where('user_id', $baru->id)->first());
+
+        // Supir lama diberi tahu, supaya tidak mengira gilirannya hangus.
+        $this->assertSame(1, $this->fcmKe('tok-driver-1', 'order_reassigned'));
+    }
+
     // === Konfirmasi otomatis lewat lokasi ==================================
 
     public function test_mobil_bergerak_melewati_ambang_menerbitkan_karcis(): void

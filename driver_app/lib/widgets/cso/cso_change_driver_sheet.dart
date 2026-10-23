@@ -130,6 +130,8 @@ class _CsoChangeDriverSheetState extends State<CsoChangeDriverSheet> {
                 ],
               ),
             ),
+            if (!_loading && _error == null && _nextDriver != null)
+              _nextAction(_nextDriver!),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -168,6 +170,93 @@ class _CsoChangeDriverSheetState extends State<CsoChangeDriverSheet> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Supir yang sedang mendapat giliran. Backend yang menentukannya lewat
+  /// `is_next`; daftar sudah terurut giliran, jadi elemen pertama adalah
+  /// cadangan bila flag itu tidak ada.
+  QueueDriver? get _nextDriver {
+    for (final d in _drivers) {
+      if (d.isNext) return d;
+    }
+    return _drivers.isEmpty ? null : _drivers.first;
+  }
+
+  /// Jalan pintas satu ketuk: alihkan ke urutan berikutnya tanpa CSO harus
+  /// memilih nama. Ini kasus yang paling sering — supir tidak menekan
+  /// "SAYA JEMPUT" dan ordernya harus jalan sekarang.
+  Widget _nextAction(QueueDriver d) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: _submitting ? null : () => _change(d),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: AppColors.buttonGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.skip_next_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Ganti ke urutan berikutnya',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          d.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Supir yang diganti kembali ke posisi 1 — gilirannya tidak hangus.',
+            style: TextStyle(
+              color: AppColors.inkSoft,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Atau pilih supir lain di bawah:',
+            style: TextStyle(
+              color: AppColors.inkFaint,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

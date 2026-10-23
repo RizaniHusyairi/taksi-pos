@@ -583,8 +583,31 @@ class CsoApiController extends Controller
             // Keluarkan supir baru dari antrian karena sekarang mendapat order.
             DriverQueue::where('user_id', $newDriverId)->delete();
 
+            // Supir lama dikembalikan ke DEPAN antrian (posisi 1). Keputusan
+            // koperasi 2026-09-20: supir yang tidak menekan "SAYA JEMPUT"
+            // cukup kehilangan order ini, bukan gilirannya — ordernya diberikan
+            // ke urutan berikutnya, dia sendiri balik ke posisi 1.
+            //
+            // Baris ini WAJIB ada: tanpa dia supir lama keluar antrian sama
+            // sekali, lalu auto-join memasukkannya lagi ke grup rejoin
+            // (sort_order 1000 = paling belakang) — hukuman terberat, justru
+            // yang tidak dipilih koperasi.
+            $frontOrder = (int) (DriverQueue::min('sort_order') ?? 0) - 1;
+            [$oldLat, $oldLng] = $this->driverPositionNow($oldDriverId);
+            DriverQueue::updateOrCreate(
+                ['user_id' => $oldDriverId],
+                [
+                    'sort_order'     => $frontOrder,
+                    'latitude'       => $oldLat,
+                    'longitude'      => $oldLng,
+                    // Peringatan pra-giliran diulang dari nol untuk order berikutnya.
+                    'heads_up_level' => 0,
+                ]
+            );
+
             // Catat aktivitas untuk kedua supir.
             $this->logDriverActivity($oldDriverId, 'ORDER_REASSIGNED_OUT', 'Order dialihkan ke supir lain oleh CSO');
+            $this->logDriverActivity($oldDriverId, 'QUEUE_RETURN_FRONT', 'Kembali ke posisi 1 setelah ordernya dialihkan');
             $this->logDriverActivity($newDriverId, 'ORDER_REASSIGNED_IN', 'Menerima order alihan dari CSO');
             $this->logDriverActivity($newDriverId, 'QUEUE_LEAVE_ORDER', 'Keluar Antrian (Order Alihan)');
 
@@ -624,6 +647,26 @@ class CsoApiController extends Controller
             );
         } catch (\Exception $e) {
             Log::error('Notifikasi ganti supir gagal: ' . $e->getMessage());
+        }
+
+        // Beritahu supir lama: ordernya lepas, tapi gilirannya tidak hangus.
+        // Tanpa ini dia baru sadar saat membuka aplikasi dan mengira dilewati.
+        try {
+            $oldDriver = User::with('driverProfile')->find($oldDriverId);
+            if ($oldDriver) {
+                $this->pushFcmToDriver(
+                    $oldDriver,
+                    'Order Dialihkan',
+                    'Anda tidak menekan SAYA JEMPUT, order diberikan ke supir berikutnya. '
+                        . 'Giliran Anda tidak hangus — Anda kembali ke posisi 1.',
+                    [
+                        'type'       => 'order_reassigned',
+                        'booking_id' => (string) $booking->id,
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            Log::error('Notifikasi supir lama gagal: ' . $e->getMessage());
         }
 
         app(QueueHeadsUpService::class)->notify();
