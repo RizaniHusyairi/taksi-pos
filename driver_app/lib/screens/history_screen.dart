@@ -13,6 +13,29 @@ enum _Periode { hariIni, tujuhHari, tigaPuluhHari, pilih }
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
+  /// Susun daftar datar: [header tanggal, trip, trip, header, ...].
+  /// Header berupa [GrupTanggal]; trip tetap Map aslinya.
+  @visibleForTesting
+  static List<Object> susunPerTanggal(List<dynamic> history) {
+    final entri = <Object>[];
+    String? kunciTerakhir;
+    GrupTanggal? grup;
+    for (final trip in history) {
+      final t = _HistoryScreenState._waktu(trip);
+      final kunci = t == null ? '-' : '${t.year}-${t.month}-${t.day}';
+      if (grup == null || kunci != kunciTerakhir) {
+        grup = GrupTanggal(t, []);
+        entri.add(grup);
+        kunciTerakhir = kunci;
+      }
+      // Simpan referensi grup: entri.last sudah berupa trip setelah trip
+      // pertama, jadi tidak boleh di-cast ke grup (dulu crash di sini).
+      grup.trips.add(trip);
+      entri.add(trip);
+    }
+    return entri;
+  }
+
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -205,19 +228,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _daftar() {
-    // Susun daftar datar: [header tanggal, trip, trip, header, ...].
-    final entri = <Object>[];
-    String? kunciTerakhir;
-    for (final trip in _history) {
-      final t = _waktu(trip);
-      final kunci = t == null ? '-' : '${t.year}-${t.month}-${t.day}';
-      if (kunci != kunciTerakhir) {
-        entri.add(_GrupTanggal(t, []));
-        kunciTerakhir = kunci;
-      }
-      (entri.last as _GrupTanggal).trips.add(trip);
-      entri.add(trip);
-    }
+    final entri = HistoryScreen.susunPerTanggal(_history);
 
     final atas = <Widget>[
       _ringkasan(),
@@ -235,7 +246,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       itemBuilder: (context, i) {
         if (i < atas.length) return atas[i];
         final e = entri[i - atas.length];
-        if (e is _GrupTanggal) return _headerGrup(e);
+        if (e is GrupTanggal) return _headerGrup(e);
         return FadeInUp(
           delayMs: ((i - atas.length) * 35).clamp(0, 250),
           child: _tripCard(e),
@@ -467,7 +478,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   // === Grup per tanggal ===================================================
 
-  Widget _headerGrup(_GrupTanggal g) {
+  Widget _headerGrup(GrupTanggal g) {
     final total = g.trips.fold<double>(
       0,
       (s, t) => s + _angka(t['driver_share']),
@@ -935,8 +946,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-class _GrupTanggal {
+class GrupTanggal {
   final DateTime? tanggal;
   final List<dynamic> trips;
-  _GrupTanggal(this.tanggal, this.trips);
+  GrupTanggal(this.tanggal, this.trips);
 }
