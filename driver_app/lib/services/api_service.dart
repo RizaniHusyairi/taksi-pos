@@ -92,6 +92,29 @@ class ApiService {
     );
   }
 
+  /// Lupa password: server mengirim OTP ke WhatsApp yang terdaftar di akun.
+  /// [login] = username atau nomor HP. Jawabannya selalu sama, terdaftar
+  /// atau tidak.
+  Future<Response> forgotPassword(String login) async {
+    return await _dio.post('/password/forgot', data: {'login': login});
+  }
+
+  Future<Response> resetPassword({
+    required String login,
+    required String code,
+    required String password,
+  }) async {
+    return await _dio.post(
+      '/password/reset',
+      data: {
+        'login': login,
+        'code': code,
+        'password': password,
+        'password_confirmation': password,
+      },
+    );
+  }
+
   Future<Response> logout() async {
     return await _dio.post('/logout');
   }

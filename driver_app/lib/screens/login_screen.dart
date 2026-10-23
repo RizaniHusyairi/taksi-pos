@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../widgets/airport_pickup_backdrop.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -156,7 +157,29 @@ class _LoginScreenState extends State<LoginScreen> {
                               validator: (value) =>
                                   value!.isEmpty ? 'Wajib diisi' : null,
                             ),
-                            const SizedBox(height: 28),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ForgotPasswordScreen(
+                                      initialLogin:
+                                          _usernameController.text.trim(),
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Lupa kata sandi?',
+                                  style: GoogleFonts.outfit(
+                                    color: AppColors.skyBlue,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
                             Consumer<AuthProvider>(
                               builder: (context, auth, _) {
                                 return GradientButton(

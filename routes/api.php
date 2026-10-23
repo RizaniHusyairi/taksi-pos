@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
 use App\Http\Controllers\Api\ProfilePhotoController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ApiAuthController; // <-- Arahkan ke ApiAuthController
 use App\Http\Controllers\Api\ManagementApiController; // Management API (read-only) utk sistem eksternal
 
@@ -20,6 +21,11 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // endpoint tanpa autentikasi yang menerima password, jadi batasnya jauh lebih
 // ketat daripada rem umum grup api (lihat bootstrap/app.php).
 Route::post('/login', [ApiAuthController::class, 'login'])->middleware('throttle:5,1');
+
+// Lupa password (supir & CSO) lewat OTP WhatsApp. Batas per akun ada di
+// controller; rem per IP di sini menahan penebakan kode dan spam permintaan.
+Route::post('/password/forgot', [PasswordResetController::class, 'requestCode'])->middleware('throttle:5,1');
+Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
 // === MANAGEMENT API (read-only) — untuk website manajemen koperasi eksternal ===
 // Auth via API key (bukan login user). Header: Authorization: Bearer <api_key>.
