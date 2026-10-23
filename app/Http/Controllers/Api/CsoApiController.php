@@ -479,6 +479,9 @@ class CsoApiController extends Controller
             $start = $request->start_date . ' 00:00:00';
             $end   = $request->end_date . ' 23:59:59';
             $query->whereBetween('created_at', [$start, $end]);
+            // Rentang panjang (mis. sebulan) tetap dibatasi supaya payload
+            // aplikasi tidak membengkak; aplikasi memberi tahu bila terpotong.
+            $query->limit(500);
         } else {
             // Jika TIDAK ada filter, defaultnya tampilkan 50 transaksi terakhir 
             // (agar tidak terlalu berat me-load semua data sejak awal berdiri)

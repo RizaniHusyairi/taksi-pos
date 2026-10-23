@@ -49,11 +49,11 @@ class CsoTransaction {
   /// Hanya order ber-status 'Assigned' yang boleh diganti supirnya.
   bool get canChangeDriver => status == 'Assigned';
 
-  /// Menit sejak booking dibuat (untuk aturan jeda 10 menit ganti supir).
-  int get minutesSinceBooking {
-    if (bookingCreatedAt == null) return 9999;
-    return DateTime.now().difference(bookingCreatedAt!).inMinutes;
-  }
+  /// Waktu sejak booking dibuat — dipakai jeda Ganti Supir yang sama dengan
+  /// lembar karcis (CsoTicketSheet.lateAfter).
+  Duration get sinceBooking => bookingCreatedAt == null
+      ? const Duration(days: 1)
+      : DateTime.now().difference(bookingCreatedAt!.toLocal());
 
   /// Data berbentuk booking + transaksi untuk ditampilkan sebagai struk.
   Map<String, dynamic> get receiptData => {...bookingRaw, 'transaction': raw};
@@ -84,7 +84,12 @@ class CsoTransaction {
       status: (booking['status'] ?? 'Assigned').toString(),
       passengerPhone: (booking['passenger_phone'] ?? '-').toString(),
       bookingCreatedAt: toDate(booking['created_at']),
-      zoneName: (zone['name'] ?? 'Unknown').toString(),
+      // Order manual tidak punya zona — tampilkan tujuan yang diketik CSO.
+      zoneName: (zone['name'] ??
+              ((booking['manual_destination']?.toString().trim().isEmpty ?? true)
+                  ? 'Tujuan manual'
+                  : booking['manual_destination']))
+          .toString(),
       driverName: (driver['name'] ?? '-').toString(),
       driverLine: toInt(profile['line_number']),
       raw: json,

@@ -287,7 +287,7 @@ class _TicketData {
 
     return _TicketData(
       code: code,
-      zoneName: s(zone['name']),
+      zoneName: s(zone['name'], s(booking['manual_destination'])),
       kasir: s(cso['name']).split(' ').first,
       methodLabel: methodLabel,
       dateStr: dt == null ? '-' : '${two(dt.day)}/${two(dt.month)}/${dt.year}',

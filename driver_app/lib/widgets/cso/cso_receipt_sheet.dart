@@ -133,7 +133,7 @@ class CsoReceiptSheet extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _row('Tujuan', 'Bandara → ${_str(zone['name'])}'),
+                  _row('Tujuan', 'Bandara → ${_str(zone['name'] ?? booking['manual_destination'])}'),
                   _row('Supir', '${_str(driver['name'])}$line'),
                   _row('Penumpang', _str(booking['passenger_phone'])),
                   _row('Kasir', _str(cso['name'])),
