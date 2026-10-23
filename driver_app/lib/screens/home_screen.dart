@@ -443,27 +443,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await auth.fetchProfile();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Karcis diterbitkan — silakan menuju penumpang")),
+          const SnackBar(content: Text("Perjalanan dimulai — karcis diterbitkan di konter CSO")),
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(apiErrorMessage(e))),
-        );
-      }
-    }
-  }
-
-  Future<void> _startTrip(int bookingId) async {
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      await _apiService.startBooking(bookingId);
-      await auth.fetchProfile();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Perjalanan Dimulai!")));
       }
     } catch (e) {
       if (mounted) {
@@ -1022,9 +1003,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       paymentMethod = 'Tunai ke Supir';
     }
     final isOntrip = booking['status'] == 'OnTrip';
-    // Assigned punya dua fase: belum berangkat (tombol SAYA JEMPUT, karcis di
-    // konter CSO masih terkunci) dan sudah menuju penumpang.
-    final isPickedUp = booking['pickup_confirmed_at'] != null;
+    // Assigned = belum berangkat (tombol SAYA JEMPUT, karcis di konter CSO
+    // masih terkunci). SAYA JEMPUT langsung menjadikan order OnTrip.
     final accent = isOntrip ? AppColors.skyBlue : AppColors.success;
 
     return AppCard(
@@ -1063,7 +1043,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Text(
                   isOntrip
                       ? "DALAM PERJALANAN"
-                      : (isPickedUp ? "MENUJU PENUMPANG" : "ORDERAN MASUK"),
+                      : "ORDERAN MASUK",
                   style: GoogleFonts.outfit(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -1088,7 +1068,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _orderRow("CSO", csoName),
                 _orderRow("Pembayaran", paymentMethod),
                 const SizedBox(height: 24),
-                if (!isOntrip && !isPickedUp) ...[
+                if (!isOntrip) ...[
                   // Sekali tekan, tanpa dialog: supir memang tidak bisa menolak
                   // order, jadi tidak ada salah tekan yang perlu dicegah.
                   GradientButton(
@@ -1102,7 +1082,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const SizedBox(height: 8),
                   Center(
                     child: Text(
-                      "Tekan saat mulai menuju penumpang — karcis dicetak di konter CSO",
+                      "Tekan saat berangkat — perjalanan dimulai & karcis dicetak di konter CSO",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         fontSize: 12,
@@ -1110,16 +1090,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ),
-                ] else if (!isOntrip)
-                  GradientButton(
-                    label: "MULAI PERJALANAN",
-                    icon: Icons.play_arrow_rounded,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF12A06B), AppColors.success],
-                    ),
-                    onPressed: () => _startTrip(booking['id']),
-                  )
-                else
+                ] else
                   GradientButton(
                     label: "SELESAIKAN PERJALANAN",
                     icon: Icons.check_circle_rounded,

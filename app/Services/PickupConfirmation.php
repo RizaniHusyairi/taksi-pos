@@ -8,11 +8,14 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Satu pintu untuk menandai bahwa supir sudah berangkat menjemput — momen
- * yang MENERBITKAN karcis di aplikasi CSO.
+ * yang MENERBITKAN karcis di aplikasi CSO sekaligus MEMULAI perjalanan
+ * (status OnTrip). Sejak 2026-10-23 tidak ada lagi fase "menuju penumpang"
+ * terpisah: di pangkalan penumpang langsung naik, jadi tombol "MULAI
+ * PERJALANAN" dihapus dan "SAYA JEMPUT" mengambil perannya.
  *
  * Tiga jalur memanggil kelas ini, dan semuanya harus berperilaku sama:
  *  - tombol "SAYA JEMPUT" di aplikasi / notifikasi supir,
- *  - tombol "MULAI PERJALANAN" bila supir melewatkan tombol pertama,
+ *  - endpoint lama `/start` (aplikasi versi lama yang masih punya tombol MULAI),
  *  - konfirmasi otomatis saat mobil supir sudah bergerak (updateLocation).
  */
 class PickupConfirmation
@@ -24,7 +27,7 @@ class PickupConfirmation
     }
 
     /**
-     * Tandai order sebagai "supir menuju penumpang".
+     * Tandai order sebagai "supir berangkat" dan jalankan perjalanannya.
      *
      * Mengembalikan true hanya bila panggilan INI yang mengonfirmasi. Update
      * dibuat bersyarat (`whereNull`) di level SQL supaya tombol notifikasi dan
@@ -45,6 +48,7 @@ class PickupConfirmation
                 'pickup_lat'          => $lat,
                 'pickup_lng'          => $lng,
                 'pickup_source'       => $source,
+                'status'              => 'OnTrip',
                 'updated_at'          => $now,
             ]);
 
@@ -53,6 +57,7 @@ class PickupConfirmation
         }
 
         $booking->refresh()->loadMissing(['driver.driverProfile', 'zoneTo', 'cso']);
+        $booking->driver?->driverProfile?->update(['status' => 'ontrip']);
 
         $label = match ($source) {
             'auto_location' => 'otomatis — mobil sudah bergerak',

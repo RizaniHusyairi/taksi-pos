@@ -105,7 +105,7 @@ class _IncomingOrderScreenState extends State<IncomingOrderScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Karcis diterbitkan — silakan menuju penumpang'),
+          content: Text('Perjalanan dimulai — karcis diterbitkan di konter CSO'),
           backgroundColor: AppColors.success,
         ),
       );
@@ -206,7 +206,7 @@ class _IncomingOrderScreenState extends State<IncomingOrderScreen>
                   ),
                   const Spacer(flex: 2),
                   Text(
-                    'Tekan saat Anda mulai menuju penumpang.\nKarcis langsung dicetak di konter CSO.',
+                    'Tekan saat Anda berangkat — perjalanan langsung dimulai.\nKarcis dicetak di konter CSO.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.outfit(
                       color: Colors.white70,

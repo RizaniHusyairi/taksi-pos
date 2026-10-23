@@ -182,11 +182,8 @@ class ApiService {
     return await _dio.get('/driver/history');
   }
 
-  Future<Response> startBooking(int bookingId) async {
-    return await _dio.post('/driver/bookings/$bookingId/start');
-  }
-
-  /// "SAYA JEMPUT": supir berangkat menjemput -> karcis di konter CSO terbit.
+  /// "SAYA JEMPUT": supir berangkat -> karcis di konter CSO terbit dan order
+  /// langsung OnTrip (tidak ada lagi tombol MULAI PERJALANAN).
   /// [source] 'notification' bila ditekan dari tombol di notifikasi.
   Future<Response> confirmPickup(int bookingId, {String source = 'button'}) async {
     return await _dio.post(

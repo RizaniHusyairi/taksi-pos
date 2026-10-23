@@ -1479,8 +1479,8 @@ class DriverApiController extends Controller
     
     /**
      * Supir menekan "SAYA JEMPUT" — dari aplikasi atau langsung dari tombol
-     * notifikasi. Status order TETAP 'Assigned' (penumpang belum naik); yang
-     * berubah hanya karcis di aplikasi CSO menjadi bisa dicetak.
+     * notifikasi. Karcis di aplikasi CSO terbit dan order langsung OnTrip —
+     * tidak ada lagi tombol "MULAI PERJALANAN" (lihat PickupConfirmation).
      *
      * Idempoten: menekan dua kali, atau kalah balapan dengan konfirmasi
      * otomatis lokasi, bukan galat — supir cukup melihat kartunya berubah.
@@ -1516,6 +1516,10 @@ class DriverApiController extends Controller
         return $this->getProfile($request);
     }
 
+    /**
+     * Endpoint lama tombol "MULAI PERJALANAN". Aplikasi baru tidak memakainya
+     * lagi (SAYA JEMPUT sudah memulai perjalanan); dipertahankan untuk APK lama.
+     */
     public function startBooking(Request $request, Booking $booking, PickupConfirmation $pickup)
     {
         if ($request->user()->id !== $booking->driver_id) {

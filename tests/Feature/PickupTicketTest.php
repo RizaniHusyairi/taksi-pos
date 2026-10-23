@@ -134,6 +134,7 @@ class PickupTicketTest extends TestCase
         $this->assertNull($booking->fresh()->pickup_confirmed_at);
     }
 
+    /** Sejak 2026-10-23 SAYA JEMPUT sekaligus memulai perjalanan (tombol MULAI dihapus). */
     public function test_konfirmasi_menerbitkan_karcis_dan_memberi_tahu_cso_sekali(): void
     {
         [, $driver, $booking] = $this->order();
@@ -145,7 +146,8 @@ class PickupTicketTest extends TestCase
         $fresh = $booking->fresh();
         $this->assertNotNull($fresh->pickup_confirmed_at);
         $this->assertSame('notification', $fresh->pickup_source);
-        $this->assertSame('Assigned', $fresh->status);
+        $this->assertSame('OnTrip', $fresh->status);
+        $this->assertSame('ontrip', $driver->driverProfile->fresh()->status);
         $this->assertSame(1, $this->fcmKe('tok-cso', 'ticket_ready'));
     }
 
@@ -158,6 +160,7 @@ class PickupTicketTest extends TestCase
         $this->postJson("/api/driver/bookings/{$booking->id}/pickup")->assertStatus(422);
     }
 
+    /** Endpoint lama tombol MULAI, masih dipakai APK versi lama. */
     public function test_mulai_perjalanan_tanpa_jemput_tetap_menerbitkan_karcis(): void
     {
         [, $driver, $booking] = $this->order();
@@ -170,7 +173,8 @@ class PickupTicketTest extends TestCase
         $this->assertNotNull($fresh->pickup_confirmed_at);
     }
 
-    public function test_ganti_supir_mereset_konfirmasi(): void
+    /** Supir yang sudah SAYA JEMPUT sedang mengantar — ordernya tidak bisa dialihkan. */
+    public function test_ganti_supir_ditolak_setelah_supir_jemput(): void
     {
         [$cso, $driver, $booking] = $this->order();
         Sanctum::actingAs($driver);
@@ -179,9 +183,9 @@ class PickupTicketTest extends TestCase
         $baru = $this->supir('2');
         Sanctum::actingAs($cso);
         $this->postJson("/api/cso/bookings/{$booking->id}/change-driver", ['new_driver_id' => $baru->id])
-            ->assertOk();
+            ->assertStatus(422);
 
-        $this->assertNull($booking->fresh()->pickup_confirmed_at);
+        $this->assertSame($driver->id, (int) $booking->fresh()->driver_id);
     }
 
     /**
@@ -224,6 +228,7 @@ class PickupTicketTest extends TestCase
         $fresh = $booking->fresh();
         $this->assertNotNull($fresh->pickup_confirmed_at);
         $this->assertSame('auto_location', $fresh->pickup_source);
+        $this->assertSame('OnTrip', $fresh->status);
     }
 
     // === WA karcis manual ==================================================
