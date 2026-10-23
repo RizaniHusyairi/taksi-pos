@@ -25,7 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // =========================================================
         // Middleware ini akan memeriksa cookie sesi pada request API
         $middleware->appendToGroup('api', [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            // Turunan Sanctum yang juga mengenali Sec-Fetch-Site — lihat
+            // kelasnya untuk alasan (browser yang tidak mengirim Referer).
+            \App\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             // Rem laju umum. Laravel 11 TIDAK memasang throttle pada grup api
             // secara otomatis — tanpa baris ini seluruh API terbuka tanpa batas.
             // Definisi kuotanya (per-pengguna, bukan per-IP) ada di

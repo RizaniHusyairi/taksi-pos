@@ -77,6 +77,21 @@ async function fetchApi(endpoint, options = {}) {
       headers,
       credentials: 'include' // Sertakan cookie untuk autentikasi berbasis sesi
     });
+    // 401 = sesi login tidak dikenali API (kedaluwarsa, logout di tab lain,
+    // atau panel dibuka lewat alamat yang tidak terdaftar di
+    // SANCTUM_STATEFUL_DOMAINS). Semua kartu dashboard akan gagal bersamaan,
+    // jadi cukup SATU pemberitahuan lalu kembali ke halaman login — bukan
+    // belasan toast "Unauthenticated".
+    if (response.status === 401) {
+      if (!fetchApi._sesiHabis) {
+        fetchApi._sesiHabis = true;
+        Utils.showToast('Sesi login Anda berakhir. Silakan masuk lagi.', 'error');
+        setTimeout(() => { window.location.href = '/'; }, 1800);
+      }
+      const err = new Error('Unauthenticated.');
+      err.sesiHabis = true;
+      throw err;
+    }
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData.message || 'Terjadi kesalahan pada server');
@@ -84,7 +99,9 @@ async function fetchApi(endpoint, options = {}) {
     return response.json();
   } catch (error) {
     console.error(`API Error on ${endpoint}:`, error);
-    Utils.showToast(`Gagal berkomunikasi dengan server: ${error.message}`, 'error');
+    if (!error.sesiHabis) {
+      Utils.showToast(`Gagal berkomunikasi dengan server: ${error.message}`, 'error');
+    }
     throw error; // Lemparkan lagi agar bisa ditangkap oleh pemanggil
   }
 }
