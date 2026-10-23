@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Suara notifikasi hanya dirujuk lewat nama (kanal notifikasi & FCM),
+     jadi jangan sampai dibuang resource shrinker pada build rilis. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/kaj_order,@raw/kaj_queue,@raw/kaj_notif" />

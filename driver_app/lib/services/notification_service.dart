@@ -13,18 +13,37 @@ import 'package:driver_app/services/api_service.dart';
 // Kanal & id notifikasi
 // ---------------------------------------------------------------------------
 
+// Suara khas Angkasa Jaya (klakson + chime) ada di android/app/src/main/res/raw
+// dan dibuat oleh tool/notification_sounds/make_sounds.py.
+//
+// Android MENGUNCI suara sebuah kanal sejak kanal itu pertama dibuat di HP,
+// jadi mengganti suara = id kanal baru (akhiran _v2). Kanal lama dihapus di
+// [setupNotificationChannels] supaya tidak menumpuk di pengaturan HP.
+// Id kanal umum & antrean juga dipakai FcmService di server — samakan.
+
 /// Kanal umum (setoran, info). Id-nya dipakai juga oleh FcmService di server.
-const String kHighImportanceChannel = 'high_importance_channel';
+const String kHighImportanceChannel = 'high_importance_channel_v2';
 
 /// Order baru untuk supir: berdering seperti ALARM sampai ditanggapi.
 ///
 /// Di lapangan supir biasanya keluar mobil dan mengobrol — HP di saku, kadang
 /// dalam mode getar. Jalur suara alarm tetap berbunyi pada mode getar dan
 /// memakai volume alarm yang jarang dikecilkan orang.
-const String kOrderAlarmChannel = 'order_alarm_channel';
+const String kOrderAlarmChannel = 'order_alarm_channel_v2';
 
 /// Peringatan pra-giliran ("bersiap di dekat mobil"). Id dipakai FcmService.
-const String kQueueHeadsUpChannel = 'queue_heads_up_channel';
+const String kQueueHeadsUpChannel = 'queue_heads_up_channel_v2';
+
+/// Kanal versi lama (suara bawaan HP) yang dibersihkan saat aplikasi dibuka.
+const List<String> _kanalLama = [
+  'high_importance_channel',
+  'order_alarm_channel',
+  'queue_heads_up_channel',
+];
+
+const _suaraOrder = RawResourceAndroidNotificationSound('kaj_order');
+const _suaraAntrean = RawResourceAndroidNotificationSound('kaj_queue');
+const _suaraUmum = RawResourceAndroidNotificationSound('kaj_notif');
 
 /// Id tetap untuk alarm order: satu supir hanya punya satu order aktif, jadi
 /// notifikasi baru cukup menimpa yang lama dan mudah dibatalkan.
@@ -39,6 +58,7 @@ const AndroidNotificationChannel _highImportance = AndroidNotificationChannel(
   description: 'Notifikasi order baru dan info penting lainnya.',
   importance: Importance.max,
   playSound: true,
+  sound: _suaraUmum,
   enableVibration: true,
 );
 
@@ -49,6 +69,7 @@ final AndroidNotificationChannel _orderAlarm = AndroidNotificationChannel(
       'Berdering seperti alarm saat ada order, sampai Anda menekan SAYA JEMPUT.',
   importance: Importance.max,
   playSound: true,
+  sound: _suaraOrder,
   enableVibration: true,
   vibrationPattern: Int64List.fromList([0, 900, 500, 900, 500, 900]),
   audioAttributesUsage: AudioAttributesUsage.alarm,
@@ -60,6 +81,7 @@ final AndroidNotificationChannel _queueHeadsUp = AndroidNotificationChannel(
   description: 'Getar saat giliran Anda sudah dekat.',
   importance: Importance.high,
   playSound: true,
+  sound: _suaraAntrean,
   enableVibration: true,
   vibrationPattern: Int64List.fromList([0, 400, 250, 400]),
 );
@@ -134,6 +156,9 @@ Future<void> _initPlugin(
   );
   final android = plugin.resolvePlatformSpecificImplementation<
       AndroidFlutterLocalNotificationsPlugin>();
+  for (final id in _kanalLama) {
+    await android?.deleteNotificationChannel(id);
+  }
   await android?.createNotificationChannel(_highImportance);
   await android?.createNotificationChannel(_orderAlarm);
   await android?.createNotificationChannel(_queueHeadsUp);
@@ -163,6 +188,7 @@ Future<void> _showOrderAlarm(
         visibility: NotificationVisibility.public,
         fullScreenIntent: true,
         audioAttributesUsage: AudioAttributesUsage.alarm,
+        sound: _suaraOrder,
         vibrationPattern: _orderAlarm.vibrationPattern,
         ongoing: true,
         autoCancel: false,
@@ -299,6 +325,7 @@ class NotificationService {
             importance: channel.importance,
             priority: Priority.high,
             playSound: true,
+            sound: channel.sound,
             enableVibration: true,
             vibrationPattern: channel.vibrationPattern,
             icon: '@mipmap/ic_launcher',

@@ -125,6 +125,12 @@ class FcmService
             ];
         }
 
+        // Suara khas Angkasa Jaya (klakson + chime) dibundel di res/raw
+        // aplikasi. Android 8+ memakai suara milik KANAL, jadi id kanal _v2
+        // (kanal bersuara baru) yang menentukan; `sound` untuk Android lama.
+        // APK lama yang belum punya kanal _v2 jatuh ke kanal bawaannya.
+        $antrean = $type === 'queue_heads_up';
+
         return [
             'token'        => $token,
             'notification' => ['title' => $title, 'body' => $body],
@@ -132,10 +138,10 @@ class FcmService
             'android'      => [
                 'priority'     => 'HIGH',
                 'notification' => [
-                    'channel_id'              => $type === 'queue_heads_up'
-                        ? 'queue_heads_up_channel'
-                        : 'high_importance_channel',
-                    'default_sound'           => true,
+                    'channel_id'              => $antrean
+                        ? 'queue_heads_up_channel_v2'
+                        : 'high_importance_channel_v2',
+                    'sound'                   => $antrean ? 'kaj_queue' : 'kaj_notif',
                     'default_vibrate_timings' => true,
                 ],
             ],

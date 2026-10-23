@@ -295,7 +295,12 @@ class PickupTicketTest extends TestCase
         $this->assertSame('5', $order['data']['booking_id']);
 
         $lain = FcmService::buildMessage('tok', 'J', 'I', ['type' => 'queue_heads_up']);
-        $this->assertSame('queue_heads_up_channel', $lain['android']['notification']['channel_id']);
+        $this->assertSame('queue_heads_up_channel_v2', $lain['android']['notification']['channel_id']);
+        $this->assertSame('kaj_queue', $lain['android']['notification']['sound']);
+
+        $umum = FcmService::buildMessage('tok', 'J', 'I', ['type' => 'ticket_ready']);
+        $this->assertSame('high_importance_channel_v2', $umum['android']['notification']['channel_id']);
+        $this->assertSame('kaj_notif', $umum['android']['notification']['sound']);
     }
 
     // === Peringatan pra-giliran ============================================
