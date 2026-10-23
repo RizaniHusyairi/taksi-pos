@@ -8,6 +8,14 @@
       "port": 8000,
       "url": "http://127.0.0.1:8000",
       "autoPort": true
+    },
+    {
+      "name": "taksi-pos-demo",
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--host=127.0.0.1", "--port=8000"],
+      "env": { "DB_CONNECTION": "sqlite", "DB_DATABASE": "C:/laragon/www/taksi-pos/database/demo.sqlite", "QUEUE_CONNECTION": "sync" },
+      "port": 8000,
+      "url": "http://127.0.0.1:8000"
     }
   ]
 }
