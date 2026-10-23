@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/cso_order_provider.dart';
+import '../../widgets/profile_avatar.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_bottom_nav.dart';
 import 'cso_dashboard_screen.dart';
@@ -36,7 +38,9 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      const CsoDashboardScreen(),
+      CsoDashboardScreen(
+        onBukaTab: (i) => setState(() => _currentIndex = i),
+      ),
       const CsoHistoryScreen(),
       const CsoOrderScreen(),
       const CsoDepositScreen(),
@@ -51,7 +55,9 @@ class _CsoMainScreenState extends State<CsoMainScreen> {
           bottom: false,
           child: Column(
             children: [
-              _Header(title: _titles[_currentIndex]),
+              _currentIndex == 0
+                  ? const _HeaderSapaan()
+                  : _Header(title: _titles[_currentIndex]),
               Expanded(
                 child: _TabTransition(
                   index: _currentIndex,
@@ -125,6 +131,80 @@ class _TabTransitionState extends State<_TabTransition>
     return FadeTransition(
       opacity: _fade,
       child: SlideTransition(position: _slide, child: widget.child),
+    );
+  }
+}
+
+/// Header tab Home: sapaan, tanggal, dan foto profil CSO.
+class _HeaderSapaan extends StatelessWidget {
+  const _HeaderSapaan();
+
+  static const _hari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+  static const _bulan = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli',
+    'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user ?? const {};
+    final nama = '${user['name'] ?? 'CSO'}'.trim();
+    final depan = nama.split(' ').first;
+    final now = DateTime.now();
+    final salam = now.hour < 11
+        ? 'Selamat pagi'
+        : now.hour < 15
+            ? 'Selamat siang'
+            : now.hour < 18
+                ? 'Selamat sore'
+                : 'Selamat malam';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+      decoration: const BoxDecoration(
+        gradient: AppColors.skyGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOutCubic,
+              builder: (_, t, child) => Opacity(
+                opacity: t,
+                child: Transform.translate(offset: Offset(-12 * (1 - t), 0), child: child),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$salam,',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '$depan 👋',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_hari[now.weekday - 1]}, ${now.day} ${_bulan[now.month - 1]} ${now.year}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ProfileAvatar(
+            photoPath: user['photo_path']?.toString(),
+            inisial: nama.isEmpty ? 'C' : nama[0].toUpperCase(),
+            size: 50,
+            editable: false,
+          ),
+        ],
+      ),
     );
   }
 }

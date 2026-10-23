@@ -11,12 +11,19 @@ import '../../utils/api_error.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/cso/cso_receipt_sheet.dart';
 import '../../widgets/cso/cso_ticket_sheet.dart';
+import '../../widgets/map_tiles.dart';
+import '../../widgets/fade_in.dart';
+import '../../widgets/gradient_button.dart';
+import '../../widgets/profile_avatar.dart';
 
 /// Dashboard CSO: ringkasan yang dikelola CSO — pendapatan & transaksi hari ini,
 /// rincian Tunai/QRIS, peta posisi supir, dan transaksi terakhir.
 /// Peta memakai OpenStreetMap (gratis, tanpa API key). Auto-refresh tiap 20 detik.
 class CsoDashboardScreen extends StatefulWidget {
-  const CsoDashboardScreen({super.key});
+  /// Pindah tab di CsoMainScreen (2 = Pesan, 3 = Setoran).
+  final void Function(int index)? onBukaTab;
+
+  const CsoDashboardScreen({super.key, this.onBukaTab});
 
   @override
   State<CsoDashboardScreen> createState() => _CsoDashboardScreenState();
@@ -99,8 +106,13 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
   final Map<int, LatLng> _to = {}; // titik tujuan (posisi server terbaru)
 
   // Stats
-  num _revenue = 0, _cash = 0, _qris = 0;
-  int _count = 0, _queueReady = 0;
+  num _revenue = 0, _cash = 0, _cashDriver = 0, _qris = 0;
+  int _count = 0, _cancelled = 0, _queueReady = 0;
+  List<Map<String, dynamic>> _antrian = [];
+  num _setorTotal = 0;
+  String? _setorTertua;
+
+  static const _bulanPendek = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   List<CsoTransaction> _recent = [];
 
   /// Order yang karcisnya masih menunggu supir / siap diserahkan.
@@ -180,6 +192,8 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
           (stats['today'] as Map?)?.cast<String, dynamic>() ?? const {};
       final queue =
           (stats['queue'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final deposit =
+          (stats['deposit'] as Map?)?.cast<String, dynamic>() ?? const {};
       final recent = ((stats['recent'] as List?) ?? [])
           .map(
             (e) => CsoTransaction.fromJson((e as Map).cast<String, dynamic>()),
@@ -198,9 +212,16 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
       setState(() {
         _revenue = toNum(today['revenue']);
         _cash = toNum(today['cash']);
+        _cashDriver = toNum(today['cash_driver']);
         _qris = toNum(today['qris']);
         _count = toInt(today['count']);
+        _cancelled = toInt(today['cancelled']);
         _queueReady = toInt(queue['ready']);
+        _antrian = ((queue['next'] as List?) ?? [])
+            .map((e) => (e as Map).cast<String, dynamic>())
+            .toList();
+        _setorTotal = toNum(deposit['outstanding_total']);
+        _setorTertua = deposit['oldest_date']?.toString();
         _recent = recent;
         _drivers = drivers;
         if (base['latitude'] != null && base['longitude'] != null) {
@@ -239,37 +260,25 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
         children: [
           if (_error != null) _errorBanner(),
-          if (_tickets.isNotEmpty) ...[
-            _ticketsCard(),
-            const SizedBox(height: 12),
-          ],
-          _heroCard(),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _miniStat(
-                  'Tunai',
-                  _cash,
-                  Icons.payments_rounded,
-                  AppColors.success,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _miniStat(
-                  'QRIS',
-                  _qris,
-                  Icons.qr_code_rounded,
-                  AppColors.skyBlue,
-                ),
-              ),
+          if (_loading)
+            _kerangka()
+          else ...[
+            if (_tickets.isNotEmpty) ...[
+              FadeInUp(child: _ticketsCard()),
+              const SizedBox(height: 12),
             ],
-          ),
-          const SizedBox(height: 16),
-          _mapCard(),
-          const SizedBox(height: 16),
-          _recentCard(),
+            if (_setorTotal > 0) ...[
+              FadeInUp(delayMs: 60, child: _pengingatSetor()),
+              const SizedBox(height: 12),
+            ],
+            FadeInUp(delayMs: 120, child: _ringkasanHariIni()),
+            const SizedBox(height: 14),
+            FadeInUp(delayMs: 180, child: _antrianCard()),
+            const SizedBox(height: 14),
+            FadeInUp(delayMs: 240, child: _mapCard()),
+            const SizedBox(height: 16),
+            FadeInUp(delayMs: 300, child: _recentCard()),
+          ],
         ],
       ),
     );
@@ -306,46 +315,143 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
     );
   }
 
-  Widget _heroCard() {
+  // === Pengingat setoran ===================================================
+
+  int get _umurSetor {
+    final d = DateTime.tryParse(_setorTertua ?? '');
+    if (d == null) return 0;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day).difference(DateTime(d.year, d.month, d.day)).inDays;
+  }
+
+  /// Muncul hanya bila ada tunai kasir yang belum disetor. Warnanya ikut
+  /// umur tunai tertua (sama dengan tab Setoran): biru < 2 hari, oranye
+  /// 2–6 hari, merah ≥ 7 hari.
+  Widget _pengingatSetor() {
+    final umur = _umurSetor;
+    final warna = umur >= 7
+        ? AppColors.danger
+        : umur >= 2
+            ? const Color(0xFFF57C00)
+            : AppColors.skyBlue;
+    final d = DateTime.tryParse(_setorTertua ?? '');
+    final tertua = d == null ? '' : '${d.day} ${_bulanPendek[d.month - 1]}';
+    final umurTeks = umur <= 0 ? 'hari ini' : (umur == 1 ? 'kemarin' : '$umur hari');
+
+    return Material(
+      color: warna.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => widget.onBukaTab?.call(3),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: warna.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: [
+              _Denyut(
+                aktif: umur >= 2,
+                child: Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(color: warna, shape: BoxShape.circle),
+                  child: const Icon(Icons.savings_rounded, color: Colors.white, size: 20),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tunai belum disetor',
+                        style: TextStyle(color: warna, fontSize: 12, fontWeight: FontWeight.w700)),
+                    _AngkaNaik(
+                      nilai: _setorTotal,
+                      style: const TextStyle(color: AppColors.ink, fontSize: 18, fontWeight: FontWeight.w900),
+                    ),
+                    Text('Tertua $tertua · $umurTeks',
+                        style: const TextStyle(color: AppColors.inkSoft, fontSize: 11.5)),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: warna, borderRadius: BorderRadius.circular(20)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Setor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                    Icon(Icons.chevron_right_rounded, color: Colors.white, size: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // === Ringkasan hari ini ==================================================
+
+  Widget _ringkasanHariIni() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: AppColors.skyGradient,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x330B4DA2),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [BoxShadow(color: Color(0x330B4DA2), blurRadius: 18, offset: Offset(0, 9))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          const Text(
-            'Pendapatan Hari Ini',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          Positioned(
+            right: -30,
+            top: -40,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08)),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            _loading ? '—' : formatRupiah(_revenue),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _heroChip(Icons.receipt_long_rounded, '$_count transaksi'),
-              const SizedBox(width: 8),
-              _heroChip(Icons.groups_rounded, '$_queueReady supir ready'),
+              Row(
+                children: [
+                  const Icon(Icons.payments_rounded, color: Colors.white, size: 18),
+                  const SizedBox(width: 6),
+                  const Text('Tunai di kasir hari ini',
+                      style: TextStyle(color: Colors.white70, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('$_count order${_cancelled > 0 ? ' · $_cancelled batal' : ''}',
+                        style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              _AngkaNaik(
+                nilai: _cash,
+                style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  _ubinMini(Icons.local_taxi_rounded, 'Tunai ke supir', _cashDriver),
+                  const SizedBox(width: 8),
+                  _ubinMini(Icons.qr_code_rounded, 'QRIS', _qris),
+                  const SizedBox(width: 8),
+                  _ubinMini(Icons.functions_rounded, 'Total', _revenue),
+                ],
+              ),
             ],
           ),
         ],
@@ -353,82 +459,212 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
     );
   }
 
-  Widget _heroChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 14),
-          const SizedBox(width: 5),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+  Widget _ubinMini(IconData icon, String label, num nilai) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(height: 4),
+            _AngkaNaik(
+              nilai: nilai,
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
             ),
-          ),
-        ],
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _miniStat(String label, num value, IconData icon, Color color) {
+  // === Antrean berikutnya ==================================================
+
+  Widget _antrianCard() {
+    final pertama = _antrian.isEmpty ? null : _antrian.first;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F0B4DA2),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [BoxShadow(color: Color(0x0F0B4DA2), blurRadius: 12, offset: Offset(0, 5))],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(icon, color: color, size: 17),
-              ),
+              const Icon(Icons.format_list_numbered_rounded, color: AppColors.deepBlue, size: 20),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+              const Text('Antrean Berikutnya',
+                  style: TextStyle(color: AppColors.ink, fontSize: 15, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                child: Text('$_queueReady siap',
+                    style: const TextStyle(color: AppColors.success, fontSize: 11.5, fontWeight: FontWeight.w800)),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            _loading ? '—' : formatRupiah(value),
-            style: const TextStyle(
-              color: AppColors.ink,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
+          const SizedBox(height: 12),
+          if (pertama == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Column(
+                children: [
+                  Icon(Icons.hourglass_empty_rounded, color: AppColors.inkFaint, size: 30),
+                  SizedBox(height: 6),
+                  Text('Belum ada supir siap di antrean',
+                      style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+                ],
+              ),
+            )
+          else ...[
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0.08, 0), end: Offset.zero).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(key: ValueKey(pertama['id']), child: _giliranUtama(pertama)),
             ),
+            for (var i = 1; i < _antrian.length; i++)
+              FadeInUp(delayMs: 60 * i, child: _barisAntrian(_antrian[i], i + 1)),
+            const SizedBox(height: 12),
+            GradientButton(
+              label: 'BUAT ORDER',
+              icon: Icons.add_rounded,
+              height: 50,
+              onPressed: () => widget.onBukaTab?.call(2),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _avatarSupir(Map<String, dynamic> d, double size) {
+    final nama = '${d['name'] ?? '-'}';
+    return ProfileAvatar(
+      photoPath: d['photo_path']?.toString(),
+      inisial: nama.isEmpty ? 'S' : nama[0].toUpperCase(),
+      size: size,
+      editable: false,
+    );
+  }
+
+  Widget _pilLambung(dynamic line, {bool besar = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: besar ? 10 : 8, vertical: besar ? 4 : 3),
+      decoration: BoxDecoration(color: AppColors.deepBlue, borderRadius: BorderRadius.circular(8)),
+      child: Text(line == null ? '—' : 'L$line',
+          style: TextStyle(color: Colors.white, fontSize: besar ? 13 : 11, fontWeight: FontWeight.w900)),
+    );
+  }
+
+  Widget _giliranUtama(Map<String, dynamic> d) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFFE7F7F0), Color(0xFFEAF3FF)]),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          _avatarSupir(d, 50),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _pilLambung(d['line_number'], besar: true),
+                    const SizedBox(width: 8),
+                    _Denyut(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: AppColors.success, borderRadius: BorderRadius.circular(20)),
+                        child: const Text('GILIRAN',
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('${d['name'] ?? '-'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.ink, fontSize: 15, fontWeight: FontWeight.w800)),
+                if ((d['plate_number'] ?? '').toString().isNotEmpty)
+                  Text('${d['plate_number']}', style: const TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+              ],
+            ),
+          ),
+          const Text('#1', style: TextStyle(color: AppColors.success, fontSize: 22, fontWeight: FontWeight.w900)),
+        ],
+      ),
+    );
+  }
+
+  Widget _barisAntrian(Map<String, dynamic> d, int urut) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 26,
+            child: Text('#$urut',
+                style: const TextStyle(color: AppColors.inkFaint, fontSize: 12.5, fontWeight: FontWeight.w800)),
+          ),
+          _avatarSupir(d, 34),
+          const SizedBox(width: 10),
+          _pilLambung(d['line_number']),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('${d['name'] ?? '-'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.ink, fontSize: 13.5, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
+  }
+
+  // === Kerangka loading ====================================================
+
+  Widget _kerangka() {
+    Widget kotak(double h, {double r = 20}) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _Denyut(
+            skala: false,
+            child: Container(
+              height: h,
+              decoration: BoxDecoration(
+                color: AppColors.inkFaint.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(r),
+              ),
+            ),
+          ),
+        );
+    return Column(children: [kotak(170, r: 22), kotak(210), kotak(260, r: 18)]);
   }
 
   Widget _mapCard() {
@@ -476,7 +712,7 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${_drivers.length} supir · $_queueReady ready',
+                    '${_drivers.length} supir di peta',
                     style: const TextStyle(
                       color: AppColors.deepBlue,
                       fontSize: 11.5,
@@ -495,15 +731,7 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
                   mapController: _mapController,
                   options: MapOptions(initialCenter: _base, initialZoom: 13.2),
                   children: [
-                    TileLayer(
-                      // Tile resolusi tinggi (@2x) + gaya bersih (CARTO Voyager),
-                      // jauh lebih tajam di layar HP berkepadatan tinggi.
-                      urlTemplate:
-                          'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
-                      retinaMode: RetinaMode.isHighDensity(context),
-                      userAgentPackageName: 'com.example.driver_app',
-                    ),
+                    kajTileLayer(),
                     CircleLayer(
                       circles: [
                         CircleMarker(
@@ -545,7 +773,7 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
                       ),
                     ),
                     const RichAttributionWidget(
-                      attributions: [TextSourceAttribution('© OpenStreetMap, CARTO')],
+                      attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
                     ),
                   ],
                 ),
@@ -1193,6 +1421,78 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
           child: Icon(icon, color: AppColors.deepBlue, size: 20),
         ),
       ),
+    );
+  }
+}
+
+/// Angka rupiah yang "menghitung naik" ke nilai baru setiap kali data
+/// berubah (TweenAnimationBuilder melanjutkan dari nilai yang sedang tampil).
+class _AngkaNaik extends StatelessWidget {
+  final num nilai;
+  final TextStyle style;
+  const _AngkaNaik({required this.nilai, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: nilai.toDouble()),
+      duration: const Duration(milliseconds: 750),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, _) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(formatRupiah(v), style: style),
+      ),
+    );
+  }
+}
+
+/// Denyut halus (skala atau kedip) untuk hal yang perlu dilirik: badge
+/// GILIRAN, pengingat setoran yang sudah lama, dan kerangka loading.
+class _Denyut extends StatefulWidget {
+  final Widget child;
+  final bool aktif;
+  final bool skala;
+  const _Denyut({required this.child, this.aktif = true, this.skala = true});
+
+  @override
+  State<_Denyut> createState() => _DenyutState();
+}
+
+class _DenyutState extends State<_Denyut> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.aktif) _c.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_Denyut old) {
+    super.didUpdateWidget(old);
+    if (widget.aktif && !_c.isAnimating) {
+      _c.repeat(reverse: true);
+    } else if (!widget.aktif && _c.isAnimating) {
+      _c.stop();
+      _c.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final anim = CurvedAnimation(parent: _c, curve: Curves.easeInOut);
+    return RepaintBoundary(
+      child: widget.skala
+          ? ScaleTransition(scale: Tween(begin: 1.0, end: 1.08).animate(anim), child: widget.child)
+          : FadeTransition(opacity: Tween(begin: 1.0, end: 0.45).animate(anim), child: widget.child),
     );
   }
 }

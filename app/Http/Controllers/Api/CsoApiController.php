@@ -211,8 +211,12 @@ class CsoApiController extends Controller
     }
 
     /**
-     * Ringkasan untuk dashboard CSO: pendapatan & transaksi hari ini,
-     * rincian Cash vs QRIS, jumlah antrian, dan transaksi terakhir.
+     * Ringkasan untuk dashboard CSO: angka hari ini PER METODE, antrian
+     * teratas, pengingat setoran, dan transaksi terakhir.
+     *
+     * `cash` sengaja HANYA tunai di kasir (CashCSO): tunai ke supir tidak
+     * pernah dipegang CSO, jadi menggabungkannya membuat laci kasir selalu
+     * tampak kurang. Order batal tidak ikut dijumlahkan.
      */
     public function getDashboardStats(Request $request)
     {
@@ -226,11 +230,17 @@ class CsoApiController extends Controller
 
         // Agregasi di DB (1 query) — tidak menarik semua transaksi hari ini ke memori.
         $todayAgg = (clone $base)->whereDate('created_at', $today)
+            ->whereHas('booking', fn ($q) => $q->where('status', '!=', 'Cancelled'))
             ->selectRaw('COUNT(*) as cnt')
             ->selectRaw('COALESCE(SUM(amount), 0) as revenue')
-            ->selectRaw("COALESCE(SUM(CASE WHEN method IN ('CashCSO','CashDriver') THEN amount ELSE 0 END), 0) as cash")
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'CashCSO' THEN amount ELSE 0 END), 0) as cash")
+            ->selectRaw("COALESCE(SUM(CASE WHEN method = 'CashDriver' THEN amount ELSE 0 END), 0) as cash_driver")
             ->selectRaw("COALESCE(SUM(CASE WHEN method = 'QRIS' THEN amount ELSE 0 END), 0) as qris")
             ->first();
+
+        $batalHariIni = (clone $base)->whereDate('created_at', $today)
+            ->whereHas('booking', fn ($q) => $q->where('status', 'Cancelled'))
+            ->count();
 
         $recent = (clone $base)
             ->with([
@@ -248,16 +258,43 @@ class CsoApiController extends Controller
             $q->whereIn('status', ['standby', 'available']);
         })->count();
 
+        // 5 supir teratas — urutan yang sama dengan pemilihan supir saat order.
+        $antrian = $this->readyQueueQuery()->limit(5)->get()
+            ->filter(fn ($q) => $q->driver)
+            ->values()
+            ->map(fn ($q, $i) => [
+                'id'          => $q->driver->id,
+                'name'        => $q->driver->name,
+                'photo_path'  => $q->driver->photo_path,
+                'line_number' => $q->driver->driverProfile?->line_number,
+                'plate_number'=> $q->driver->driverProfile?->plate_number,
+                'is_next'     => $i === 0,
+            ]);
+
+        // Pengingat setoran: tunai di tangan CSO yang belum diserahkan.
+        $belumSetor = Transaction::cashCsoBelumSetor($cso->id)
+            ->selectRaw('COALESCE(SUM(amount), 0) as total, MIN(created_at) as tertua')
+            ->first();
+
         return response()->json([
             'today' => [
-                'count'   => (int) $todayAgg->cnt,
-                'revenue' => (float) $todayAgg->revenue,
-                'cash'    => (float) $todayAgg->cash,
-                'qris'    => (float) $todayAgg->qris,
+                'count'       => (int) $todayAgg->cnt,
+                'revenue'     => (float) $todayAgg->revenue,
+                'cash'        => (float) $todayAgg->cash,
+                'cash_driver' => (float) $todayAgg->cash_driver,
+                'qris'        => (float) $todayAgg->qris,
+                'cancelled'   => $batalHariIni,
             ],
             'queue' => [
                 'total' => $queueTotal,
                 'ready' => $queueReady,
+                'next'  => $antrian,
+            ],
+            'deposit' => [
+                'outstanding_total' => (float) $belumSetor->total,
+                'oldest_date'       => $belumSetor->tertua
+                    ? \Illuminate\Support\Carbon::parse($belumSetor->tertua)->toDateString()
+                    : null,
             ],
             'recent' => $recent,
         ]);
