@@ -382,6 +382,11 @@ class ApiService {
     return await _dio.get('/cso/deposits/outstanding');
   }
 
+  /// Rincian transaksi tunai belum disetor pada satu tanggal ('YYYY-MM-DD').
+  Future<Response> getCsoDepositOutstandingDay(String date) async {
+    return await _dio.get('/cso/deposits/outstanding/$date');
+  }
+
   /// Ajukan setoran untuk [dates] (format 'YYYY-MM-DD').
   /// Nominalnya dihitung server dari tanggal-tanggal itu — klien tidak
   /// mengirim angka apa pun, supaya tidak mungkin berbeda dengan catatan asli.

@@ -33,6 +33,37 @@ class OutstandingDay {
   DateTime? get parsedDate => DateTime.tryParse(date);
 }
 
+/// Satu transaksi tunai di dalam [OutstandingDay] — untuk mencocokkan uang
+/// fisik. Sumber: GET /cso/deposits/outstanding/{date}
+class OutstandingTx {
+  final int id;
+  final int? bookingId;
+  final num amount;
+  final DateTime? createdAt;
+  final String? destination;
+  final String? driver;
+
+  const OutstandingTx({
+    required this.id,
+    required this.bookingId,
+    required this.amount,
+    required this.createdAt,
+    required this.destination,
+    required this.driver,
+  });
+
+  factory OutstandingTx.fromJson(Map<String, dynamic> json) {
+    return OutstandingTx(
+      id: int.tryParse('${json['id']}') ?? 0,
+      bookingId: int.tryParse('${json['booking_id']}'),
+      amount: num.tryParse('${json['amount']}') ?? 0,
+      createdAt: DateTime.tryParse('${json['created_at'] ?? ''}')?.toLocal(),
+      destination: json['destination']?.toString(),
+      driver: json['driver']?.toString(),
+    );
+  }
+}
+
 /// Satu pengajuan setoran.
 /// Sumber: GET /cso/deposits, POST /cso/deposits
 class CsoDeposit {
@@ -52,6 +83,9 @@ class CsoDeposit {
   final DateTime? submittedAt;
   final DateTime? processedAt;
 
+  /// Path foto bukti di disk `public` server (sudah berstempel), atau null.
+  final String? proofImage;
+
   const CsoDeposit({
     required this.id,
     required this.amount,
@@ -62,6 +96,7 @@ class CsoDeposit {
     this.adminNote,
     this.submittedAt,
     this.processedAt,
+    this.proofImage,
   });
 
   factory CsoDeposit.fromJson(Map<String, dynamic> json) {
@@ -90,6 +125,9 @@ class CsoDeposit {
           ?.toLocal(),
       processedAt: DateTime.tryParse(json['processed_at']?.toString() ?? '')
           ?.toLocal(),
+      proofImage: (json['proof_image']?.toString().trim().isEmpty ?? true)
+          ? null
+          : json['proof_image'].toString(),
     );
   }
 

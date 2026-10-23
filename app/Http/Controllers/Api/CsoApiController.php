@@ -733,6 +733,42 @@ class CsoApiController extends Controller
             ])->values(),
             'grand_total' => (float) $rows->sum('total'),
             'grand_count' => (int) $rows->sum('jumlah'),
+            // Uang yang SUDAH diserahkan tapi belum diverifikasi admin — supaya
+            // CSO tidak mengira setorannya hilang dari hitungan.
+            'pending_total' => (float) CsoDeposit::where('cso_id', $cso->id)
+                ->where('status', 'Pending')->sum('amount'),
+            'pending_count' => CsoDeposit::where('cso_id', $cso->id)
+                ->where('status', 'Pending')->count(),
+        ]);
+    }
+
+    /**
+     * Rincian transaksi tunai yang belum disetor pada SATU tanggal — supaya
+     * CSO bisa mencocokkan uang fisik dengan ordernya sebelum menyetor.
+     */
+    public function depositOutstandingDay(Request $request, string $date)
+    {
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return response()->json(['message' => 'Format tanggal tidak valid.'], 422);
+        }
+
+        $rows = Transaction::cashCsoBelumSetor($request->user()->id)
+            ->whereDate('created_at', $date)
+            ->with(['booking:id,zone_id,driver_id,manual_destination',
+                    'booking.zoneTo:id,name', 'booking.driver:id,name'])
+            ->orderBy('created_at')
+            ->get(['id', 'booking_id', 'amount', 'created_at']);
+
+        return response()->json([
+            'date'         => $date,
+            'transactions' => $rows->map(fn ($t) => [
+                'id'          => $t->id,
+                'booking_id'  => $t->booking_id,
+                'amount'      => (float) $t->amount,
+                'created_at'  => $t->created_at,
+                'destination' => $t->booking?->zoneTo?->name ?? $t->booking?->manual_destination,
+                'driver'      => $t->booking?->driver?->name,
+            ])->values(),
         ]);
     }
 

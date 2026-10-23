@@ -191,6 +191,7 @@ Route::middleware('auth:sanctum')->group(function() {
         // Setoran tunai CSO ke admin. `outstanding` didaftarkan SEBELUM
         // `{deposit}` supaya tidak tertelan route model binding.
         Route::get('/deposits/outstanding', [CsoApiController::class, 'depositOutstanding']);
+        Route::get('/deposits/outstanding/{date}', [CsoApiController::class, 'depositOutstandingDay']);
         Route::get('/deposits', [CsoApiController::class, 'depositHistory']);
         Route::post('/deposits', [CsoApiController::class, 'storeDeposit']);
         Route::get('/deposits/{deposit}', [CsoApiController::class, 'depositDetail']);
