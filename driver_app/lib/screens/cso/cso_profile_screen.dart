@@ -6,6 +6,7 @@ import '../../services/thermal_printer_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/api_error.dart';
 import '../../widgets/cso/cso_printer_picker_sheet.dart';
+import '../../widgets/profile_avatar.dart';
 
 /// Tab Profil CSO — desain bold & interaktif: hero gradien dengan avatar
 /// (ring + indikator online berdenyut), animasi masuk fade/slide, kartu
@@ -195,7 +196,7 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          _hero(name, username, initial),
+          _hero(name, username, initial, user['photo_path']?.toString()),
           const SizedBox(height: 18),
           _expandable(
             icon: Icons.badge_rounded,
@@ -294,7 +295,8 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
                   icon: const Icon(Icons.bluetooth_rounded, size: 16),
                   label: const Text('Pilih / ganti printer'),
                   style: TextButton.styleFrom(
-                      foregroundColor: AppColors.inkSoft),
+                    foregroundColor: AppColors.inkSoft,
+                  ),
                 ),
               ],
             ),
@@ -313,7 +315,12 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
     );
   }
 
-  Widget _hero(String name, String username, String initial) {
+  Widget _hero(
+    String name,
+    String username,
+    String initial,
+    String? photoPath,
+  ) {
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
       decoration: BoxDecoration(
@@ -334,68 +341,19 @@ class _CsoProfileScreenState extends State<CsoProfileScreen> {
           Positioned(left: -30, bottom: -46, child: _ghostCircle(90)),
           Column(
             children: [
-              // Avatar dengan ring gradien + indikator online berdenyut
-              GestureDetector(
-                onTap: () => _toast('Ganti foto profil segera hadir.'),
+              // Foto profil (ketuk untuk ganti) + indikator online berdenyut
+              SizedBox(
+                width: 100,
+                height: 100,
                 child: Stack(
-                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Colors.white, Color(0xFFBFE3FF)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.15),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
+                    ProfileAvatar(
+                      photoPath: photoPath,
+                      inisial: initial,
+                      size: 100,
                     ),
-                    Container(
-                      width: 84,
-                      height: 84,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        initial,
-                        style: const TextStyle(
-                          color: AppColors.deepBlue,
-                          fontSize: 38,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    // indikator online berdenyut (kanan-bawah)
-                    const Positioned(right: 6, bottom: 6, child: _PulseDot()),
-                    // badge kamera (kanan-atas)
-                    Positioned(
-                      right: 2,
-                      top: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          color: AppColors.deepBlue,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: const Icon(
-                          Icons.photo_camera_rounded,
-                          color: Colors.white,
-                          size: 13,
-                        ),
-                      ),
-                    ),
+                    const Positioned(left: 8, bottom: 6, child: _PulseDot()),
                   ],
                 ),
               ),

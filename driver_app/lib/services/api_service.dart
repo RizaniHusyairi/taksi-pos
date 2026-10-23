@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -351,6 +352,28 @@ class ApiService {
       data: FormData.fromMap(fields),
     );
   }
+
+  // --- Foto profil (supir & CSO) ---
+
+  /// Unggah foto profil yang sudah dipotong persegi (JPEG).
+  Future<Response> uploadProfilePhoto(
+    Uint8List jpeg, {
+    required bool cso,
+  }) async {
+    return await _dio.post(
+      '/${cso ? 'cso' : 'driver'}/profile/photo',
+      data: FormData.fromMap({
+        'photo': MultipartFile.fromBytes(jpeg, filename: 'avatar.jpg'),
+      }),
+    );
+  }
+
+  Future<Response> deleteProfilePhoto({required bool cso}) async {
+    return await _dio.delete('/${cso ? 'cso' : 'driver'}/profile/photo');
+  }
+
+  /// URL publik file di disk `public` server (foto profil, bukti transfer).
+  static String storageUrl(String path) => '$assetBaseUrl/storage/$path';
 
   // --- Setoran tunai CSO ke admin ---
 

@@ -2107,6 +2107,7 @@ class ApiController extends Controller
                 return [
                     'id'              => $user->id,
                     'name'            => $user->name,
+                    'photo_path'      => $user->photo_path,
                     'line_number'     => $p->line_number,
                     'car_model'       => $p->car_model,
                     'plate_number'    => $p->plate_number,

@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
+use App\Http\Controllers\Api\ProfilePhotoController;
 use App\Http\Controllers\Api\ApiAuthController; // <-- Arahkan ke ApiAuthController
 use App\Http\Controllers\Api\ManagementApiController; // Management API (read-only) utk sistem eksternal
 
@@ -178,6 +179,8 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/profile', [CsoApiController::class, 'getProfile']);
         Route::post('/profile/update', [CsoApiController::class, 'updateProfile']);
         Route::post('/profile/password', [CsoApiController::class, 'changePassword']);
+        Route::post('/profile/photo', [ProfilePhotoController::class, 'store']);
+        Route::delete('/profile/photo', [ProfilePhotoController::class, 'destroy']);
 
         Route::post('/bookings/{booking}/change-driver', [CsoApiController::class, 'changeDriver']);
 
@@ -237,6 +240,8 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::post('/change-password', [DriverApiController::class, 'changePassword']);
 
         Route::post('/profile/update', [DriverApiController::class, 'updateProfile']);
+        Route::post('/profile/photo', [ProfilePhotoController::class, 'store']);
+        Route::delete('/profile/photo', [ProfilePhotoController::class, 'destroy']);
         Route::post('/update-fcm-token', [DriverApiController::class, 'updateFcmToken']);
     });
 });

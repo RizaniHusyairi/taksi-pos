@@ -1498,8 +1498,13 @@ export class AdminApp {
 
         return `<tr class="border-t hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${isActive ? '' : 'opacity-60'}">
           <td class="py-3 px-3">
-            <div class="font-medium text-slate-900 dark:text-slate-100">${u.name}${statusBadge}</div>
-            ${carInfo.replace('text-slate-500', 'text-slate-500 dark:text-slate-400')}
+            <div class="flex items-center gap-3">
+              ${AdminApp.avatarHtml(u, 38)}
+              <div class="min-w-0">
+                <div class="font-medium text-slate-900 dark:text-slate-100">${u.name}${statusBadge}</div>
+                ${carInfo.replace('text-slate-500', 'text-slate-500 dark:text-slate-400')}
+              </div>
+            </div>
           </td>
           <td class="py-3 px-3 capitalize text-slate-600 dark:text-slate-300">${u.role}</td>
           <td class="py-3 px-3 text-slate-600 dark:text-slate-300">${u.username}</td>
@@ -2873,6 +2878,21 @@ export class AdminApp {
   }
 
   /**
+   * Foto profil bulat (diunggah supir/CSO dari aplikasi). Tanpa foto, atau
+   * bila gambarnya gagal dimuat, jatuh ke lingkaran berinisial nama.
+   * Inline style dipakai supaya bisa dipakai juga di popup peta Leaflet.
+   */
+  static avatarHtml(u, size = 36) {
+    const esc = AdminApp.escapeHtml;
+    const inisial = esc(String(u?.name || '?').trim().charAt(0).toUpperCase() || '?');
+    const dasar = `width:${size}px;height:${size}px;border-radius:50%;flex-shrink:0;`;
+    const cadangan = `<span style="${dasar}display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#dbeafe,#bfdbfe);color:#0b4da2;font-weight:800;font-size:${Math.round(size * 0.42)}px">${inisial}</span>`;
+    if (!u?.photo_path) return cadangan;
+    const src = esc('/storage/' + u.photo_path);
+    return `<span style="${dasar}position:relative;display:inline-block">${cadangan.replace('<span style="', '<span style="position:absolute;inset:0;')}<img src="${src}" alt="" loading="lazy" style="${dasar}position:absolute;inset:0;object-fit:cover;border:2px solid #fff;box-shadow:0 1px 4px rgba(15,23,42,.25)" onerror="this.remove()"></span>`;
+  }
+
+  /**
    * Tabel performa CSO untuk satu bulan. Semua agregasi & pengurutan dikerjakan
    * server (lihat adminGetCsoPerformanceReport) — di sini murni menggambar.
    */
@@ -3201,8 +3221,13 @@ export class AdminApp {
       L.marker([d.latitude, d.longitude], { icon }).addTo(this._driverMarkers)
         .bindPopup(
           `<div style="min-width:180px;font-family:system-ui,sans-serif">
-            <div style="font-weight:800;font-size:14px;color:#0f172a">${esc(d.name)}</div>
-            <div style="font-size:12px;color:#64748b;margin:2px 0 7px">${esc(d.car_model || '-')} &bull; ${esc(d.plate_number || '-')}</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+              ${AdminApp.avatarHtml(d, 40)}
+              <div>
+                <div style="font-weight:800;font-size:14px;color:#0f172a">${esc(d.name)}</div>
+                <div style="font-size:12px;color:#64748b;margin-top:2px">${esc(d.car_model || '-')} &bull; ${esc(d.plate_number || '-')}</div>
+              </div>
+            </div>
             <span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 9px;border-radius:12px;background:${color}22;color:${color}">${esc((d.status || '').toUpperCase())}</span>
             <div style="margin-top:9px;padding-top:8px;border-top:1px solid #eef2f7;display:flex;gap:14px;font-size:12px;color:#334155">
               <span>Masuk: <b style="color:#16a34a">${d.airport_entries}</b>x</span>

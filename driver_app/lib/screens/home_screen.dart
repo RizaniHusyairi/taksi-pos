@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../utils/api_error.dart';
 import '../widgets/active_order_card.dart';
+import '../widgets/profile_avatar.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
@@ -782,6 +783,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     String name,
     Map<String, dynamic>? profile,
     String status,
+    String? photoPath,
   ) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -792,11 +794,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 25,
-            backgroundColor: Colors.white,
-            child: const Icon(Icons.person_rounded,
-                color: AppColors.deepBlue, size: 28),
+          // Ganti foto lewat menu Profil; di sini hanya ditampilkan.
+          ProfileAvatar(
+            photoPath: photoPath,
+            inisial: name.isEmpty ? 'D' : name[0].toUpperCase(),
+            size: 52,
+            editable: false,
           ),
           const SizedBox(width: 14),
           Expanded(
