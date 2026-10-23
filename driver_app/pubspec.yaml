@@ -55,6 +55,7 @@ dependencies:
   esc_pos_utils_plus: ^2.0.4
   image: ^4.9.1
   url_launcher: ^6.3.2
+  camera: ^0.12.1
 
 dev_dependencies:
   flutter_test:

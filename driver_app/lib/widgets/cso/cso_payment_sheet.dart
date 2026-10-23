@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../providers/cso_order_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/format.dart';
+import '../../screens/live_camera_screen.dart';
 
 /// Bottom sheet pembayaran (langkah 2). Mengumpulkan No. WA penumpang +
 /// metode (QRIS / Tunai Kasir / Tunai Supir). Untuk QRIS wajib unggah bukti.
@@ -65,8 +66,10 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
     if (_validPhone() != null) return false;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No. WhatsApp penumpang harus 10–15 digit, '
-            'atau kosongkan saja.'),
+        content: Text(
+          'No. WhatsApp penumpang harus 10–15 digit, '
+          'atau kosongkan saja.',
+        ),
       ),
     );
     return true;
@@ -94,6 +97,14 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
       ),
     );
     if (source == null) return;
+    if (!mounted) return;
+    // Kamera: potret langsung di aplikasi (bingkai panduan, fokus,
+    // tinjau ulang) — bukan kamera bawaan lewat image_picker.
+    if (source == ImageSource.camera) {
+      final path = await LiveCameraScreen.buka(context);
+      if (path != null && mounted) setState(() => _proofPath = path);
+      return;
+    }
     try {
       final file = await ImagePicker().pickImage(
         source: source,
@@ -112,7 +123,7 @@ class _CsoPaymentSheetState extends State<CsoPaymentSheet> {
 
   void _verify(CsoPaymentMethod method) {
     if (_phoneBermasalah()) return;
-    final phone = _validPhone()!;   // '' bila sengaja dikosongkan
+    final phone = _validPhone()!; // '' bila sengaja dikosongkan
 
     if (method == CsoPaymentMethod.qris && _proofPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(

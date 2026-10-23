@@ -11,6 +11,7 @@ import '../utils/format.dart';
 import '../widgets/app_card.dart';
 import '../widgets/fade_in.dart';
 import '../widgets/gradient_button.dart';
+import 'live_camera_screen.dart';
 
 /// Layar "Setor Tunai": supir melunasi utang komisi atas order yang dibayar
 /// penumpang secara tunai langsung kepadanya.
@@ -156,6 +157,18 @@ class _DriverDepositScreenState extends State<DriverDepositScreen> {
       ),
     );
     if (sumber == null) return;
+    if (!mounted) return;
+    // Kamera: potret langsung di aplikasi (bingkai panduan, fokus,
+    // tinjau ulang) — bukan kamera bawaan lewat image_picker.
+    if (sumber == ImageSource.camera) {
+      final path = await LiveCameraScreen.buka(
+        context,
+        judul: 'Foto Bukti Setoran',
+        petunjuk: 'Potret uang / kuitansi saat diserahkan ke admin',
+      );
+      if (path != null && mounted) setState(() => _proofPath = path);
+      return;
+    }
 
     try {
       final file = await ImagePicker().pickImage(
