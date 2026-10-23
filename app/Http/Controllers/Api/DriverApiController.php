@@ -997,8 +997,16 @@ class DriverApiController extends Controller
             ->pluck('id')
             ->flip();
 
-        $history->each(function ($t) use ($bisa) {
+        // Potongan koperasi per trip, dari rumus tunggal CommissionCalculator,
+        // supaya ringkasan di aplikasi sama angkanya dengan tagihan setoran.
+        $kalkulator = app(CommissionCalculator::class);
+        $rate = $kalkulator->rate();
+        $flat = $kalkulator->flat();
+
+        $history->each(function ($t) use ($bisa, $rate, $flat) {
             $t->can_dispute = $bisa->has($t->id);
+            $t->commission = round(CommissionCalculator::compute($t, $rate, $flat));
+            $t->driver_share = round((float) $t->amount - $t->commission);
         });
 
         return response()->json($history);

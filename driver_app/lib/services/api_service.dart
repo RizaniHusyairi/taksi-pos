@@ -178,8 +178,12 @@ class ApiService {
     return await _dio.post('/driver/withdrawals');
   }
 
-  Future<Response> getTripHistory() async {
-    return await _dio.get('/driver/history');
+  /// [dateFrom]/[dateTo] berformat yyyy-MM-dd; keduanya boleh kosong.
+  Future<Response> getTripHistory({String? dateFrom, String? dateTo}) async {
+    return await _dio.get('/driver/history', queryParameters: {
+      if (dateFrom != null) 'date_from': dateFrom,
+      if (dateTo != null) 'date_to': dateTo,
+    });
   }
 
   /// "SAYA JEMPUT": supir berangkat -> karcis di konter CSO terbit dan order

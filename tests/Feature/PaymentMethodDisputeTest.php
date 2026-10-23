@@ -173,6 +173,10 @@ class PaymentMethodDisputeTest extends TestCase
 
         $this->assertTrue($riwayat[$bisa->id]['can_dispute']);
         $this->assertFalse($riwayat[$tidak->id]['can_dispute']);
+
+        // Potongan & hak bersih dihitung server (rate 20% dari setUp).
+        $this->assertEquals(20000, $riwayat[$bisa->id]['commission']);
+        $this->assertEquals(80000, $riwayat[$bisa->id]['driver_share']);
     }
 
     // === Admin memutus ====================================================
