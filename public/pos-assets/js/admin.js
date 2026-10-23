@@ -110,9 +110,36 @@ export class AdminApp {
   constructor() {
     this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'cso-deposits', 'driver-deposits', 'method-disputes', 'report-revenue', 'report-driver', 'cso-performance', 'fraud-signals', 'driver-map', 'api', 'wa', 'settings'];
     this.charts = {};
+
+    // Tampilan yang menyegarkan diri selama dibuka (ms). Formulir, laporan
+    // berat, dan pengaturan sengaja tidak ikut: memuat ulang di tengah admin
+    // mengetik akan menimpa isiannya.
+    this.autoRefresh = {
+      'dashboard':       { ms: 60000, fns: ['renderDashboard'] },
+      'queue':           { ms: 15000, fns: ['renderQueue'] },
+      'users':           { ms: 30000, fns: ['renderUsers'] },
+      'finance-log':     { ms: 30000, fns: ['renderTxLog'] },
+      'withdrawals':     { ms: 20000, fns: ['renderWithdrawals'] },
+      'cso-deposits':    { ms: 20000, fns: ['renderCsoDeposits'] },
+      'driver-deposits': { ms: 20000, fns: ['renderDriverDeposits'] },
+      'method-disputes': { ms: 30000, fns: ['renderMethodDisputes'] },
+    };
+
+    // Halaman tabel terakhir dicatat supaya penyegaran otomatis tidak
+    // melempar admin kembali ke halaman 1.
+    this._lastPage = {};
+    ['renderUsers', 'renderTxLog', 'renderWithdrawals', 'renderCsoDeposits',
+     'renderDriverDeposits', 'renderMethodDisputes'].forEach(fn => {
+      const asli = this[fn].bind(this);
+      this[fn] = (page = 1) => { this._lastPage[fn] = page; return asli(page); };
+    });
   }
   init() {
     window.addEventListener('hashchange', () => this.route());
+    // Kembali ke tab browser ini → langsung segarkan, jangan tunggu interval.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) this._refreshView(this._currentView);
+    });
     this.route();
     this.populateFilterDropdowns();
     this.initCommon();
@@ -603,6 +630,11 @@ export class AdminApp {
       this.renderDriverMap();
       this._mapPoll = setInterval(() => this.renderDriverMap(), 15000);
     }
+    this._currentView = hash;
+    clearInterval(this._viewPoll);
+    const auto = this.autoRefresh[hash];
+    if (auto) this._viewPoll = setInterval(() => this._refreshView(hash), auto.ms);
+
     if (hash === 'wa') this.renderWa();
     if (hash === 'wa') this.renderFcm();
     // Sinyal kecurangan sengaja TIDAK ikut renderAll(): tiga query agregatnya
@@ -612,6 +644,17 @@ export class AdminApp {
     // Peta pemilih titik pusat hidup di tab Pengaturan yang awalnya tersembunyi
     // → Leaflet perlu menghitung ulang ukurannya setiap tab ini dibuka.
     if (hash === 'settings') this.renderAirportCenterMap();
+  }
+  // Dilewati saat tab browser tersembunyi, ada modal terbuka, atau admin
+  // sedang mengisi kolom di tampilan itu (mis. filter tanggal).
+  _refreshView(view) {
+    const auto = this.autoRefresh[view];
+    if (!auto || document.hidden) return;
+    if (document.querySelector('[id^="modal"].flex')) return;
+    const aktif = document.activeElement;
+    if (aktif && aktif.matches('input, select, textarea')
+        && aktif.closest('#view-' + view)) return;
+    auto.fns.forEach(fn => this[fn](this._lastPage[fn] || 1));
   }
   titleOf(v) {
     return {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../utils/auto_refresh.dart';
 import '../services/api_service.dart';
 import '../utils/api_error.dart';
 import '../theme/app_colors.dart';
@@ -40,7 +41,8 @@ class HistoryScreen extends StatefulWidget {
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class _HistoryScreenState extends State<HistoryScreen>
+    with AutoRefresh {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -111,7 +113,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     };
   }
 
-  Future<void> _fetchHistory() async {
+  @override
+  Future<void> autoRefresh() => _fetchHistory(silent: true);
+
+  Future<void> _fetchHistory({bool silent = false}) async {
     final r = _rentang();
     final ymd = DateFormat('yyyy-MM-dd');
     try {
@@ -127,7 +132,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = apiErrorMessage(e);
           _isLoading = false;
@@ -218,7 +223,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ? _errorBody()
                 : RefreshIndicator(
                     color: AppColors.skyBlue,
-                    onRefresh: _fetchHistory,
+                    onRefresh: () => _fetchHistory(),
                     child: _daftar(),
                   ),
           ),
@@ -508,7 +513,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _errorBody() {
     return RefreshIndicator(
       color: AppColors.skyBlue,
-      onRefresh: _fetchHistory,
+      onRefresh: () => _fetchHistory(),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [

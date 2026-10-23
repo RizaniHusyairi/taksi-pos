@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../utils/auto_refresh.dart';
 import '../services/api_service.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
@@ -21,7 +22,8 @@ class WalletScreen extends StatefulWidget {
   State<WalletScreen> createState() => _WalletScreenState();
 }
 
-class _WalletScreenState extends State<WalletScreen> {
+class _WalletScreenState extends State<WalletScreen>
+    with AutoRefresh {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -69,8 +71,11 @@ class _WalletScreenState extends State<WalletScreen> {
     _fetchData();
   }
 
-  Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
+  @override
+  Future<void> autoRefresh() => _fetchData(silent: true);
+
+  Future<void> _fetchData({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
     try {
@@ -107,7 +112,7 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = apiErrorMessage(e);
           _isLoading = false;
@@ -164,7 +169,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 : _error != null
                 ? RefreshIndicator(
                     color: AppColors.skyBlue,
-                    onRefresh: _fetchData,
+                    onRefresh: () => _fetchData(),
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
@@ -180,7 +185,7 @@ class _WalletScreenState extends State<WalletScreen> {
                   )
                 : RefreshIndicator(
                     color: AppColors.skyBlue,
-                    onRefresh: _fetchData,
+                    onRefresh: () => _fetchData(),
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                       children: [

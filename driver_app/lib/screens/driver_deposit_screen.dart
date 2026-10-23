@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../utils/auto_refresh.dart';
 import '../models/driver_deposit.dart';
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
@@ -32,7 +33,8 @@ class DriverDepositScreen extends StatefulWidget {
   State<DriverDepositScreen> createState() => _DriverDepositScreenState();
 }
 
-class _DriverDepositScreenState extends State<DriverDepositScreen> {
+class _DriverDepositScreenState extends State<DriverDepositScreen>
+    with AutoRefresh {
   final _api = ApiService();
 
   List<DriverOutstandingDay> _days = [];
@@ -60,11 +62,20 @@ class _DriverDepositScreenState extends State<DriverDepositScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  Future<void> autoRefresh() => _load(silent: true);
+
+  // Jangan menyegarkan di tengah pengiriman setoran.
+  @override
+  bool get autoRefreshPaused => _submitting;
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final hasil = await Future.wait([
         _api.getDriverDepositOutstanding(),
@@ -99,7 +110,7 @@ class _DriverDepositScreenState extends State<DriverDepositScreen> {
         _loading = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = apiErrorMessage(e);
           _loading = false;
@@ -285,7 +296,7 @@ class _DriverDepositScreenState extends State<DriverDepositScreen> {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.skyBlue,
-            onRefresh: _load,
+            onRefresh: () => _load(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),

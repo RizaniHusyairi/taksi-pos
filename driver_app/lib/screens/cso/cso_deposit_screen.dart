@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../utils/auto_refresh.dart';
 import '../../models/cso_deposit.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
@@ -25,7 +26,8 @@ class CsoDepositScreen extends StatefulWidget {
   State<CsoDepositScreen> createState() => _CsoDepositScreenState();
 }
 
-class _CsoDepositScreenState extends State<CsoDepositScreen> {
+class _CsoDepositScreenState extends State<CsoDepositScreen>
+    with AutoRefresh {
   final _api = ApiService();
 
   List<OutstandingDay> _days = [];
@@ -61,11 +63,20 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  Future<void> autoRefresh() => _load(silent: true);
+
+  // Jangan menyegarkan di tengah pengiriman setoran.
+  @override
+  bool get autoRefreshPaused => _submitting;
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final hasil = await Future.wait([
         _api.getCsoDepositOutstanding(),
@@ -103,7 +114,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
         _muatRincian(d);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _error = apiErrorMessage(e);
           _loading = false;
@@ -483,7 +494,7 @@ class _CsoDepositScreenState extends State<CsoDepositScreen> {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.skyBlue,
-            onRefresh: _load,
+            onRefresh: () => _load(),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),

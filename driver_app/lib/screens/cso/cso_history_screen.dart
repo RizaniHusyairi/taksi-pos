@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../utils/auto_refresh.dart';
 import '../../models/cso_transaction.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
@@ -23,7 +24,8 @@ class CsoHistoryScreen extends StatefulWidget {
   State<CsoHistoryScreen> createState() => _CsoHistoryScreenState();
 }
 
-class _CsoHistoryScreenState extends State<CsoHistoryScreen> {
+class _CsoHistoryScreenState extends State<CsoHistoryScreen>
+    with AutoRefresh {
   final _api = ApiService();
   final _cari = TextEditingController();
 
@@ -97,11 +99,16 @@ class _CsoHistoryScreenState extends State<CsoHistoryScreen> {
     };
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  Future<void> autoRefresh() => _load(silent: true);
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final r = _rentang;
       final res = await _api.getCsoHistory(
@@ -115,9 +122,9 @@ class _CsoHistoryScreenState extends State<CsoHistoryScreen> {
           .toList();
       if (mounted) setState(() => _txs = list);
     } catch (e) {
-      if (mounted) setState(() => _error = apiErrorMessage(e));
+      if (mounted && !silent) setState(() => _error = apiErrorMessage(e));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && !silent) setState(() => _loading = false);
     }
   }
 
@@ -278,7 +285,7 @@ class _CsoHistoryScreenState extends State<CsoHistoryScreen> {
     ];
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: () => _load(),
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
