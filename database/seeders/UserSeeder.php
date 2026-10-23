@@ -40,7 +40,6 @@ class UserSeeder extends Seeder
         }
 
         // 3. GENERATE 30 AKUN DRIVER (DENGAN NOMOR URUT)
-        $carModels = ['Toyota Avanza', 'Daihatsu Xenia', 'Toyota Calya', 'Daihatsu Sigra', 'Honda Brio', 'Suzuki Ertiga', 'Toyota Innova'];
 
         for ($i = 1; $i <= 30; $i++) {
             
@@ -56,12 +55,11 @@ class UserSeeder extends Seeder
             );
 
             $randomPlate = 'KT ' . $faker->numberBetween(1000, 9999) . ' ' . strtoupper($faker->lexify('??'));
-            $randomCar = $carModels[array_rand($carModels)];
 
             $driver->driverProfile()->updateOrCreate(
                 ['user_id' => $driver->id],
                 [
-                    'car_model' => $randomCar,
+                    'car_model' => \App\Models\DriverProfile::CAR_MODEL,
                     'plate_number' => $randomPlate,
                     'status' => 'offline', // Default offline
                     'line_number' => $i,   // NOMOR URUT TETAP (1 s/d 30)

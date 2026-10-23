@@ -920,7 +920,7 @@
                   <svg class="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
                   Tipe Kendaraan
                 </label>
-                <input id="userCar" class="w-full rounded-xl border-gray-200 bg-white/80 dark:border-white/10 dark:bg-black/40 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3" placeholder="Contoh: Innova"/>
+                <input id="userCar" value="Honda Mobilio" readonly title="Seluruh armada Angkasa Jaya memakai Honda Mobilio" class="w-full rounded-xl border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed dark:border-white/10 dark:bg-white/5 dark:text-gray-400 text-sm py-2.5 px-3"/>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Nomor Plat</label>

@@ -1651,7 +1651,7 @@ export class AdminApp {
       document.getElementById('userPassword').value = '';
       document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
 
-      document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
+      document.getElementById('userCar').value = 'Honda Mobilio'; // seluruh armada (DriverProfile::CAR_MODEL)
       document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
 
       const role = document.getElementById('userRole').value;
@@ -3906,7 +3906,7 @@ export class AdminApp {
     document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
 
     // Sesuaikan nama properti object data dari backend
-    document.getElementById('userCar').value = isEditing ? data.driver_profile?.car_model || '' : '';
+    document.getElementById('userCar').value = 'Honda Mobilio'; // seluruh armada (DriverProfile::CAR_MODEL)
     document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
 
     const role = document.getElementById('userRole').value;

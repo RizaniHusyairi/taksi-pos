@@ -19,6 +19,21 @@ class DriverProfile extends Model
         'ovo'       => 'OVO',
     ];
 
+    /**
+     * Seluruh armada Angkasa Jaya memakai Honda Mobilio (keputusan koperasi
+     * 2026-10-23). Model mobil tidak lagi diisi supir maupun admin: setiap
+     * penyimpanan profil memaksa nilai ini, jadi semua jalur tulis (form admin,
+     * edit profil aplikasi, APK lama) otomatis seragam.
+     */
+    public const CAR_MODEL = 'Honda Mobilio';
+
+    protected static function booted(): void
+    {
+        static::saving(function (DriverProfile $profile) {
+            $profile->car_model = self::CAR_MODEL;
+        });
+    }
+
     protected $fillable = [
         'user_id',
         'car_model',

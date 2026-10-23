@@ -22,7 +22,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _usernameController;
-  late TextEditingController _carModelController;
   late TextEditingController _plateNumberController;
 
   final ApiService _apiService = ApiService();
@@ -39,9 +38,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emailController = TextEditingController(text: user['email']);
     _phoneController = TextEditingController(text: user['phone_number']);
     _usernameController = TextEditingController(text: user['username']);
-    _carModelController = TextEditingController(
-      text: profile?['car_model'] ?? '',
-    );
     _plateNumberController = TextEditingController(
       text: profile?['plate_number'] ?? '',
     );
@@ -53,7 +49,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _usernameController.dispose();
-    _carModelController.dispose();
     _plateNumberController.dispose();
     super.dispose();
   }
@@ -69,7 +64,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'email': _emailController.text,
         'phone_number': _phoneController.text,
         'username': _usernameController.text,
-        'car_model': _carModelController.text,
         'plate_number': _plateNumberController.text,
       };
 
@@ -136,11 +130,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                     const SizedBox(height: 22),
                     _buildSectionTitle("Informasi Kendaraan"),
-                    _buildTextField(
-                      "Model Mobil (Contoh: Avanza Hitam)",
-                      _carModelController,
-                      icon: Icons.directions_car_rounded,
-                    ),
+                    _modelMobilTetap(),
                     _buildTextField("Plat Nomor", _plateNumberController,
                         icon: Icons.confirmation_number_rounded),
                     const SizedBox(height: 28),
@@ -180,6 +170,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               color: AppColors.ink,
               fontSize: 17,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Seluruh armada memakai Honda Mobilio (DriverProfile::CAR_MODEL di
+  /// server), jadi model mobil hanya ditampilkan, tidak bisa diubah.
+  Widget _modelMobilTetap() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Model Mobil",
+            style: GoogleFonts.outfit(
+              color: AppColors.inkSoft,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.paleBlue,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.directions_car_rounded,
+                    color: AppColors.cyan, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Honda Mobilio",
+                    style: GoogleFonts.outfit(
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.lock_rounded,
+                    color: AppColors.inkFaint, size: 16),
+              ],
             ),
           ),
         ],

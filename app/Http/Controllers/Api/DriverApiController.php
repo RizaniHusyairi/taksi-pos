@@ -1627,7 +1627,8 @@ class DriverApiController extends Controller
             'username'     => 'required|string|max:50|unique:users,username,' . $user->id,
             
             // Validasi Tabel DriverProfiles
-            'car_model'    => 'required|string|max:50',
+            // car_model tidak lagi dibaca: selalu Honda Mobilio
+            // (DriverProfile::CAR_MODEL). APK lama yang masih mengirimnya aman.
             'plate_number' => 'required|string|max:20',
         ]);
 
@@ -1643,10 +1644,7 @@ class DriverApiController extends Controller
             // 3. Update Tabel DriverProfiles
             $user->driverProfile()->updateOrCreate(
                 ['user_id' => $user->id],
-                [
-                    'car_model'    => $validated['car_model'],
-                    'plate_number' => $validated['plate_number']
-                ]
+                ['plate_number' => $validated['plate_number']]
             );
         });
 
