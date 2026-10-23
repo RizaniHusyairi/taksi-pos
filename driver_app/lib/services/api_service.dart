@@ -396,14 +396,16 @@ class ApiService {
     String? proofPath,
   }) async {
     final Map<String, dynamic> fields = {
-      // Dio mengirim List sebagai dates[]=..., sesuai validasi 'dates.*'.
+      // multiCompatible -> dates[]=...; bawaan Dio (multi) mengirim dates=...
+      // tanpa [] sehingga PHP hanya membaca nilai terakhir sebagai string.
       'dates': dates,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
     };
     if (proofPath != null) {
       fields['proof_image'] = await MultipartFile.fromFile(proofPath);
     }
-    return await _dio.post('/cso/deposits', data: FormData.fromMap(fields));
+    return await _dio.post('/cso/deposits',
+        data: FormData.fromMap(fields, ListFormat.multiCompatible));
   }
 
   /// Riwayat setoran CSO yang sedang login (paginated).
@@ -446,7 +448,8 @@ class ApiService {
     if (proofPath != null) {
       fields['proof_image'] = await MultipartFile.fromFile(proofPath);
     }
-    return await _dio.post('/driver/deposits', data: FormData.fromMap(fields));
+    return await _dio.post('/driver/deposits',
+        data: FormData.fromMap(fields, ListFormat.multiCompatible));
   }
 
   /// Riwayat setoran supir yang sedang login (paginated).
