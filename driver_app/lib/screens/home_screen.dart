@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../utils/api_error.dart';
+import '../widgets/active_order_card.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
@@ -732,7 +733,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ],
                     if (activeBooking != null) ...[
                       FadeInUp(
-                        child: _buildOrderCard(activeBooking, currencyFormat),
+                        child: ActiveOrderCard(
+                          booking: activeBooking,
+                          currency: currencyFormat,
+                          pickupSecondsLeft: _pickupTimeSeconds,
+                          onConfirmPickup: () =>
+                              _confirmPickup(activeBooking['id']),
+                          onComplete: () => _completeTrip(activeBooking['id']),
+                        ),
                       ),
                     ] else ...[
                       FadeInUp(
@@ -981,195 +989,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 color: depan,
                 fontSize: 11,
                 fontWeight: bermasalah ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOrderCard(Map<String, dynamic> booking, NumberFormat currency) {
-    final zoneName = booking['zone_to']?['name'] ??
-        booking['manual_destination'] ??
-        'Tujuan Manual';
-    final price = double.tryParse(booking['price'].toString()) ?? 0;
-    final csoName = booking['cso']?['name'] ?? 'Sistem';
-    final passengerPhone = booking['passenger_phone'] ?? '-';
-    var paymentMethod = booking['transaction']?['method'] ?? 'Tunai';
-    if (paymentMethod == 'CashCSO') {
-      paymentMethod = 'Tunai ke Kasir (CSO)';
-    } else if (paymentMethod == 'CashDriver') {
-      paymentMethod = 'Tunai ke Supir';
-    }
-    final isOntrip = booking['status'] == 'OnTrip';
-    // Assigned = belum berangkat (tombol SAYA JEMPUT, karcis di konter CSO
-    // masih terkunci). SAYA JEMPUT langsung menjadikan order OnTrip.
-    final accent = isOntrip ? AppColors.skyBlue : AppColors.success;
-
-    return AppCard(
-      padding: EdgeInsets.zero,
-      shadow: [
-        BoxShadow(
-          color: accent.withValues(alpha: 0.25),
-          blurRadius: 26,
-          offset: const Offset(0, 12),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header strip gradien
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isOntrip
-                    ? const [AppColors.deepBlue, AppColors.skyBlue]
-                    : const [Color(0xFF12A06B), AppColors.success],
-              ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isOntrip
-                      ? Icons.navigation_rounded
-                      : Icons.notifications_active_rounded,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  isOntrip
-                      ? "DALAM PERJALANAN"
-                      : "ORDERAN MASUK",
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!isOntrip && _pickupTimeSeconds != null)
-                  _pickupTimerBox(),
-                _orderRow("Tujuan", zoneName, isBold: true),
-                _orderRow("Tarif", currency.format(price), isHighlight: true),
-                const Divider(height: 28),
-                _orderRow("Penumpang (WA)", passengerPhone),
-                _orderRow("CSO", csoName),
-                _orderRow("Pembayaran", paymentMethod),
-                const SizedBox(height: 24),
-                if (!isOntrip) ...[
-                  // Sekali tekan, tanpa dialog: supir memang tidak bisa menolak
-                  // order, jadi tidak ada salah tekan yang perlu dicegah.
-                  GradientButton(
-                    label: "SAYA JEMPUT",
-                    icon: Icons.directions_car_filled_rounded,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF12A06B), AppColors.success],
-                    ),
-                    onPressed: () => _confirmPickup(booking['id']),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      "Tekan saat berangkat — perjalanan dimulai & karcis dicetak di konter CSO",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        color: AppColors.inkSoft,
-                      ),
-                    ),
-                  ),
-                ] else
-                  GradientButton(
-                    label: "SELESAIKAN PERJALANAN",
-                    icon: Icons.check_circle_rounded,
-                    gradient: const LinearGradient(
-                      colors: [AppColors.deepBlue, AppColors.skyBlue],
-                    ),
-                    onPressed: () => _completeTrip(booking['id']),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pickupTimerBox() {
-    final urgent = _pickupTimeSeconds! < 60;
-    final color = urgent ? AppColors.danger : AppColors.warning;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.timer_rounded, color: color),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Batas Waktu Jemput",
-                  style: GoogleFonts.outfit(
-                    color: AppColors.inkSoft,
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  _formatDuration(_pickupTimeSeconds!),
-                  style: GoogleFonts.robotoMono(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _orderRow(
-    String label,
-    String value, {
-    bool isBold = false,
-    bool isHighlight = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: GoogleFonts.outfit(color: AppColors.inkSoft)),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: GoogleFonts.outfit(
-                color: isHighlight ? AppColors.cyan : AppColors.ink,
-                fontWeight:
-                    isBold || isHighlight ? FontWeight.bold : FontWeight.w500,
-                fontSize: isHighlight ? 20 : 14,
               ),
             ),
           ),

@@ -71,23 +71,31 @@ class _GradientButtonState extends State<GradientButton> {
                       color: widget.foreground,
                     ),
                   )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (widget.icon != null) ...[
-                        Icon(widget.icon, color: widget.foreground, size: 20),
-                        const SizedBox(width: 10),
-                      ],
-                      Text(
-                        widget.label,
-                        style: GoogleFonts.outfit(
-                          color: widget.foreground,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          letterSpacing: 0.4,
-                        ),
+                // Label panjang di layar sempit / huruf besar: perkecil,
+                // jangan meluap keluar tombol.
+                : Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.icon != null) ...[
+                            Icon(widget.icon, color: widget.foreground, size: 20),
+                            const SizedBox(width: 10),
+                          ],
+                          Text(
+                            widget.label,
+                            style: GoogleFonts.outfit(
+                              color: widget.foreground,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
           ),
         ),
