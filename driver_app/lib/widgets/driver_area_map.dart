@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/api_service.dart';
 import '../theme/app_colors.dart';
 import 'app_card.dart';
+import 'map_tiles.dart';
 
 /// Peta kecil di beranda supir: posisi supir sendiri + lingkaran area bandara.
 ///
@@ -164,14 +165,7 @@ class _DriverAreaMapState extends State<DriverAreaMap> {
                       },
                     ),
                     children: [
-                      TileLayer(
-                        // Gaya & sumber tile disamakan dengan peta CSO.
-                        urlTemplate:
-                            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                        subdomains: const ['a', 'b', 'c', 'd'],
-                        retinaMode: RetinaMode.isHighDensity(context),
-                        userAgentPackageName: 'com.example.driver_app',
-                      ),
+                      kajTileLayer(),
                       CircleLayer(
                         circles: [
                           CircleMarker(
@@ -205,6 +199,9 @@ class _DriverAreaMapState extends State<DriverAreaMap> {
                         attributions: [
                           TextSourceAttribution('© OpenStreetMap, CARTO'),
                         ],
+                      ),
+                      const RichAttributionWidget(
+                        attributions: [TextSourceAttribution('© OpenStreetMap contributors')],
                       ),
                     ],
                   ),
