@@ -161,6 +161,19 @@ sudo supervisorctl start taksi-worker:*
 
 ## 🔁 Update/redeploy berikutnya
 
+Cukup jalankan skrip di root repo — ia memuat semua langkah di bawah plus
+pengecekan awal (file `.env`, perubahan lokal di server), `storage:link`,
+`queue:restart`, dan cek `/up` di akhir. Bila satu langkah gagal, skrip berhenti
+dan menyebut langkahnya; aplikasi sengaja dibiarkan dalam mode maintenance.
+
+```bash
+cd /var/www/taksi-pos
+bash deploy.sh
+# opsional: PHP_FPM_SERVICE=php8.3-fpm bash deploy.sh   (ikut reload PHP-FPM/OPcache)
+```
+
+Langkah manualnya (yang dijalankan skrip):
+
 ```bash
 cd /var/www/taksi-pos
 php artisan down
