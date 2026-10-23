@@ -828,12 +828,20 @@ class DriverApiController extends Controller
     public function requestWithdrawal(Request $request)
     {
         $driver = $request->user();
-        
+
+        // Lembar Tarik Dana di aplikasi mengirim tujuan pencairannya sekaligus
+        // (supir bisa mengisi/mengubah nomor tepat sebelum menarik). Isian
+        // divalidasi lebih dulu, dan baru DISIMPAN setelah saldo terbukti
+        // cukup — penarikan yang ditolak tidak boleh diam-diam mengubah
+        // profil. Tanpa `payout_method` (APK lama) alurnya seperti dulu.
+        $tujuanBaru = $request->filled('payout_method')
+            ? $this->validasiTujuanPencairan($request)[0]
+            : null;
+
         // --- VALIDASI : Cek Tujuan Pencairan (bank ATAU e-wallet) ---
-        $tujuan = $this->snapshotTujuanPencairan($driver);
-        if (!$tujuan) {
+        if (!$tujuanBaru && !$this->snapshotTujuanPencairan($driver)) {
             return response()->json([
-                'message' => 'Anda belum mengatur tujuan pencairan. Silakan isi rekening Bank BTN atau akun e-wallet di menu Profil.'
+                'message' => 'Anda belum mengatur tujuan pencairan. Isi nomor rekening Bank BTN atau akun e-wallet di lembar Tarik Dana.'
             ], 422); // 422 Unprocessable Entity
         }
 
@@ -844,6 +852,12 @@ class DriverApiController extends Controller
         if ($amountToWithdraw < 10000) {
             return response()->json(['message' => 'Saldo bersih belum mencapai batas minimal pencairan (Rp 10.000).'], 422);
         }
+
+        if ($tujuanBaru) {
+            $driver->driverProfile()->updateOrCreate(['user_id' => $driver->id], $tujuanBaru);
+            $driver->load('driverProfile');
+        }
+        $tujuan = $this->snapshotTujuanPencairan($driver);
 
         // Variabel untuk menampung objek withdrawal agar bisa dikirim ke email
         $newWithdrawal = null;
@@ -1021,6 +1035,29 @@ class DriverApiController extends Controller
      */
     public function updateBankDetails(Request $request)
     {
+        [$data, $pesan] = $this->validasiTujuanPencairan($request);
+
+        $user = $request->user();
+
+        // Update atau Create profile jika belum ada
+        $user->driverProfile()->updateOrCreate(['user_id' => $user->id], $data);
+
+        return response()->json([
+            'message' => $pesan,
+            'data' => $user->load('driverProfile')
+        ]);
+    }
+
+    /**
+     * Validasi isian tujuan pencairan dan petakan ke kolom driver_profiles.
+     * Dipakai bersama oleh updateBankDetails() dan requestWithdrawal()
+     * (lembar Tarik Dana mengirim tujuannya sekaligus), supaya aturannya
+     * hanya ada satu salinan.
+     *
+     * @return array{0: array, 1: string}  [data profil, pesan sukses]
+     */
+    private function validasiTujuanPencairan(Request $request): array
+    {
         $metode = $request->input('payout_method', 'bank');
 
         $rules = ['payout_method' => 'nullable|in:bank,ewallet'];
@@ -1045,8 +1082,6 @@ class DriverApiController extends Controller
             'ewallet_holder_name.required' => 'Nama pemilik akun e-wallet wajib diisi.',
         ]);
 
-        $user = $request->user();
-
         // Hanya kolom milik metode terpilih yang ditulis: data metode lain
         // dibiarkan utuh supaya supir bisa bolak-balik tanpa mengetik ulang.
         $data = ['payout_method' => $metode];
@@ -1067,13 +1102,7 @@ class DriverApiController extends Controller
             $pesan = 'Informasi rekening BTN berhasil disimpan.';
         }
 
-        // Update atau Create profile jika belum ada
-        $user->driverProfile()->updateOrCreate(['user_id' => $user->id], $data);
-
-        return response()->json([
-            'message' => $pesan,
-            'data' => $user->load('driverProfile')
-        ]);
+        return [$data, $pesan];
     }
 
     /**

@@ -174,22 +174,56 @@ class ApiService {
     return await _dio.get('/driver/withdrawals');
   }
 
-  Future<Response> requestWithdrawal() async {
-    return await _dio.post('/driver/withdrawals');
+  /// Ajukan penarikan. Bila [method] diisi, tujuan pencairan ikut dikirim
+  /// dan disimpan server — hanya bila penarikannya diterima.
+  Future<Response> requestWithdrawal({
+    String? method,
+    String? accountNumber,
+    String? provider,
+    String? number,
+    String? holderName,
+  }) async {
+    return await _dio.post(
+      '/driver/withdrawals',
+      data: method == null
+          ? null
+          : _payoutBody(method, accountNumber, provider, number, holderName),
+    );
   }
+
+  Map<String, dynamic> _payoutBody(
+    String method,
+    String? accountNumber,
+    String? provider,
+    String? number,
+    String? holderName,
+  ) => method == 'ewallet'
+      ? {
+          'payout_method': 'ewallet',
+          'ewallet_provider': provider,
+          'ewallet_number': number,
+          'ewallet_holder_name': holderName,
+        }
+      : {'payout_method': 'bank', 'account_number': accountNumber};
 
   /// [dateFrom]/[dateTo] berformat yyyy-MM-dd; keduanya boleh kosong.
   Future<Response> getTripHistory({String? dateFrom, String? dateTo}) async {
-    return await _dio.get('/driver/history', queryParameters: {
-      if (dateFrom != null) 'date_from': dateFrom,
-      if (dateTo != null) 'date_to': dateTo,
-    });
+    return await _dio.get(
+      '/driver/history',
+      queryParameters: {
+        if (dateFrom != null) 'date_from': dateFrom,
+        if (dateTo != null) 'date_to': dateTo,
+      },
+    );
   }
 
   /// "SAYA JEMPUT": supir berangkat -> karcis di konter CSO terbit dan order
   /// langsung OnTrip (tidak ada lagi tombol MULAI PERJALANAN).
   /// [source] 'notification' bila ditekan dari tombol di notifikasi.
-  Future<Response> confirmPickup(int bookingId, {String source = 'button'}) async {
+  Future<Response> confirmPickup(
+    int bookingId, {
+    String source = 'button',
+  }) async {
     return await _dio.post(
       '/driver/bookings/$bookingId/pickup',
       data: {'source': source},
@@ -208,31 +242,6 @@ class ApiService {
 
   Future<Response> completeBooking(int bookingId) async {
     return await _dio.post('/driver/bookings/$bookingId/complete');
-  }
-
-  /// Tujuan pencairan: rekening Bank BTN (`method: 'bank'`) atau satu akun
-  /// e-wallet (`method: 'ewallet'`). Endpoint-nya tetap /driver/bank-details.
-  Future<Response> updatePayoutAccount({
-    required String method,
-    String? accountNumber,
-    String? provider,
-    String? number,
-    String? holderName,
-  }) async {
-    return await _dio.post(
-      '/driver/bank-details',
-      data: method == 'ewallet'
-          ? {
-              'payout_method': 'ewallet',
-              'ewallet_provider': provider,
-              'ewallet_number': number,
-              'ewallet_holder_name': holderName,
-            }
-          : {
-              'payout_method': 'bank',
-              'account_number': accountNumber,
-            },
-    );
   }
 
   Future<Response> updateProfile(Map<String, dynamic> data) async {

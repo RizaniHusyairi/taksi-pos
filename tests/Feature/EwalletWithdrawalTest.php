@@ -193,4 +193,75 @@ class EwalletWithdrawalTest extends TestCase
         $this->assertSame('ewallet', $profil->payout_method);
         $this->assertSame('1234567890', $profil->account_number);
     }
+
+    // === Lembar Tarik Dana: tujuan dikirim bersama pengajuan ===============
+
+    public function test_tarik_dana_dengan_ewallet_baru_menyimpan_tujuan_dan_menyalinnya(): void
+    {
+        $driver = $this->driver(['payout_method' => 'bank', 'account_number' => '1234567890']);
+        $this->saldoOrder($driver);
+
+        Sanctum::actingAs($driver);
+        $this->postJson('/api/driver/withdrawals', [
+            'payout_method'       => 'ewallet',
+            'ewallet_provider'    => 'gopay',
+            'ewallet_number'      => '089876543210',
+            'ewallet_holder_name' => 'Budi S',
+        ])->assertStatus(201);
+
+        $profil = $driver->fresh()->driverProfile;
+        $this->assertSame('ewallet', $profil->payout_method);
+        $this->assertSame('089876543210', $profil->ewallet_number);
+        // Rekening bank lama tetap utuh.
+        $this->assertSame('1234567890', $profil->account_number);
+
+        $w = Withdrawals::where('driver_id', $driver->id)->firstOrFail();
+        $this->assertSame('gopay', $w->payout_provider);
+        $this->assertSame('089876543210', $w->payout_account);
+    }
+
+    public function test_supir_tanpa_rekening_bisa_langsung_mengisi_btn_saat_tarik(): void
+    {
+        $driver = $this->driver();
+        $this->saldoOrder($driver);
+
+        Sanctum::actingAs($driver);
+        $this->postJson('/api/driver/withdrawals', [
+            'payout_method'  => 'bank',
+            'account_number' => '0011223344',
+        ])->assertStatus(201);
+
+        $this->assertSame('0011223344', $driver->fresh()->driverProfile->account_number);
+        $this->assertSame('0011223344', Withdrawals::where('driver_id', $driver->id)->value('payout_account'));
+    }
+
+    public function test_isian_tidak_valid_tidak_mengubah_profil_dan_tidak_membuat_pengajuan(): void
+    {
+        $driver = $this->driver(['payout_method' => 'bank', 'account_number' => '1234567890']);
+        $this->saldoOrder($driver);
+
+        Sanctum::actingAs($driver);
+        $this->postJson('/api/driver/withdrawals', [
+            'payout_method'    => 'ewallet',
+            'ewallet_provider' => 'dana',
+            'ewallet_number'   => '0812', // terlalu pendek
+        ])->assertStatus(422);
+
+        $this->assertSame('bank', $driver->fresh()->driverProfile->payout_method);
+        $this->assertSame(0, Withdrawals::where('driver_id', $driver->id)->count());
+    }
+
+    public function test_saldo_kurang_tidak_menyimpan_tujuan_baru(): void
+    {
+        $driver = $this->driver(['payout_method' => 'bank', 'account_number' => '1234567890']);
+
+        Sanctum::actingAs($driver);
+        $this->postJson('/api/driver/withdrawals', [
+            'payout_method'  => 'bank',
+            'account_number' => '9999999999',
+        ])->assertStatus(422);
+
+        $this->assertSame('1234567890', $driver->fresh()->driverProfile->account_number);
+        $this->assertSame(0, Withdrawals::where('driver_id', $driver->id)->count());
+    }
 }

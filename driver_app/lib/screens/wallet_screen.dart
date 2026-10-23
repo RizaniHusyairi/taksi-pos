@@ -7,21 +7,12 @@ import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/sky_header.dart';
 import '../widgets/app_card.dart';
-import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
 import '../widgets/error_state.dart';
 import '../widgets/wallet_source_sheet.dart';
+import '../widgets/withdraw_sheet.dart';
 import '../utils/api_error.dart';
 import 'driver_deposit_screen.dart';
-
-/// Dompet elektronik tujuan pencairan. Kuncinya harus sama persis dengan
-/// DriverProfile::EWALLET_PROVIDERS di backend — validasi ada di sana.
-const Map<String, String> kEwalletProviders = {
-  'shopeepay': 'ShopeePay',
-  'dana': 'DANA',
-  'gopay': 'GoPay',
-  'ovo': 'OVO',
-};
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -67,30 +58,10 @@ class _WalletScreenState extends State<WalletScreen> {
 
   // Tujuan pencairan: 'bank' (BTN) atau 'ewallet'. Hanya satu yang aktif.
   String _payoutMethod = 'bank';
-  String _bankName = 'Bank BTN';
   String _accountNumber = '';
   String _ewalletProvider = '';
   String _ewalletNumber = '';
   String _ewalletHolder = '';
-
-  bool get _isEwallet => _payoutMethod == 'ewallet';
-
-  /// Sudah lengkap atau belum. Aturan yang sama ditegakkan ulang di server —
-  /// ini cuma supaya supir tidak menekan tombol yang pasti gagal.
-  bool get _payoutConfigured => _isEwallet
-      ? (_ewalletProvider.isNotEmpty &&
-            _ewalletNumber.isNotEmpty &&
-            _ewalletHolder.isNotEmpty)
-      : _accountNumber.isNotEmpty;
-
-  String get _payoutChannelLabel =>
-      _isEwallet ? (kEwalletProviders[_ewalletProvider] ?? '-') : _bankName;
-
-  String get _payoutDetailLabel => _isEwallet
-      ? (_ewalletNumber.isEmpty
-            ? "Belum Diatur"
-            : "$_ewalletNumber a.n. $_ewalletHolder")
-      : (_accountNumber.isEmpty ? "Belum Diatur" : _accountNumber);
 
   @override
   void initState() {
@@ -126,7 +97,6 @@ class _WalletScreenState extends State<WalletScreen> {
 
           // Tujuan pencairan dari profil
           _payoutMethod = profile?['payout_method'] ?? 'bank';
-          _bankName = profile?['bank_name'] ?? 'Bank BTN'; // Default to BTN
           _accountNumber = profile?['account_number'] ?? '';
           _ewalletProvider = profile?['ewallet_provider'] ?? '';
           _ewalletNumber = profile?['ewallet_number'] ?? '';
@@ -146,297 +116,30 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
+  /// Lembar Tarik Dana: supir memilih BTN / e-wallet dan bisa mengisi atau
+  /// mengubah nomornya di sana — tujuan baru dikirim bersama pengajuan dan
+  /// disimpan server hanya bila penarikannya diterima.
   Future<void> _requestWithdrawal() async {
-    // Tujuan pencairan harus lengkap dulu
-    if (!_payoutConfigured) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Harap atur tujuan pencairan terlebih dahulu!'),
-        ),
-      );
-      _showEditBankDialog();
-      return;
-    }
-
-    // Confirm Dialog
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Konfirmasi Penarikan"),
-        content: Text(
-          "Ajukan penarikan sebesar Rp ${NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0).format(_balance)} ke $_payoutChannelLabel ($_payoutDetailLabel)?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              "Batal",
-              style: GoogleFonts.outfit(color: AppColors.inkSoft),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.skyBlue,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Ya, Tarik Dana"),
-          ),
-        ],
+    final berhasil = await WithdrawSheet.tampilkan(
+      context,
+      amount: _balance,
+      debt: _debtTotal,
+      saved: PayoutTujuan(
+        method: _payoutMethod,
+        accountNumber: _accountNumber,
+        provider: _ewalletProvider,
+        number: _ewalletNumber,
+        holder: _ewalletHolder,
+      ),
+      onSubmit: (t) => _apiService.requestWithdrawal(
+        method: t.method,
+        accountNumber: t.accountNumber,
+        provider: t.provider,
+        number: t.number,
+        holderName: t.holder,
       ),
     );
-
-    if (confirm != true) return;
-
-    try {
-      await _apiService.requestWithdrawal();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Permintaan penarikan berhasil dikirim!'),
-          ),
-        );
-      }
-      _fetchData();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
-      }
-    }
-  }
-
-  void _showEditBankDialog() {
-    final accController = TextEditingController(text: _accountNumber);
-    final numController = TextEditingController(text: _ewalletNumber);
-    final holderController = TextEditingController(text: _ewalletHolder);
-    // State lokal sheet: metode & provider bisa diubah sebelum disimpan tanpa
-    // mengganggu tampilan kartu di belakangnya.
-    String metode = _payoutMethod;
-    String provider = _ewalletProvider.isNotEmpty ? _ewalletProvider : 'dana';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 12,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: AppColors.inkFaint.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                Text(
-                  "Atur Tujuan Pencairan",
-                  style: GoogleFonts.outfit(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  "Hanya satu tujuan yang aktif. Dana dikirim manual oleh admin.",
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    color: AppColors.inkSoft,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'bank',
-                      label: Text("Bank BTN"),
-                      icon: Icon(Icons.account_balance_rounded),
-                    ),
-                    ButtonSegment(
-                      value: 'ewallet',
-                      label: Text("E-Wallet"),
-                      icon: Icon(Icons.account_balance_wallet_rounded),
-                    ),
-                  ],
-                  selected: {metode},
-                  onSelectionChanged: (pilihan) =>
-                      setSheetState(() => metode = pilihan.first),
-                ),
-                const SizedBox(height: 22),
-                if (metode == 'bank') ...[
-                  Text(
-                    "Nama Bank",
-                    style: GoogleFonts.outfit(color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    enabled: false,
-                    decoration: InputDecoration(
-                      hintText: _bankName,
-                      hintStyle: GoogleFonts.outfit(color: AppColors.ink),
-                      prefixIcon: const Icon(
-                        Icons.account_balance_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Nomor Rekening",
-                    style: GoogleFonts.outfit(color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: accController,
-                    keyboardType: TextInputType.number,
-                    style: GoogleFonts.outfit(color: AppColors.ink),
-                    decoration: const InputDecoration(
-                      hintText: "Masukkan nomor rekening",
-                      prefixIcon: Icon(
-                        Icons.numbers_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  Text(
-                    "Dompet Elektronik",
-                    style: GoogleFonts.outfit(color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: provider,
-                    style: GoogleFonts.outfit(color: AppColors.ink),
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(
-                        Icons.account_balance_wallet_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                    items: kEwalletProviders.entries
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e.key,
-                            child: Text(e.value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) =>
-                        setSheetState(() => provider = v ?? provider),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Nomor E-Wallet",
-                    style: GoogleFonts.outfit(color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: numController,
-                    keyboardType: TextInputType.phone,
-                    style: GoogleFonts.outfit(color: AppColors.ink),
-                    decoration: const InputDecoration(
-                      hintText: "Contoh: 081234567890",
-                      prefixIcon: Icon(
-                        Icons.phone_iphone_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "Nama Pemilik Akun",
-                    style: GoogleFonts.outfit(color: AppColors.inkSoft),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: holderController,
-                    textCapitalization: TextCapitalization.words,
-                    style: GoogleFonts.outfit(color: AppColors.ink),
-                    decoration: const InputDecoration(
-                      hintText: "Sesuai nama di aplikasi e-wallet",
-                      prefixIcon: Icon(
-                        Icons.person_rounded,
-                        color: AppColors.cyan,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 28),
-                GradientButton(
-                  label: "SIMPAN TUJUAN",
-                  icon: Icons.save_rounded,
-                  onPressed: () async {
-                    final lengkap = metode == 'ewallet'
-                        ? numController.text.isNotEmpty &&
-                              holderController.text.isNotEmpty
-                        : accController.text.isNotEmpty;
-                    if (!lengkap) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Lengkapi dulu semua isian tujuan.'),
-                        ),
-                      );
-                      return;
-                    }
-                    try {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Menyimpan tujuan pencairan...'),
-                        ),
-                      );
-                      await _apiService.updatePayoutAccount(
-                        method: metode,
-                        accountNumber: accController.text,
-                        provider: provider,
-                        number: numController.text,
-                        holderName: holderController.text,
-                      );
-                      await _fetchData(); // Refresh UI
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Tujuan pencairan berhasil disimpan!',
-                            ),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(apiErrorMessage(e))),
-                        );
-                      }
-                    }
-                  },
-                ),
-                const SizedBox(height: 28),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    if (berhasil && mounted) _fetchData();
   }
 
   @override
@@ -706,8 +409,6 @@ class _WalletScreenState extends State<WalletScreen> {
               ),
             ],
           ],
-          const SizedBox(height: 14),
-          _tujuanPencairan(),
         ],
       ),
     );
@@ -721,7 +422,7 @@ class _WalletScreenState extends State<WalletScreen> {
     final teks = canWithdraw
         ? (debt > 0
               ? 'Hak ${currency.format(_hakBersih)} − setoran ${currency.format(debt)}. Seluruh saldo dikirim saat ditarik.'
-              : 'Seluruh saldo dikirim ke tujuan pencairan di bawah.')
+              : 'Pilih tujuan Bank BTN atau e-wallet saat menarik dana.')
         : 'Minimal penarikan Rp 10.000 — kurang '
               '${currency.format((10000 - _balance).clamp(0, 10000))} lagi.';
     return Text(
@@ -771,99 +472,6 @@ class _WalletScreenState extends State<WalletScreen> {
         ),
       ],
     );
-  }
-
-  /// Tujuan pencairan ditaruh di kartu saldo, tepat di bawah tombol tarik:
-  /// informasi itu dibutuhkan persis saat supir hendak menarik dana.
-  Widget _tujuanPencairan() {
-    final String detail;
-    if (!_payoutConfigured) {
-      detail = 'Belum diatur';
-    } else if (_isEwallet) {
-      detail = '${_samarkan(_ewalletNumber)} · $_ewalletHolder';
-    } else {
-      detail = _samarkan(_accountNumber);
-    }
-
-    return Material(
-      color: Colors.white.withValues(alpha: 0.14),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: _showEditBankDialog,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-          child: Row(
-            children: [
-              Icon(
-                _isEwallet
-                    ? Icons.account_balance_wallet_outlined
-                    : Icons.account_balance_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _payoutConfigured
-                          ? 'Dikirim ke $_payoutChannelLabel'
-                          : 'Tujuan pencairan',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        fontSize: 11,
-                      ),
-                    ),
-                    Text(
-                      detail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13.5,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: _payoutConfigured
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  _payoutConfigured ? 'UBAH' : 'ATUR',
-                  style: GoogleFonts.outfit(
-                    color: _payoutConfigured
-                        ? Colors.white
-                        : AppColors.deepBlue,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 0012345678 → •••• 5678 (layar bisa terlihat orang di sebelah).
-  static String _samarkan(String nomor) {
-    final n = nomor.replaceAll(' ', '');
-    if (n.length <= 4) return n;
-    return '•••• ${n.substring(n.length - 4)}';
   }
 
   Widget _breakdownCard(NumberFormat currency) {
