@@ -212,6 +212,9 @@ const UIStyles = {
 .kt-dlg__err{margin-top:.4rem;font-size:.6875rem;font-weight:600;color:#dc2626;
   display:none;animation:ktGoyang .32s ease}
 .kt-dlg__err--tampil{display:block}
+.kt-dlg__input--galat,.kt-dlg__input--galat:focus{border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.15)}
+.kt-dlg__hint{margin-top:.35rem;font-size:.6875rem;opacity:.6}
+.kt-dlg__btn--ok:disabled{opacity:.45;cursor:not-allowed;filter:none}
 @keyframes ktGoyang{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}
   75%{transform:translateX(4px)}}
 .kt-dlg__actions{display:flex;gap:.5rem;padding:0 1.5rem 1.5rem}
@@ -270,6 +273,7 @@ const UIDialog = {
                         <label class="kt-dlg__label" for="kt-dlg-input"></label>
                         <textarea id="kt-dlg-input" class="kt-dlg__input" rows="3"></textarea>
                         <div class="kt-dlg__err"></div>
+                        <div class="kt-dlg__hint"></div>
                       </div>` : ''}
                   </div>
                   <div class="kt-dlg__actions">
@@ -296,7 +300,44 @@ const UIDialog = {
                 backdrop.querySelector('.kt-dlg__label').textContent = o.label || 'Keterangan';
                 input.placeholder = o.placeholder || '';
                 input.value = o.defaultValue ?? '';
-                if (o.multiline === false) input.rows = 1;
+                if (o.multiline === false) { input.rows = 1; input.style.resize = 'none'; }
+                if (o.inputMode) input.inputMode = o.inputMode;
+                const hintEl = backdrop.querySelector('.kt-dlg__hint');
+                hintEl.textContent = o.hint || '';
+                hintEl.style.display = o.hint ? '' : 'none';
+            }
+
+            // Validasi real-time (opsional): o.format merapikan isian saat
+            // diketik, o.validate(nilai) mengembalikan pesan galat atau null.
+            // Tombol OK nonaktif selama isian tidak valid.
+            const tampilGalat = (pesan) => {
+                errEl.textContent = pesan || '';
+                errEl.classList.toggle('kt-dlg__err--tampil', !!pesan);
+                input.classList.toggle('kt-dlg__input--galat', !!pesan);
+            };
+            const periksa = () => {
+                if (o.format) {
+                    // Pertahankan posisi kursor: hitung digit di kiri kursor,
+                    // lalu letakkan kursor setelah jumlah digit yang sama.
+                    const digitKiri = input.value.slice(0, input.selectionStart).replace(/\D/g, '').length;
+                    input.value = o.format(input.value);
+                    let pos = 0, n = 0;
+                    while (pos < input.value.length && n < digitKiri) {
+                        if (/\d/.test(input.value[pos])) n++;
+                        pos++;
+                    }
+                    if (digitKiri === 0) pos = input.value.replace(/\d.*$/, '').length;
+                    input.setSelectionRange(pos, pos);
+                }
+                const nilai = input.value.trim();
+                const pesan = o.validate && nilai ? o.validate(nilai) : null;
+                tampilGalat(pesan);
+                btnOk.disabled = !!pesan || (o.required && !nilai);
+                return pesan;
+            };
+            if (input && (o.format || o.validate)) {
+                input.addEventListener('input', periksa);
+                periksa();
             }
 
             document.body.appendChild(backdrop);
@@ -344,7 +385,8 @@ const UIDialog = {
                     input.focus();
                     return;
                 }
-                selesai(nilai);
+                if (o.validate && o.validate(nilai)) { periksa(); input.focus(); return; }
+                selesai(o.parse ? o.parse(nilai) : nilai);
             };
 
             const onKey = (e) => {

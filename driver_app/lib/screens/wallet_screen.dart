@@ -12,6 +12,7 @@ import '../widgets/fade_in.dart';
 import '../widgets/error_state.dart';
 import '../widgets/wallet_source_sheet.dart';
 import '../widgets/withdraw_sheet.dart';
+import '../widgets/concession_card.dart';
 import '../utils/api_error.dart';
 import 'driver_deposit_screen.dart';
 
@@ -33,6 +34,8 @@ class _WalletScreenState extends State<WalletScreen>
   double _debtLimit = 0;
   bool _debtBlocked = false;
   Map<String, dynamic>? _breakdown; // rincian saldo (income/debt) dari API
+  // Konsesi bulan berjalan (null = fitur dimatikan admin).
+  Map<String, dynamic>? _concession;
   List<dynamic> _history = [];
 
   // Rincian saldo tertutup secara bawaan: kartu saldo sudah menjawab
@@ -98,6 +101,9 @@ class _WalletScreenState extends State<WalletScreen>
               : null;
           _debtLimit = double.tryParse('${balRes.data['debt_limit']}') ?? 0;
           _debtBlocked = balRes.data['debt_blocked'] == true;
+          _concession = balRes.data['concession'] is Map
+              ? Map<String, dynamic>.from(balRes.data['concession'])
+              : null;
           _history = histRes.data;
 
           // Tujuan pencairan dari profil
@@ -196,6 +202,18 @@ class _WalletScreenState extends State<WalletScreen>
                         // === Kartu saldo (berubah sesuai keadaan) ===
                         FadeInUp(child: _balanceCard(currencyFormat)),
                         const SizedBox(height: 16),
+                        // === Konsesi bulanan (dicicil dari saldo) ===
+                        if (_concession != null) ...[
+                          FadeInUp(
+                            delayMs: 60,
+                            child: ConcessionCard(
+                              summary: _concession!,
+                              balance: _balance,
+                              onChanged: _fetchData,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         // === Rincian saldo (transparansi keuangan) ===
                         _breakdownCard(currencyFormat),
                         const SizedBox(height: 26),
@@ -639,7 +657,8 @@ class _WalletScreenState extends State<WalletScreen>
                           _lineRow(
                             'Biaya order manual',
                             currency.format(manualFee),
-                            sub: '$manualCount trip × ${currency.format(flat)}',
+                            sub: '$manualCount trip × ${currency.format(flat)}'
+                                '${n(debt['manual_to_concession']) > 0 ? ' · ${currency.format(n(debt['manual_to_concession']))} untuk konsesi' : ''}',
                             bucket: 'debt_manual',
                           ),
                         if (tripCount == 0)

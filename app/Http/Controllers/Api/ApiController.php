@@ -534,6 +534,12 @@ class ApiController extends Controller
                     'payout_status' => 'Unpaid',
                     'withdrawal_id' => null // Lepas ikatan agar bisa diajukan lagi nanti
                 ]);
+
+            // 3. Potongan konsesi dari dompet juga dilepas: konsesinya TETAP
+            //    terbayar (uangnya masih di koperasi), dan potongannya kembali
+            //    mengurangi saldo sampai pencairan berikutnya.
+            \App\Models\ConcessionPayment::where('withdrawal_id', $withdrawal->id)
+                ->update(['withdrawal_id' => null]);
         });
 
         return response()->json(['message' => 'Permintaan ditolak dan saldo dikembalikan ke Unpaid.']);
@@ -1675,6 +1681,7 @@ class ApiController extends Controller
         // Batas utang supir — nilai efektif lewat model (0 = pembatasan mati),
         // supaya field di UI tidak pernah kosong dan artinya tidak ambigu.
         $settings['max_driver_debt'] = Setting::maxDriverDebt();
+        $settings['concession_monthly_fee'] = Setting::concessionFee();
 
         return response()->json($settings);
     }
@@ -1710,6 +1717,8 @@ class ApiController extends Controller
             // Batas utang supir sebelum dilarang masuk antrian.
             // 0 = pembatasan dimatikan (lihat Setting::maxDriverDebt).
             'max_driver_debt'   => 'nullable|integer|min:0|max:100000000',
+            // Konsesi bulanan supir. 0 = fitur mati (lihat Setting::concessionFee).
+            'concession_monthly_fee' => 'nullable|integer|min:0|max:100000000',
             'wa_endpoint'       => 'nullable|url|max:255',
             'wa_device_id'      => 'nullable|integer|min:0', // 0 = device bawaan API Key
             'operating_start'   => 'nullable|date_format:H:i',

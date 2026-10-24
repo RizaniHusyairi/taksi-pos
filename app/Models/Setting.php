@@ -74,6 +74,22 @@ class Setting extends Model
     }
 
     /**
+     * Tarif konsesi bulanan supir (Rp). Pola sama dengan [maxDriverDebt]:
+     * belum diatur / 0 = fitur konsesi MATI (tidak ada tagihan, tidak ada
+     * gerbang antrian), supaya koperasi yang mengaktifkannya lewat Pengaturan.
+     */
+    public static function concessionFee(): int
+    {
+        $v = static::getValue('concession_monthly_fee');
+
+        if ($v === null || $v === '' || !is_numeric($v)) {
+            return 0;
+        }
+
+        return max(0, (int) $v);
+    }
+
+    /**
      * Tenggang (menit) supir standby yang berada di luar area bandara sebelum
      * antriannya hangus otomatis. Bisa diatur admin lewat Pengaturan.
      *

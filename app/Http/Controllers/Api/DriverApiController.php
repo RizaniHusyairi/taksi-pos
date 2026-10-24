@@ -14,7 +14,9 @@ use App\Models\Setting;
 use App\Models\AdminNotification;
 use App\Models\DriverQueue;
 use App\Models\DriverProfile;
+use App\Models\ConcessionPayment;
 use App\Services\AdminNotifier;
+use App\Services\ConcessionService;
 use App\Services\CommissionCalculator;
 use App\Services\PushNotifier;
 use App\Services\PickupConfirmation;
@@ -108,6 +110,13 @@ class DriverApiController extends Controller
 
         $driver->active_booking = $ongoingBooking;
 
+        // Ringkasan konsesi bulan berjalan → beranda menampilkan peringatan
+        // "antrean diblokir" sebelum supir mencoba masuk antrian.
+        $driver->concession = app(ConcessionService::class)->summary($driver);
+        // Fee flat trip mandiri — dialog "Penumpang Sendiri" menampilkannya
+        // dari sini, bukan angka yang ditulis mati di aplikasi.
+        $driver->manual_fee_flat = app(CommissionCalculator::class)->flat();
+
         // Info jam operasi → app pakai untuk menyalakan ulang layanan lokasi
         // saat jendela kerja dibuka (dan menampilkan status "di luar jam").
         $oh = Setting::operatingHours();
@@ -183,6 +192,14 @@ class DriverApiController extends Controller
                 return response()->json([
                     'message'      => $pesanUtang,
                     'debt_blocked' => true,
+                ], 422);
+            }
+
+            // GERBANG KONSESI: konsesi bulan berjalan belum dicicil sama sekali.
+            if ($pesanKonsesi = $this->gerbangKonsesi($user)) {
+                return response()->json([
+                    'message'            => $pesanKonsesi,
+                    'concession_blocked' => true,
                 ], 422);
             }
 
@@ -517,12 +534,22 @@ class DriverApiController extends Controller
         // Jika ini adalah Self Order (CSO = Driver, Zone = Null)
         if ($booking->cso_id == $request->user()->id && is_null($booking->zone_id)) {
             // Catat sebagai Hutang (Unpaid Transaction)
-            Transaction::create([
+            $trip = Transaction::create([
                 'booking_id'    => $booking->id,
                 'method'        => 'CashDriver', // Uang di driver
                 'amount'        => $booking->price, // Nominal tarif yang diinput
                 'payout_status' => 'Unpaid', // Belum disetor
             ]);
+
+            // Fee flat trip ini dialihkan menjadi cicilan konsesi bulan
+            // berjalan (selama konsesi belum lunas). Utangnya tetap sama —
+            // supir tetap menyetor/terpotong Rp flat — hanya peruntukannya
+            // yang berubah dari biaya admin menjadi konsesi.
+            app(ConcessionService::class)->payFromSelfTrip(
+                $request->user(),
+                $trip,
+                app(CommissionCalculator::class)->flat()
+            );
         }
         
         $booking->update(['status' => 'Completed']);
@@ -546,6 +573,75 @@ class DriverApiController extends Controller
     public function getBalance(Request $request)
     {
         return response()->json($this->hitungSaldo($request->user()));
+    }
+
+    /**
+     * Mencicil konsesi bulan berjalan dari saldo dompet. Nominal dipilih supir;
+     * batasnya min(sisa konsesi, saldo bersih) — diperiksa ulang di dalam
+     * kunci baris supaya dua ketukan bersamaan tidak memotong saldo dua kali.
+     */
+    public function payConcession(Request $request, ConcessionService $konsesi)
+    {
+        $validated = $request->validate([
+            'amount' => 'required|integer|min:1|max:100000000',
+        ]);
+
+        $driver = $request->user();
+        $tagihan = $konsesi->current($driver);
+
+        if (!$tagihan) {
+            return response()->json(['message' => 'Tidak ada tagihan konsesi saat ini.'], 422);
+        }
+
+        $hasil = $konsesi->pay(
+            $tagihan,
+            (int) $validated['amount'],
+            'wallet',
+            fn () => $this->hitungSaldo($driver)['balance'],
+        );
+
+        if (is_string($hasil)) {
+            return response()->json(['message' => $hasil], 422);
+        }
+
+        $driver->refresh();
+
+        return response()->json([
+            'message' => 'Pembayaran konsesi Rp ' . number_format($hasil->amount, 0, ',', '.') . ' berhasil.',
+            'data'    => $this->hitungSaldo($driver),
+        ]);
+    }
+
+    /** Riwayat tagihan konsesi (12 bulan terakhir) beserta cicilannya. */
+    public function concessionHistory(Request $request, ConcessionService $konsesi)
+    {
+        $driver = $request->user();
+        $konsesi->current($driver); // pastikan bulan ini ikut tampil
+
+        $rows = \App\Models\DriverConcession::where('driver_id', $driver->id)
+            ->with(['payments' => fn ($q) => $q->latest()])
+            ->orderByDesc('period')
+            ->limit(12)
+            ->get()
+            ->map(function ($c) {
+                $paid = (int) $c->payments->sum('amount');
+                return [
+                    'id'           => $c->id,
+                    'period'       => $c->period,
+                    'period_label' => ConcessionService::periodLabel($c->period),
+                    'amount'       => $c->amount,
+                    'paid'         => $paid,
+                    'remaining'    => $c->status === 'Open' ? max(0, $c->amount - $paid) : 0,
+                    'status'       => $c->status,
+                    'payments'     => $c->payments->map(fn ($p) => [
+                        'amount'     => $p->amount,
+                        'source'     => $p->source,
+                        'created_at' => $p->created_at?->toIso8601String(),
+                    ])->values(),
+                ];
+            });
+
+        return response()->json(['data' => $rows]);
     }
 
     /** Batas baris yang dikirim ke aplikasi (mengikuti getTripHistory). */
@@ -720,11 +816,21 @@ class DriverApiController extends Controller
         // B. Booking manual (tanpa zona) → fee flat per trip.
         $manualCount    = $this->queryUtangManual($driver)->count();
         $debtFromManual = $manualCount * $manualFlat;
+        // Bagian fee manual di atas yang peruntukannya konsesi (bukan biaya
+        // admin). Hanya informasi — nominal utangnya tidak berubah.
+        $manualToConcession = (int) ConcessionPayment::where('source', 'self_trip')
+            ->whereIn('transaction_id', $this->queryUtangManual($driver)->select('transactions.id'))
+            ->sum('amount');
 
         $driverDebt = $debtFromStandard + $debtFromManual;
 
-        // === 3. SALDO BERSIH ===
-        $netBalance = $driverShare - $driverDebt;
+        // === 3. POTONGAN KONSESI (dicicil supir dari dompet) ===
+        //     Uangnya sudah tertahan di koperasi; potongan cukup mengurangi
+        //     hak pencairan sampai terkunci ke pencairan berikutnya.
+        $concessionDeducted = (int) ConcessionPayment::potonganDompetTerbuka($driver->id)->sum('amount');
+
+        // === 4. SALDO BERSIH ===
+        $netBalance = $driverShare - $driverDebt - $concessionDeducted;
 
         $batasUtang = Setting::maxDriverDebt();
 
@@ -755,10 +861,13 @@ class DriverApiController extends Controller
                     'standard_count' => $standardCount,
                     'manual_count'   => $manualCount,
                     'manual_fee'     => round($debtFromManual),
+                    'manual_to_concession' => $manualToConcession,
                     'total'          => round($driverDebt),
                 ],
+                'concession_deducted' => $concessionDeducted,
                 'net' => round($netBalance),
             ],
+            'concession' => app(ConcessionService::class)->summary($driver),
         ];
     }
 
@@ -823,6 +932,15 @@ class DriverApiController extends Controller
     }
 
     /**
+     * Bolehkah supir ini masuk antrian, dilihat dari konsesi bulan berjalan?
+     * Aturannya ada di ConcessionService::gate().
+     */
+    private function gerbangKonsesi(User $driver): ?string
+    {
+        return app(ConcessionService::class)->gate($driver);
+    }
+
+    /**
      * Mengajukan penarikan dana.
      */
     public function requestWithdrawal(Request $request)
@@ -876,7 +994,12 @@ class DriverApiController extends Controller
             ] + $tujuan);
 
             // B. KUNCI TRANSAKSI (Ubah status 'Unpaid' -> 'Processing')
-            
+
+            // Potongan konsesi dari dompet ikut terkunci ke pencairan ini —
+            // nominalnya sudah dikurangkan lewat hitungSaldo()['balance'].
+            ConcessionPayment::potonganDompetTerbuka($driver->id)
+                ->update(['withdrawal_id' => $newWithdrawal->id]);
+
             // Update transaksi Pemasukan (QRIS/CashCSO)
             Transaction::whereHas('booking', function ($q) use ($driver) {
                 $q->where('driver_id', $driver->id);
@@ -1440,6 +1563,17 @@ class DriverApiController extends Controller
                     'tracking_open'  => $trackingOpen,
                     'debt_blocked'   => true,
                     'message'        => $pesanUtang,
+                ]);
+            }
+
+            // GERBANG KONSESI juga di pintu otomatis, alasan sama dengan utang.
+            if ($pesanKonsesi = $this->gerbangKonsesi($user)) {
+                return response()->json([
+                    'status'             => 'offline',
+                    'in_area'            => true,
+                    'tracking_open'      => $trackingOpen,
+                    'concession_blocked' => true,
+                    'message'            => $pesanKonsesi,
                 ]);
             }
 

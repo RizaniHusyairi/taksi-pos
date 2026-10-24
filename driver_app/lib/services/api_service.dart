@@ -194,6 +194,16 @@ class ApiService {
     );
   }
 
+  /// Cicil konsesi bulan berjalan dari saldo dompet. Respons `data` = saldo
+  /// terbaru (bentuk sama dengan getBalance).
+  Future<Response> payConcession(int amount) async {
+    return await _dio.post('/driver/concession/pay', data: {'amount': amount});
+  }
+
+  Future<Response> getConcessionHistory() async {
+    return await _dio.get('/driver/concession/history');
+  }
+
   Future<Response> getWithdrawalHistory() async {
     return await _dio.get('/driver/withdrawals');
   }

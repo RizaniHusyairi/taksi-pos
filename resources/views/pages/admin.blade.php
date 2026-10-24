@@ -382,6 +382,11 @@
             <span class="font-medium">Setoran Supir</span>
           </a>
 
+          <a href="#concessions" class="nav-link">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <span class="font-medium">Konsesi Supir</span>
+          </a>
+
           <a href="#method-disputes" class="nav-link">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             <span class="font-medium">Sengketa Pembayaran</span>
@@ -1152,6 +1157,60 @@
           </div>
         </div>
       </div>
+
+      <!-- Konsesi bulanan supir: dicicil supir dari saldo dompet, atau dicatat
+           admin bila supir bayar tunai. Belum mencicil sama sekali = diblokir
+           dari antrian. -->
+      <section id="view-concessions" class="hidden space-y-6">
+        <div class="glass-card rounded-2xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div>
+              <h3 class="font-bold text-gray-800 dark:text-white text-lg">Konsesi Bulanan Supir</h3>
+              <p id="concFeeInfo" class="text-xs text-gray-500 dark:text-gray-400 mt-1">&nbsp;</p>
+            </div>
+            <input type="month" id="concPeriod" class="zona-input" style="width:auto;min-width:170px">
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+            <div class="rounded-xl bg-white/60 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Total Tagihan</p>
+              <p id="concSumBilled" class="font-bold text-gray-800 dark:text-white mt-1">-</p>
+            </div>
+            <div class="rounded-xl bg-white/60 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Terkumpul</p>
+              <p id="concSumCollected" class="font-bold text-gray-800 dark:text-white mt-1">-</p>
+            </div>
+            <div class="rounded-xl bg-white/60 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Sisa</p>
+              <p id="concSumRemaining" class="font-bold text-gray-800 dark:text-white mt-1">-</p>
+            </div>
+            <div class="rounded-xl bg-white/60 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Lunas</p>
+              <p id="concSumPaidOff" class="font-bold text-gray-800 dark:text-white mt-1">-</p>
+            </div>
+            <div class="rounded-xl bg-white/60 dark:bg-white/5 border border-gray-100 dark:border-white/5 p-3">
+              <p class="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Diblokir</p>
+              <p id="concSumBlocked" class="font-bold text-gray-800 dark:text-white mt-1">-</p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-50/80 dark:bg-white/5 text-gray-500 dark:text-gray-400 uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th class="py-4 px-5">Supir</th>
+                  <th class="py-4 px-5 text-right">Tagihan</th>
+                  <th class="py-4 px-5 text-right w-48">Terbayar</th>
+                  <th class="py-4 px-5 text-right">Sisa</th>
+                  <th class="py-4 px-5 text-center">Status</th>
+                  <th class="py-4 px-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="concTable" class="divide-y divide-gray-100 dark:divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <!-- Sengketa metode pembayaran: supir menyanggah menerima uang tunai.
            Mengabulkannya MEMINDAHKAN kewajiban uang dari supir ke CSO, jadi
@@ -2020,6 +2079,14 @@
                       <b>Isi 0 untuk mematikan pembatasan.</b>
                     </p>
                   </div>
+                  <div>
+                    <label for="concessionMonthlyFee" class="stlabel">Konsesi Bulanan Supir (Rp)</label>
+                    <input type="number" id="concessionMonthlyFee" min="0" step="1000" placeholder="300000" class="stinput">
+                    <p class="sthint">
+                      Ditagih ke setiap supir aktif tiap tanggal 1 dan bisa dicicil dari saldo dompet. Supir yang belum mencicil sama sekali tidak bisa masuk antrian.
+                      Perubahan berlaku mulai tagihan bulan berikutnya. <b>Isi 0 untuk mematikan.</b>
+                    </p>
+                  </div>
                 </div>
 
                 <!-- Simulasi komisi: berubah seketika saat angka diketik -->
@@ -2255,5 +2322,31 @@
     'appKey'       => 'admin',
     'bottomOffset' => '1.5rem',
   ])
+  <!-- Di luar <main>: main membuat stacking context z-10 sehingga modal
+       lebar di dalamnya tertutup sidebar (z-40). -->
+      <div id="modalConcDetails" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-800 dark:text-slate-100 rounded-xl shadow-lg w-full max-w-2xl flex flex-col max-h-[90vh]">
+          <div class="p-4 border-b flex justify-between items-center bg-slate-50 dark:bg-slate-700 dark:border-slate-600 rounded-t-xl">
+            <div>
+              <h3 class="font-bold text-lg text-slate-800 dark:text-slate-100">Riwayat Cicilan Konsesi</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="concDetailSub"></p>
+            </div>
+            <button id="btnCloseConcDetails" class="text-slate-400 hover:text-slate-600 dark:text-slate-300 text-2xl">&times;</button>
+          </div>
+          <div class="p-0 overflow-y-auto flex-1">
+            <table class="w-full text-sm text-left">
+              <thead class="text-slate-500 dark:text-slate-400 sticky top-0 bg-slate-50 dark:bg-slate-700">
+                <tr>
+                  <th class="px-4 py-3">Waktu</th>
+                  <th class="px-4 py-3">Cara Bayar</th>
+                  <th class="px-4 py-3">Pencairan</th>
+                  <th class="px-4 py-3 text-right">Nominal</th>
+                </tr>
+              </thead>
+              <tbody id="concDetailBody" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 </body>
 </html>

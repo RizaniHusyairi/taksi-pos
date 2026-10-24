@@ -534,7 +534,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          "Biaya admin Rp 10.000 dicatat sebagai hutang.",
+                          _infoFeeTripMandiri(auth.user),
                           style: GoogleFonts.outfit(
                             fontSize: 12,
                             color: AppColors.inkSoft,
@@ -730,6 +730,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   children: [
                     if (_gpsBlocker != null) ...[
                       FadeInUp(child: _gpsBlockerCard()),
+                      const SizedBox(height: 16),
+                    ],
+                    // Konsesi belum dicicil sama sekali → server menolak
+                    // masuk antrian (manual & otomatis). Beri tahu di depan.
+                    if (user?['concession']?['blocked'] == true) ...[
+                      FadeInUp(child: _concessionBlockedCard(user!['concession'])),
                       const SizedBox(height: 16),
                     ],
                     if (activeBooking != null) ...[
@@ -1153,6 +1159,58 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Keterangan fee trip mandiri. Selama konsesi bulan ini belum lunas, fee
+  /// flat-nya dihitung sebagai cicilan konsesi (lihat
+  /// ConcessionService::payFromSelfTrip); selebihnya biaya admin seperti dulu.
+  String _infoFeeTripMandiri(Map<String, dynamic>? user) {
+    final rupiah = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    final fee = (user?['manual_fee_flat'] as num?) ?? 10000;
+    final konsesi = user?['concession'];
+    final sisa = (konsesi?['remaining'] as num?) ?? 0;
+
+    if (konsesi != null && konsesi['status'] == 'Open' && sisa > 0) {
+      final masuk = sisa < fee ? sisa : fee;
+      return 'Potongan ${rupiah.format(fee)} dicatat sebagai setoran. '
+          '${rupiah.format(masuk)} di antaranya dihitung sebagai cicilan '
+          'konsesi ${konsesi['period_label'] ?? 'bulan ini'}.';
+    }
+    return 'Biaya admin ${rupiah.format(fee)} dicatat sebagai setoran.';
+  }
+
+  Widget _concessionBlockedCard(Map konsesi) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_rounded, color: AppColors.danger, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Konsesi ${konsesi['period_label'] ?? 'bulan ini'} belum dibayar. '
+              'Antrean terkunci sampai Anda mencicil, berapa pun nominalnya, '
+              'lewat menu Dompet.',
+              style: GoogleFonts.outfit(
+                color: AppColors.ink,
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+          ),
         ],
       ),
     );

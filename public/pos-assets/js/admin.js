@@ -1,4 +1,7 @@
-import { Utils } from './utils.js';
+// Versi di query string memaksa browser mengambil utils.js terbaru setelah
+// deploy — admin.js sendiri di-bust oleh ?v= di admin.blade.php, tapi impor
+// relatif ini tidak. Naikkan angkanya setiap kali utils.js berubah.
+import { Utils } from './utils.js?v=20261024';
 
 window.openPayModal = (id) => {
   document.getElementById('wdIdToPay').value = id;
@@ -108,7 +111,7 @@ async function fetchApi(endpoint, options = {}) {
 
 export class AdminApp {
   constructor() {
-    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'cso-deposits', 'driver-deposits', 'method-disputes', 'report-revenue', 'report-driver', 'cso-performance', 'fraud-signals', 'driver-map', 'api', 'wa', 'settings'];
+    this.views = ['dashboard', 'queue', 'zones', 'users', 'user-form', 'finance-log', 'withdrawals', 'cso-deposits', 'driver-deposits', 'concessions', 'method-disputes', 'report-revenue', 'report-driver', 'cso-performance', 'fraud-signals', 'driver-map', 'api', 'wa', 'settings'];
     this.charts = {};
 
     // Tampilan yang menyegarkan diri selama dibuka (ms). Formulir, laporan
@@ -122,6 +125,7 @@ export class AdminApp {
       'withdrawals':     { ms: 20000, fns: ['renderWithdrawals'] },
       'cso-deposits':    { ms: 20000, fns: ['renderCsoDeposits'] },
       'driver-deposits': { ms: 20000, fns: ['renderDriverDeposits'] },
+      'concessions':     { ms: 30000, fns: ['renderConcessions'] },
       'method-disputes': { ms: 30000, fns: ['renderMethodDisputes'] },
     };
 
@@ -291,6 +295,11 @@ export class AdminApp {
       const debtEl = document.getElementById('maxDriverDebt');
       if (debtEl && debtEl.value.trim() !== '') {
         formData.append('max_driver_debt', debtEl.value.trim());
+      }
+      // Tarif konsesi bulanan (Rp). Kosong = jangan ubah; 0 = fitur mati.
+      const concEl = document.getElementById('concessionMonthlyFee');
+      if (concEl && concEl.value.trim() !== '') {
+        formData.append('concession_monthly_fee', concEl.value.trim());
       }
       // Jam operasi pelacakan lokasi (HH:MM). Kosong = jangan ubah.
       const opStartEl = document.getElementById('operatingStart');
@@ -560,6 +569,14 @@ export class AdminApp {
     window.openWdDetails = (id) => this.openWdDetails(id);
     window.openDepDetails = (id) => this.openDepDetails(id);
     window.openDdepDetails = (id) => this.openDdepDetails(id);
+    window.openConcessionDetails = (id) => this.openConcessionDetails(id);
+
+    // Modal rincian konsesi supir
+    document.getElementById('btnCloseConcDetails')?.addEventListener('click', () => {
+      const m = document.getElementById('modalConcDetails');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    });
 
     // Modal rincian setoran SUPIR
     document.getElementById('btnCloseDdepDetails')?.addEventListener('click', () => {
@@ -641,6 +658,10 @@ export class AdminApp {
     // berat dan tidak ada gunanya dijalankan setiap kali admin membuka panel.
     // Dimuat saat tabnya benar-benar dibuka.
     if (hash === 'fraud-signals') this.renderFraudSignals();
+    // Konsesi juga dimuat saat tabnya dibuka: endpoint-nya menerbitkan
+    // tagihan bulan berjalan, dan angkanya bergantung pada tarif di
+    // Pengaturan yang bisa baru saja diubah.
+    if (hash === 'concessions') this.renderConcessions();
     // Peta pemilih titik pusat hidup di tab Pengaturan yang awalnya tersembunyi
     // → Leaflet perlu menghitung ulang ukurannya setiap tab ini dibuka.
     if (hash === 'settings') this.renderAirportCenterMap();
@@ -667,6 +688,7 @@ export class AdminApp {
       'withdrawals': 'Withdrawal Requests',
       'cso-deposits': 'Setoran Tunai CSO',
       'driver-deposits': 'Setoran Tunai Supir',
+      'concessions': 'Konsesi Supir',
       'method-disputes': 'Sengketa Pembayaran',
       'report-revenue': 'Laporan Pendapatan',
       'report-driver': 'Laporan Kinerja Supir',
@@ -2289,6 +2311,192 @@ export class AdminApp {
   }
 
   // ----- Sengketa Metode Pembayaran -----
+  // === Konsesi bulanan supir ============================================
+
+  concessionBadge(r) {
+    if (!r.status) return '<span class="text-xs text-slate-400">-</span>';
+    if (r.status === 'Paid') return '<span class="whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Lunas</span>';
+    if (r.status === 'Waived') return '<span class="whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-200">Dibebaskan</span>';
+    if (r.blocked) return '<span class="whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300">Diblokir</span>';
+    return '<span class="whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Mencicil</span>';
+  }
+
+  async renderConcessions() {
+    const tbody = document.getElementById('concTable');
+    if (!tbody) return;
+    const esc = AdminApp.escapeHtml;
+
+    const inp = document.getElementById('concPeriod');
+    if (inp && !inp.dataset.bound) {
+      inp.dataset.bound = '1';
+      if (!inp.value) {
+        const d = new Date();
+        inp.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      }
+      inp.addEventListener('change', () => this.renderConcessions());
+    }
+    const period = inp ? inp.value : '';
+
+    try {
+      const res = await fetchApi(`/admin/concessions${period ? `?period=${period}` : ''}`);
+      const s = res.summary || {};
+
+      const info = document.getElementById('concFeeInfo');
+      if (info) {
+        info.innerHTML = res.fee > 0
+          ? `Tarif berjalan <b>${Utils.formatCurrency(res.fee)}</b>/bulan. Supir yang belum mencicil sama sekali tidak bisa masuk antrian.`
+          : '<span class="text-amber-600 dark:text-amber-400 font-semibold">Fitur konsesi MATI.</span> Isi tarif konsesi di menu Pengaturan untuk mengaktifkannya.';
+      }
+
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('concSumBilled', Utils.formatCurrency(s.billed || 0));
+      set('concSumCollected', Utils.formatCurrency(s.collected || 0));
+      set('concSumRemaining', Utils.formatCurrency(s.remaining || 0));
+      set('concSumPaidOff', `${s.paid_off || 0} / ${s.drivers || 0}`);
+      set('concSumBlocked', s.blocked || 0);
+
+      const rows = res.data || [];
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-slate-500">Belum ada supir aktif.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const pct = r.amount ? Math.min(100, Math.round((r.paid / r.amount) * 100)) : 0;
+        const tunggakan = r.arrears > 0
+          ? `<div class="text-[11px] text-red-500 mt-0.5">Tunggakan bulan lalu ${Utils.formatCurrency(r.arrears)}</div>` : '';
+        const terakhir = r.last_paid_at
+          ? `<div class="text-[11px] text-slate-400 mt-0.5">Cicilan terakhir ${new Date(r.last_paid_at).toLocaleString('id-ID')}</div>` : '';
+
+        let aksi = '<span class="text-xs text-slate-400">-</span>';
+        if (r.concession_id) {
+          aksi = `<div class="flex flex-wrap items-center justify-end gap-1 whitespace-nowrap">
+              <button class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-slate-600 dark:text-slate-200 dark:hover:bg-slate-500 px-2 py-1 rounded" onclick="window.openConcessionDetails(${r.concession_id})">Detail</button>
+              ${r.status === 'Open' ? `
+              <button class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded shadow" data-conc-act="cash" data-id="${r.concession_id}" data-sisa="${r.remaining}" data-name="${esc(r.name)}">Catat Tunai</button>
+              <button class="text-xs border border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 px-2 py-1 rounded hover:bg-slate-50 dark:hover:bg-slate-700" data-conc-act="waive" data-id="${r.concession_id}" data-name="${esc(r.name)}">Bebaskan</button>` : ''}
+            </div>`;
+        }
+
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+            <td class="py-3 px-5 align-top">
+              <div class="font-medium dark:text-slate-200">${esc(r.name)}</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">${r.line_number ? `No. ${r.line_number} &middot; ` : ''}${esc(r.plate_number || '')}</div>
+            </td>
+            <td class="py-3 px-5 align-top text-right font-mono dark:text-slate-200">${r.amount != null ? Utils.formatCurrency(r.amount) : '-'}</td>
+            <td class="py-3 px-5 align-top">
+              <div class="text-right font-mono dark:text-slate-200">${Utils.formatCurrency(r.paid)}</div>
+              <div class="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${pct}%"></div></div>
+              ${terakhir}
+            </td>
+            <td class="py-3 px-5 align-top text-right font-mono dark:text-slate-200">${Utils.formatCurrency(r.remaining)}${tunggakan}</td>
+            <td class="py-3 px-5 align-top text-center">${this.concessionBadge(r)}</td>
+            <td class="py-3 px-5 align-top text-right">${aksi}</td>
+          </tr>`;
+      }).join('');
+
+      tbody.querySelectorAll('[data-conc-act="cash"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          // Batas = sisa konsesi bulan itu (Rp 300.000 bila belum dicicil
+          // sama sekali). Server memeriksa batas yang sama.
+          const sisa = Number(btn.dataset.sisa);
+          const angka = (v) => parseInt(String(v).replace(/\D/g, ''), 10) || 0;
+          const amount = await Utils.prompt({
+            variant: 'success',
+            title: `Catat bayar tunai — ${btn.dataset.name}`,
+            message: 'Catat hanya bila uangnya sudah Anda terima.',
+            label: 'Nominal',
+            placeholder: Utils.formatCurrency(sisa),
+            hint: `Maksimal ${Utils.formatCurrency(sisa)} (sisa konsesi).`,
+            multiline: false,
+            inputMode: 'numeric',
+            required: true,
+            requiredMessage: 'Nominal wajib diisi.',
+            format: (v) => {
+              const n = angka(v.replace(/\D/g, '').slice(0, 12));
+              return n ? `Rp ${n.toLocaleString('id-ID')}` : '';
+            },
+            validate: (v) => {
+              const n = angka(v);
+              if (n < 1) return 'Nominal minimal Rp 1.';
+              if (n > sisa) return `Melebihi sisa konsesi ${Utils.formatCurrency(sisa)}.`;
+              return null;
+            },
+            parse: angka,
+            confirmText: 'Catat Pembayaran',
+          });
+          if (amount === null) return;
+          if (!angka(amount) || angka(amount) > sisa) {
+            Utils.showToast(`Nominal harus Rp 1 – ${Utils.formatCurrency(sisa)}.`, 'error');
+            return;
+          }
+          try {
+            await fetchApi(`/admin/concessions/${btn.dataset.id}/cash`, {
+              method: 'POST', body: JSON.stringify({ amount: angka(amount) }),
+            });
+            Utils.showToast('Pembayaran tunai konsesi tercatat.', 'success');
+            this.renderConcessions();
+          } catch (e) { /* fetchApi sudah menampilkan pesan server */ }
+        });
+      });
+
+      tbody.querySelectorAll('[data-conc-act="waive"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const alasan = await Utils.prompt({
+            title: `Bebaskan konsesi — ${btn.dataset.name}`,
+            message: 'Supir tidak ditagih untuk bulan ini dan tidak diblokir dari antrian.',
+            label: 'Alasan',
+            placeholder: 'mis. cuti sakit / mobil di bengkel',
+            required: true,
+            requiredMessage: 'Alasan wajib diisi.',
+            confirmText: 'Bebaskan',
+          });
+          if (alasan === null) return;
+          try {
+            await fetchApi(`/admin/concessions/${btn.dataset.id}/waive`, {
+              method: 'POST', body: JSON.stringify({ note: alasan.trim() }),
+            });
+            Utils.showToast('Konsesi dibebaskan.', 'success');
+            this.renderConcessions();
+          } catch (e) { /* fetchApi sudah menampilkan pesan server */ }
+        });
+      });
+    } catch (error) {
+      console.error('Gagal memuat konsesi:', error);
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Gagal memuat data.</td></tr>';
+    }
+  }
+
+  async openConcessionDetails(id) {
+    const modal = document.getElementById('modalConcDetails');
+    const body = document.getElementById('concDetailBody');
+    const sub = document.getElementById('concDetailSub');
+    const esc = AdminApp.escapeHtml;
+    body.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">Memuat...</td></tr>';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    try {
+      const c = await fetchApi(`/admin/concessions/${id}`);
+      sub.innerHTML = `${esc(c.driver?.name || '')} &middot; ${esc(c.period_label)} &middot; terbayar ${Utils.formatCurrency(c.paid)} dari ${Utils.formatCurrency(c.amount)}`
+        + (c.status === 'Waived' ? ` &middot; <b>dibebaskan</b> oleh ${esc(c.waived_by || '-')}: ${esc(c.waive_note || '')}` : '');
+
+      body.innerHTML = c.payments.length ? c.payments.map(p => `
+        <tr>
+          <td class="px-4 py-2 dark:text-slate-300">${new Date(p.created_at).toLocaleString('id-ID')}</td>
+          <td class="px-4 py-2 dark:text-slate-300">${{
+            wallet: 'Potong saldo dompet',
+            self_trip: 'Fee trip mandiri',
+          }[p.source] || `Tunai (dicatat ${esc(p.recorded_by || 'admin')})`}${p.note ? `<div class="text-[11px] text-slate-400">${esc(p.note)}</div>` : ''}</td>
+          <td class="px-4 py-2 text-xs dark:text-slate-400">${p.source === 'wallet' ? (p.withdrawal_id ? `Ikut pencairan #${p.withdrawal_id}` : 'Belum dicairkan') : (p.source === 'self_trip' ? 'Lewat setoran trip' : '-')}</td>
+          <td class="px-4 py-2 text-right font-mono dark:text-slate-200">${Utils.formatCurrency(p.amount)}</td>
+        </tr>`).join('')
+        : '<tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">Belum ada cicilan.</td></tr>';
+    } catch (e) {
+      body.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center">Gagal memuat rincian.</td></tr>';
+    }
+  }
+
   async renderMethodDisputes(page = 1) {
     const tbody = document.getElementById('mdTable');
     if (!tbody) return;
@@ -3608,6 +3816,10 @@ export class AdminApp {
       const debtInput = document.getElementById('maxDriverDebt');
       if (debtInput && settings.max_driver_debt !== undefined) {
         debtInput.value = settings.max_driver_debt;
+      }
+      const concInput = document.getElementById('concessionMonthlyFee');
+      if (concInput && settings.concession_monthly_fee !== undefined) {
+        concInput.value = settings.concession_monthly_fee;
       }
 
       const graceInput = document.getElementById('outOfAreaGraceMinutes');

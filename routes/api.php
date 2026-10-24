@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ApiController; // <-- Arahkan ke ApiController
 use App\Http\Controllers\Api\CsoApiController; // <-- Arahkan ke CsoApiController
 use App\Http\Controllers\Api\DriverApiController; // <-- Arahkan ke DriverApiController
 use App\Http\Controllers\Api\ProfilePhotoController;
+use App\Http\Controllers\Api\AdminConcessionController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\ApiAuthController; // <-- Arahkan ke ApiAuthController
 use App\Http\Controllers\Api\ManagementApiController; // Management API (read-only) utk sistem eksternal
@@ -106,7 +107,13 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/driver-deposits/{deposit}/details', [ApiController::class, 'adminGetDriverDepositDetails']);
         Route::post('/driver-deposits/{deposit}/approve', [ApiController::class, 'adminApproveDriverDeposit']);
         Route::post('/driver-deposits/{deposit}/reject', [ApiController::class, 'adminRejectDriverDeposit']);
-        
+
+        // Konsesi bulanan supir
+        Route::get('/concessions', [AdminConcessionController::class, 'index']);
+        Route::get('/concessions/{concession}', [AdminConcessionController::class, 'show']);
+        Route::post('/concessions/{concession}/cash', [AdminConcessionController::class, 'recordCash']);
+        Route::post('/concessions/{concession}/waive', [AdminConcessionController::class, 'waive']);
+
         // Ikon lonceng di header: riwayat peristiwa + hitungan antrean yang
         // masih menunggu keputusan admin.
         Route::get('/notifications', [ApiController::class, 'adminGetNotifications']);
@@ -224,7 +231,10 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/balance/transactions', [DriverApiController::class, 'balanceTransactions']);
         Route::get('/withdrawals', [DriverApiController::class, 'getWithdrawalHistory']);
         Route::post('/withdrawals', [DriverApiController::class, 'requestWithdrawal']);
-        
+        // Konsesi bulanan: dicicil dari saldo dompet.
+        Route::get('/concession/history', [DriverApiController::class, 'concessionHistory']);
+        Route::post('/concession/pay', [DriverApiController::class, 'payConcession']);
+
         // Riwayat Perjalanan
         Route::get('/history', [DriverApiController::class, 'getTripHistory']);
         Route::post('/location', [DriverApiController::class, 'updateLocation']);

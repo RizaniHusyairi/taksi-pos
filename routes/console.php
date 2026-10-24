@@ -22,3 +22,6 @@ Schedule::command('backup:db')->dailyAt('02:00');
 Schedule::call(function () {
     \App\Models\DriverLocationLog::where('recorded_at', '<', now()->subDays(3))->delete();
 })->dailyAt('03:00');
+// Tagihan konsesi bulanan supir. ConcessionService juga menerbitkannya secara
+// lazy, jadi kalau scheduler sempat mati tidak ada supir yang lolos tagihan.
+Schedule::command('concession:issue')->monthlyOn(1, '00:05');
