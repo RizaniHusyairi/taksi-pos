@@ -269,6 +269,7 @@ class CsoApiController extends Controller
                 'line_number' => $q->driver->driverProfile?->line_number,
                 'plate_number'=> $q->driver->driverProfile?->plate_number,
                 'is_next'     => $i === 0,
+                'is_rejoin'   => $q->sort_order >= 1000,
             ]);
 
         // Pengingat setoran: tunai di tangan CSO yang belum diserahkan.

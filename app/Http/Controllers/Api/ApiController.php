@@ -17,6 +17,7 @@ use App\Models\CsoDeposit;
 use App\Models\DriverQueue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\WithdrawalApprovedNotification;
 
@@ -248,13 +249,15 @@ class ApiController extends Controller
         ]);
 
         if ($validated['role'] === 'driver') {
-            // 1. Auto-generate Line Number
+            // 1. Line Number: pakai isian admin bila ada, selain itu auto-generate
             // Because line_number might be stored as string, we need to convert it to integer to find the highest number
-            $allLines = DriverProfile::pluck('line_number')->map(function ($line) {
-                return (int) $line;
-            });
-            $maxLine = $allLines->max() ?? 0;
-            $newLine = $maxLine + 1;
+            $newLine = $this->nomorLambungBaru($request, null);
+            if ($newLine === null) {
+                $allLines = DriverProfile::pluck('line_number')->map(function ($line) {
+                    return (int) $line;
+                });
+                $newLine = ($allLines->max() ?? 0) + 1;
+            }
 
             $user->driverProfile()->create([
                 'car_model' => $validated['car_model'] ?? '',
@@ -301,11 +304,12 @@ class ApiController extends Controller
         }
 
         if ($validated['role'] === 'driver') {
-            // Pertahankan line_number lama; kalau belum ada (konversi dari role lain),
-            // beri nomor berikutnya agar driver ikut sistem rotasi antrian
+            // line_number: pakai isian admin bila ada; kalau kosong pertahankan yang
+            // lama; kalau belum ada (konversi dari role lain), beri nomor berikutnya
+            // agar driver ikut sistem rotasi antrian
             // (DailyQueueRotation memakai whereNotNull('line_number')).
             $profile = $user->driverProfile; // null jika sebelumnya bukan driver
-            $lineNumber = $profile?->line_number;
+            $lineNumber = $this->nomorLambungBaru($request, $user->id) ?? $profile?->line_number;
             if (empty($lineNumber)) {
                 $maxLine = DriverProfile::pluck('line_number')->map(fn ($l) => (int) $l)->max() ?? 0;
                 $lineNumber = $maxLine + 1;
@@ -1988,6 +1992,28 @@ class ApiController extends Controller
     }
 
     /**
+     * Jalankan rotasi harian secara manual (sama dengan jadwal 00:00):
+     * giliran maju satu nomor lambung, antrian dikosongkan lalu diisi ulang.
+     */
+    public function adminRotateQueue()
+    {
+        $before = (int) Setting::getValue('daily_start_line') ?: 1;
+        \Illuminate\Support\Facades\Artisan::call('queue:rotate');
+        Setting::forgetMemo(); // getValue() menyimpan memo per-request
+        $after = (int) Setting::getValue('daily_start_line') ?: 1;
+
+        \Illuminate\Support\Facades\Log::info('Rotasi antrian manual', [
+            'admin_id' => Auth::id(), 'from' => $before, 'to' => $after,
+        ]);
+
+        return response()->json([
+            'message' => "Rotasi selesai. Giliran kini dimulai dari L{$after}.",
+            'previous_start_line' => $before,
+            'start_line' => $after,
+        ]);
+    }
+
+    /**
      * Keluarkan driver dari antrian (Kick)
      */
     public function adminRemoveFromQueue($userId)
@@ -2266,24 +2292,48 @@ class ApiController extends Controller
     public function adminUpdateLineNumber(Request $request)
     {
         $request->validate([
-            'user_id' => 'required',
-            'line_number' => 'required|string|max:10'
+            'user_id' => 'required|exists:driver_profiles,user_id',
+            'line_number' => 'required',
+        ], [
+            'line_number.required' => 'Nomor lambung wajib diisi.',
         ]);
 
-        // line_number harus unik — kalau dipakai driver lain, rotasi antrian tabrakan.
-        $taken = DriverProfile::where('line_number', $request->line_number)
-            ->where('user_id', '!=', $request->user_id)
-            ->exists();
-        if ($taken) {
-            return response()->json([
-                'message' => "Nomor lambung {$request->line_number} sudah dipakai driver lain.",
-            ], 422);
-        }
+        $nomor = $this->nomorLambungBaru($request, (int) $request->user_id);
 
         DriverProfile::where('user_id', $request->user_id)
-            ->update(['line_number' => $request->line_number]);
+            ->update(['line_number' => $nomor]);
 
-        return response()->json(['message' => 'Line Number diperbarui.']);
+        return response()->json(['message' => "Nomor lambung diubah menjadi L{$nomor}."]);
+    }
+
+    /**
+     * Nomor lambung isian admin: angka saja (tampilan menambah "L" sendiri) dan
+     * unik antar supir — rotasi antrian harian mengurutkan dengan nomor ini, jadi
+     * nomor kembar atau "L5" membuat urutan kacau. Null bila isian kosong.
+     */
+    private function nomorLambungBaru(Request $request, ?int $kecualiUserId): ?string
+    {
+        $request->validate([
+            'line_number' => ['nullable', 'regex:/^[1-9][0-9]{0,3}$/'],
+        ], [
+            'line_number.regex' => 'Nomor lambung diisi angka saja tanpa huruf L, misalnya 5.',
+        ]);
+
+        if (!$request->filled('line_number')) {
+            return null;
+        }
+
+        $nomor = (string) $request->line_number;
+        $dipakai = DriverProfile::where('line_number', $nomor)
+            ->when($kecualiUserId, fn ($q) => $q->where('user_id', '!=', $kecualiUserId))
+            ->exists();
+        if ($dipakai) {
+            throw ValidationException::withMessages([
+                'line_number' => "Nomor lambung {$nomor} sudah dipakai driver lain.",
+            ]);
+        }
+
+        return $nomor;
     }
     public function adminChangePassword(Request $request)
     {

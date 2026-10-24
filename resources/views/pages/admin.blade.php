@@ -732,9 +732,15 @@
                     <h3 class="font-bold text-gray-800 dark:text-white text-lg">Antrian Supir (Live)</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Mengatur urutan dan status supir standby.</p>
                 </div>
+                <div class="flex items-center gap-2">
+                <button id="rotateQueue" class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold shadow-sm transition-colors disabled:opacity-50" title="Jalankan rotasi harian sekarang">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" /></svg>
+                    <span>Rolling Antrian</span>
+                </button>
                 <button id="refreshQueue" class="p-2.5 rounded-xl bg-gray-100/50 hover:bg-gray-200/50 dark:bg-white/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300 transition-colors" title="Muat Ulang">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" /></svg>
                 </button>
+                </div>
             </div>
 
             <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-white/5 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
@@ -919,7 +925,7 @@
                 </div>
               </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 bg-gradient-to-br from-gray-50 to-white dark:from-white/5 dark:to-transparent p-5 rounded-xl border border-gray-100 dark:border-white/5 mt-6" id="driverExtra" style="display:none">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 bg-gradient-to-br from-gray-50 to-white dark:from-white/5 dark:to-transparent p-5 rounded-xl border border-gray-100 dark:border-white/5 mt-6" id="driverExtra" style="display:none">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                   <svg class="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
@@ -930,6 +936,14 @@
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Nomor Plat</label>
                 <input id="userPlate" class="w-full rounded-xl border-gray-200 bg-white/80 dark:border-white/10 dark:bg-black/40 focus:ring-primary-500 focus:border-primary-500 text-sm py-2.5 px-3 uppercase tracking-wider font-mono font-bold text-center" placeholder="B 1234 XY"/>
+              </div>
+              <div>
+                <label for="userLine" class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">Nomor Lambung</label>
+                <div class="flex items-center rounded-xl border border-gray-200 bg-white/80 dark:border-white/10 dark:bg-black/40 focus-within:ring-2 focus-within:ring-primary-500/50">
+                  <span class="pl-3 text-sm font-mono font-bold text-gray-400 select-none">L</span>
+                  <input id="userLine" inputmode="numeric" maxlength="4" autocomplete="off" class="w-full border-0 bg-transparent focus:ring-0 text-sm py-2.5 px-2 font-mono font-bold" placeholder="Otomatis bila kosong"/>
+                </div>
+                <p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">Angka saja, tanpa huruf L. Dipakai untuk rotasi antrean harian.</p>
               </div>
             </div>
             <div class="pt-6 mt-6 border-t border-gray-100 dark:border-white/10 flex justify-end">

@@ -151,6 +151,7 @@ Route::middleware('auth:sanctum')->group(function() {
         Route::get('/queue', [ApiController::class, 'adminGetQueue']);
         Route::delete('/queue/{userId}', [ApiController::class, 'adminRemoveFromQueue']); // Restful style
         Route::post('/queue/move', [ApiController::class, 'adminMoveQueue']);
+        Route::post('/queue/rotate', [ApiController::class, 'adminRotateQueue']);
         Route::post('/queue/line-number', [ApiController::class, 'adminUpdateLineNumber']);
 
 

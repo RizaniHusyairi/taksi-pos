@@ -101,6 +101,14 @@ class DriverApiController extends Controller
                           });
                     })->count() + 1;
                 $driver->queue_position = $position;
+
+                // Kelompok Rejoin (sort_order >= 1000): app menampilkan
+                // penanda khusus + berapa supir antrian utama di depannya.
+                $isRejoin = $myQueue->sort_order >= 1000;
+                $driver->queue_is_rejoin = $isRejoin;
+                $driver->queue_main_ahead = $isRejoin
+                    ? DriverQueue::where('sort_order', '<', 1000)->count()
+                    : null;
             } else {
                 $driver->queue_position = null;
             }

@@ -62,10 +62,13 @@ class DailyQueueRotation extends Command
 
             // Reset Status Profil jadi Offline & Reset Tanggal Masuk
             // Kita reset last_queue_date agar besoknya dianggap fresh lagi
-            $profile->update([
-                'status' => 'offline',
-                'last_queue_date' => null 
-            ]);
+            // Supir yang sedang mengantar (ontrip) TIDAK dijadikan offline —
+            // rotasi kini bisa dipicu manual dari panel admin di siang hari,
+            // dan memutus status ontrip akan merusak alur order yang berjalan.
+            $profile->update(array_merge(
+                ['last_queue_date' => null],
+                $profile->status === 'ontrip' ? [] : ['status' => 'offline'],
+            ));
         }
 
         $this->info("Rotasi Selesai. Giliran dimulai dari L{$newStart}. Semua driver telah didaftarkan ke antrian.");

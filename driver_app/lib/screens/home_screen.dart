@@ -18,6 +18,7 @@ import '../widgets/app_card.dart';
 import '../widgets/driver_area_map.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/fade_in.dart';
+import '../widgets/queue_ticket_card.dart';
 
 import 'package:flutter_background_service/flutter_background_service.dart';
 
@@ -755,6 +756,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           status,
                           profile,
                           user?['queue_position'],
+                          isRejoin: user?['queue_is_rejoin'] == true,
+                          mainAhead: (user?['queue_main_ahead'] as num?)?.toInt(),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -1009,8 +1012,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildStatusCard(
     String status,
     Map<String, dynamic>? profile,
-    dynamic queuePosition,
-  ) {
+    dynamic queuePosition, {
+    bool isRejoin = false,
+    int? mainAhead,
+  }) {
     final meta = _statusMeta(status);
     final color = meta.color;
 
@@ -1129,34 +1134,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // Info antrian (saat standby)
           if (status == 'standby') ...[
             const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                gradient: AppColors.skyGradient,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    "NOMOR ANTRIAN",
-                    style: GoogleFonts.outfit(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 12,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "#${queuePosition ?? profile?['line_number'] ?? '-'}",
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
+            QueueTicketCard(
+              position: queuePosition ?? profile?['line_number'],
+              isRejoin: isRejoin,
+              mainAhead: mainAhead,
             ),
           ],
         ],

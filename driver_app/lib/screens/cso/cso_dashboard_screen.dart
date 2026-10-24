@@ -532,6 +532,7 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
               ),
             )
           else ...[
+            if (_isRejoin(pertama)) _pemisahRejoin(semuaRejoin: true),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 350),
               transitionBuilder: (child, anim) => FadeTransition(
@@ -543,8 +544,11 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
               ),
               child: KeyedSubtree(key: ValueKey(pertama['id']), child: _giliranUtama(pertama)),
             ),
-            for (var i = 1; i < _antrian.length; i++)
+            for (var i = 1; i < _antrian.length; i++) ...[
+              if (_isRejoin(_antrian[i]) && !_isRejoin(_antrian[i - 1]))
+                FadeInUp(delayMs: 60 * i, child: _pemisahRejoin()),
               FadeInUp(delayMs: 60 * i, child: _barisAntrian(_antrian[i], i + 1)),
+            ],
             const SizedBox(height: 12),
             GradientButton(
               label: 'BUAT ORDER',
@@ -623,7 +627,56 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
     );
   }
 
+  bool _isRejoin(Map<String, dynamic> d) => d['is_rejoin'] == true;
+
+  static const _oranye = Color(0xFFEA580C);
+
+  /// Pemisah kelompok Rejoin (sort_order >= 1000). Ketuk ikon ⓘ untuk
+  /// penjelasan singkat.
+  Widget _pemisahRejoin({bool semuaRejoin = false}) {
+    return Padding(
+      padding: EdgeInsets.only(top: semuaRejoin ? 0 : 14, bottom: semuaRejoin ? 10 : 2),
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 1.5, color: _oranye.withValues(alpha: 0.25))),
+          const SizedBox(width: 8),
+          Tooltip(
+            triggerMode: TooltipTriggerMode.tap,
+            showDuration: const Duration(seconds: 4),
+            message: semuaRejoin
+                ? 'Antrian utama kosong — semua supir siap berasal dari Rejoin '
+                    '(masuk lagi di hari yang sama, urut waktu masuk).'
+                : 'Supir di bawah garis ini masuk lagi di hari yang sama. '
+                    'Mereka di belakang antrian utama, urut waktu masuk.',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFFFFF4E5), Color(0xFFFFE8D6)]),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _oranye.withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.replay_rounded, size: 13, color: _oranye),
+                  SizedBox(width: 4),
+                  Text('ANTRIAN REJOIN',
+                      style: TextStyle(color: _oranye, fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+                  SizedBox(width: 4),
+                  Icon(Icons.info_outline_rounded, size: 13, color: _oranye),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Container(height: 1.5, color: _oranye.withValues(alpha: 0.25))),
+        ],
+      ),
+    );
+  }
+
   Widget _barisAntrian(Map<String, dynamic> d, int urut) {
+    final rejoin = _isRejoin(d);
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(
@@ -631,7 +684,10 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
           SizedBox(
             width: 26,
             child: Text('#$urut',
-                style: const TextStyle(color: AppColors.inkFaint, fontSize: 12.5, fontWeight: FontWeight.w800)),
+                style: TextStyle(
+                    color: rejoin ? _oranye.withValues(alpha: 0.7) : AppColors.inkFaint,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800)),
           ),
           _avatarSupir(d, 34),
           const SizedBox(width: 10),
@@ -643,6 +699,7 @@ class _CsoDashboardScreenState extends State<CsoDashboardScreen>
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppColors.ink, fontSize: 13.5, fontWeight: FontWeight.w600)),
           ),
+          if (rejoin) const Icon(Icons.replay_rounded, size: 16, color: _oranye),
         ],
       ),
     );

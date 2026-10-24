@@ -96,17 +96,34 @@ async function fetchApi(endpoint, options = {}) {
       throw err;
     }
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Terjadi kesalahan pada server');
+      const errorData = await response.json().catch(() => ({}));
+      const err = new Error(errorData.message || 'Terjadi kesalahan pada server');
+      // Server menjawab dengan alasan yang jelas (mis. validasi 422): tampilkan
+      // apa adanya, dan pemanggil tidak perlu menimpanya dengan pesan umum.
+      err.dariServer = true;
+      throw err;
     }
     return response.json();
   } catch (error) {
     console.error(`API Error on ${endpoint}:`, error);
-    if (!error.sesiHabis) {
+    if (error.dariServer) {
+      Utils.showToast(error.message, 'error');
+    } else if (!error.sesiHabis) {
       Utils.showToast(`Gagal berkomunikasi dengan server: ${error.message}`, 'error');
     }
     throw error; // Lemparkan lagi agar bisa ditangkap oleh pemanggil
   }
+}
+
+/**
+ * Nomor lambung: angka 1–9999 saja — tampilan menambah "L" sendiri, dan rotasi
+ * antrean harian membacanya sebagai angka. Mengembalikan pesan galat, atau null
+ * bila valid. Aturan yang sama dijaga server (ApiController::nomorLambungBaru).
+ */
+function cekNomorLambung(nilai) {
+  if (/^l/i.test(nilai)) return 'Nomor lambung diisi angka saja tanpa huruf L, misalnya 5.';
+  if (!/^[1-9][0-9]{0,3}$/.test(nilai)) return 'Nomor lambung harus angka 1–9999, misalnya 5.';
+  return null;
 }
 
 export class AdminApp {
@@ -452,6 +469,7 @@ export class AdminApp {
     userModalCancel?.addEventListener('click', () => this.closeUserForm());
     // Listener Refresh Queue
     document.getElementById('refreshQueue')?.addEventListener('click', () => this.renderQueue());
+    document.getElementById('rotateQueue')?.addEventListener('click', () => this.rotateQueue());
 
     // Ganti event listener yang lama dengan yang ini
     document.getElementById('formUser')?.addEventListener('submit', async (e) => { // <-- Jadikan async
@@ -469,6 +487,18 @@ export class AdminApp {
         car_model: document.getElementById('userCar').value.trim(),
         plate_number: document.getElementById('userPlate').value.trim()
       };
+
+      // Nomor lambung (khusus supir): kosong = otomatis (baru) / tetap (edit)
+      const lineNumber = document.getElementById('userLine').value.trim();
+      if (payload.role === 'driver' && lineNumber) {
+        const galat = cekNomorLambung(lineNumber);
+        if (galat) {
+          Utils.showToast(galat, 'error');
+          document.getElementById('userLine').focus();
+          return;
+        }
+        payload.line_number = lineNumber;
+      }
 
       // Hanya kirim password jika diisi (untuk create wajib, untuk edit opsional)
       if (password) {
@@ -505,7 +535,10 @@ export class AdminApp {
 
       } catch (error) {
         console.error("Gagal menyimpan data pengguna:", error);
-        Utils.showToast('Gagal menyimpan data pengguna. Periksa kembali isian Anda.', 'error');
+        // Alasan dari server (mis. nomor lambung dipakai) sudah ditampilkan fetchApi.
+        if (!error.dariServer && !error.sesiHabis) {
+          Utils.showToast('Gagal menyimpan data pengguna. Periksa kembali isian Anda.', 'error');
+        }
       }
     });
 
@@ -1720,9 +1753,13 @@ export class AdminApp {
 
       document.getElementById('userPassword').value = '';
       document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+      // Saat edit password opsional (server: nullable) — tanpa ini browser menolak
+      // menyimpan perubahan apa pun sebelum password diketik ulang.
+      document.getElementById('userPassword').required = !isEditing;
 
       document.getElementById('userCar').value = 'Honda Mobilio'; // seluruh armada (DriverProfile::CAR_MODEL)
       document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+      document.getElementById('userLine').value = isEditing ? data.driver_profile?.line_number || '' : '';
 
       const role = document.getElementById('userRole').value;
       const extra = document.getElementById('driverExtra');
@@ -4019,7 +4056,7 @@ export class AdminApp {
               <td class="py-3 px-4">
                   <div class="flex items-center gap-2">
                       <span class="font-mono bg-slate-100 dark:bg-slate-600 dark:text-slate-200 px-2 py-1 rounded text-xs">L${q.line_number}</span>
-                      <button onclick="app.editLineNumber(${q.user_id}, '${q.line_number}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onclick="app.editLineNumber(${q.user_id}, '${q.line_number}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" title="Ubah nomor lambung" aria-label="Ubah nomor lambung">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" /></svg>
                       </button>
                   </div>
@@ -4068,6 +4105,28 @@ export class AdminApp {
     }
   }
 
+  // Aksi: Rolling Antrian — jalankan rotasi harian (queue:rotate) sekarang
+  async rotateQueue() {
+    if (!await Utils.confirm({
+      variant: 'warning',
+      title: 'Jalankan rolling antrian sekarang?',
+      message: 'Giliran maju satu nomor lambung, antrian dikosongkan lalu diisi ulang, dan semua supir (kecuali yang sedang mengantar) menjadi Offline sampai masuk antrian lagi. Ini sama dengan rotasi otomatis pukul 00:00.',
+      confirmText: 'Ya, Rolling',
+    })) return;
+
+    const btn = document.getElementById('rotateQueue');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetchApi('/admin/queue/rotate', { method: 'POST' });
+      Utils.showToast(res?.message || 'Rotasi antrian selesai.', 'success');
+      this.renderQueue();
+    } catch (error) {
+      Utils.showToast(error.message || 'Gagal menjalankan rolling antrian.', 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   // Aksi: Kick Driver
   async kickQueue(userId, name) {
     if (!await Utils.confirm({
@@ -4088,26 +4147,39 @@ export class AdminApp {
 
   // Aksi: Edit Line Number
   async editLineNumber(userId, currentVal) {
-    const newVal = await Utils.prompt({
+    const isian = await Utils.prompt({
       variant: 'info',
-      title: 'Ubah Line Number',
-      label: 'Line number baru',
+      title: 'Ubah Nomor Lambung',
+      label: 'Nomor lambung baru (angka saja, tanpa huruf L)',
       defaultValue: String(currentVal ?? ''),
       multiline: false,
       required: true,
-      requiredMessage: 'Line number wajib diisi.',
+      requiredMessage: 'Nomor lambung wajib diisi.',
       confirmText: 'Simpan',
     });
-    if (newVal === null || newVal === currentVal) return;
+    if (isian === null) return;
+    const newVal = isian.trim();
+    if (newVal === String(currentVal)) return;
+
+    const galat = cekNomorLambung(newVal);
+    if (galat) {
+      Utils.showToast(galat, 'error');
+      return;
+    }
 
     try {
-      await fetchApi('/admin/queue/line-number', {
+      const res = await fetchApi('/admin/queue/line-number', {
         method: 'POST',
         body: JSON.stringify({ user_id: userId, line_number: newVal })
       });
+      Utils.showToast(res.message || 'Nomor lambung diperbarui.', 'success');
       this.renderQueue(); // Refresh
     } catch (error) {
-      Utils.showToast('Gagal update line number.', 'error');
+      // Alasan dari server (mis. "Nomor lambung 5 sudah dipakai driver lain.")
+      // sudah ditampilkan fetchApi — jangan ditimpa pesan umum.
+      if (!error.dariServer && !error.sesiHabis) {
+        Utils.showToast('Gagal mengubah nomor lambung.', 'error');
+      }
     }
   }
 
@@ -4184,10 +4256,12 @@ export class AdminApp {
 
     document.getElementById('userPassword').value = '';
     document.getElementById('userPassword').placeholder = isEditing ? 'Isi untuk mengubah password' : 'Password wajib diisi';
+    document.getElementById('userPassword').required = !isEditing;
 
     // Sesuaikan nama properti object data dari backend
     document.getElementById('userCar').value = 'Honda Mobilio'; // seluruh armada (DriverProfile::CAR_MODEL)
     document.getElementById('userPlate').value = isEditing ? data.driver_profile?.plate_number || '' : '';
+    document.getElementById('userLine').value = isEditing ? data.driver_profile?.line_number || '' : '';
 
     const role = document.getElementById('userRole').value;
     document.getElementById('driverExtra').style.display = role === 'driver' ? 'grid' : 'none';

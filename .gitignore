@@ -22,3 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Folder film (berkas besar, sengaja tidak dilacak git)
+/film/
+/film-v2/
